@@ -706,6 +706,8 @@ def annotate_qrz(members: list[dict]) -> None:
         current_call = info.get("current_call") if info else cache.get(key)
         if current_call and current_call != key:
             print(f"  Callsign updated: {member['callsign']} -> {current_call}", file=sys.stderr)
+            # Keep the sheet call for sponsor matching.
+            member["sheet_callsign"] = member["callsign"]
             member["callsign"] = current_call
 
         if info:
@@ -915,16 +917,26 @@ def render_roster_block(members: list[dict]) -> str:
     return "\n\n".join(cards)
 
 
+def zero_for_o(call: str) -> str:
+    """Fold letter O into digit 0."""
+    return call.upper().replace("O", "0")
+
+
 def resolve_sponsors(members: list[dict]) -> None:
     """Resolve each member's raw "Sponsor" value to the sponsoring member in place.
 
     A sponsor may be recorded as a callsign ("KI7QCF") or a BKG number ("12",
     "BKG12", "BKG #12"). Sets member['sponsor_member'] to the matched member's
-    dict, or None for a root / unrecognized sponsor. Stored as a reference (not
-    a callsign string) so the later annotate_qrz() canonical-callsign remap
-    can't leave sponsor links dangling on the old callsign.
+    dict, or None for a root / unrecognized sponsor. Runs after annotate_qrz()
+    so a sponsor cell may name either the sheet callsign or the QRZ-updated
+    one. A letter O typed for a digit 0 ("NBOE") still matches.
     """
-    by_call = {m["callsign"].upper(): m for m in members}
+    by_call = {}
+    for m in members:
+        for call in (m.get("sheet_callsign"), m["callsign"]):
+            if call:
+                by_call[call.upper()] = m
+                by_call.setdefault(zero_for_o(call), m)
     by_num = {m["number"]: m for m in members}
     for member in members:
         raw = (member.get("sponsor_raw") or "").strip()
@@ -932,7 +944,7 @@ def resolve_sponsors(members: list[dict]) -> None:
             continue
         # Prefer an exact callsign match before parsing a number, so a callsign
         # like "K5OHY" isn't mistaken for member number 5.
-        sponsor = by_call.get(raw.upper())
+        sponsor = by_call.get(raw.upper()) or by_call.get(zero_for_o(raw))
         if sponsor is None:
             num = parse_member_number(raw)
             sponsor = by_num.get(num) if num else None
@@ -1302,11 +1314,12 @@ def main() -> int:
         print(f"Applying {len(overrides)} name override(s) from {NAME_OVERRIDES_PATH.name}")
         apply_name_overrides(members, overrides)
 
-    print("Resolving sponsors for the downline tree")
-    resolve_sponsors(members)
-
     print("Looking up location + mugshot for each member via QRZ XML API")
     annotate_qrz(members)
+
+    # After QRZ so updated callsigns resolve.
+    print("Resolving sponsors for the downline tree")
+    resolve_sponsors(members)
     state_ogs = sum(1 for m in members if m.get("state_og"))
     country_ogs = sum(1 for m in members if m.get("country_og"))
     print(f"Marked {state_ogs} state OG(s) + {country_ogs} country OG(s) on the map")
