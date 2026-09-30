@@ -1118,6 +1118,16 @@ JOIN_DATE_FORMATS = (
 )
 
 
+def join_date_iso(value: datetime) -> str:
+    # Treat accidental leading zeros (0026) like our supported two-digit years
+    # (26), using the same %y century rule instead of a historical year.
+    if value.year < 100:
+        year = datetime.strptime(f"{value.year:02d}", "%y").year
+        value = value.replace(year=year)
+    # strftime's %Y padding differs on macOS and Linux for years <1000.
+    return value.date().isoformat()
+
+
 def parse_join_date(raw: str) -> str | None:
     """Normalize a roster 'Join Date' cell to 'YYYY-MM-DD', or None if unreadable."""
     text = (raw or "").strip()
@@ -1125,14 +1135,14 @@ def parse_join_date(raw: str) -> str | None:
         return None
     for fmt in JOIN_DATE_FORMATS:
         try:
-            return datetime.strptime(text, fmt).strftime("%Y-%m-%d")
+            return join_date_iso(datetime.strptime(text, fmt))
         except ValueError:
             continue
     # Last resort: a YYYY-MM-DD prefix on something longer (e.g. an ISO timestamp with tz)
     match = re.match(r"(\d{4})-(\d{2})-(\d{2})", text)
     if match:
         try:
-            return datetime(int(match[1]), int(match[2]), int(match[3])).strftime("%Y-%m-%d")
+            return join_date_iso(datetime(int(match[1]), int(match[2]), int(match[3])))
         except ValueError:
             return None
     return None
