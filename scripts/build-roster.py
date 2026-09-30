@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the BKG roster CSV from Google Sheets and render it into index.html + members.txt.
+"""Fetch the BKG roster CSV from Google Sheets and build the public site in dist/.
 
 The roster section of index.html is rebuilt between <!-- ROSTER:START --> and
 <!-- ROSTER:END --> markers. The members count is updated between
@@ -13,13 +13,16 @@ QRZ lookups are cached in qrz-cache.json (see QRZ_CACHE_* below); the deploy
 workflow commits the refreshed cache back to main after each build.
 """
 
+import argparse
 import csv
 import http.client
 import io
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -27,6 +30,8 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
+
+from site_contract import PHOTO_DIRS, PUBLIC_FILES
 
 SHEET_ID = "1GPNjke3fDf18amh3KbUpUAJUqMu4nOuFLm1F8CDzbrY"
 SHEET_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
@@ -36,7 +41,6 @@ INDEX_PATH = REPO_ROOT / "index.html"
 TREE_PATH = REPO_ROOT / "tree.html"
 NEARBY_PATH = REPO_ROOT / "nearby.html"
 OUTBREAK_PATH = REPO_ROOT / "outbreak.html"
-MEMBERS_TXT_PATH = REPO_ROOT / "members.txt"
 NAME_OVERRIDES_PATH = REPO_ROOT / "name-overrides.txt"
 LOCATION_OVERRIDES_PATH = REPO_ROOT / "location-overrides.txt"
 MUGSHOT_DIR = REPO_ROOT / "images" / "mugshots"
@@ -218,6 +222,27 @@ def parse_members(csv_text: str) -> list[dict]:
             )
     members.sort(key=lambda m: m["number"])
     return members
+
+
+def validate_members(members: list[dict]) -> None:
+    """Reject unusable rosters before they can replace the deployed site.
+
+    Check again after QRZ canonicalizes callsigns: two sheet rows mapping to
+    the same operator would otherwise overwrite each other in page lookups.
+    """
+    if not members:
+        raise ValueError("No members parsed from CSV")
+    numbers: set[int] = set()
+    callsigns: set[str] = set()
+    for member in members:
+        number = member["number"]
+        callsign = member["callsign"].upper()
+        if number in numbers:
+            raise ValueError(f"Duplicate member number: {number}")
+        if callsign in callsigns:
+            raise ValueError(f"Duplicate callsign: {callsign}")
+        numbers.add(number)
+        callsigns.add(callsign)
 
 
 def load_name_overrides() -> dict[str, str]:
@@ -1072,11 +1097,8 @@ def render_geo_data(members: list[dict]) -> str:
     return json.dumps(entries, separators=(",", ":"))
 
 
-def update_nearby(members: list[dict]) -> None:
-    """Inject the geo JSON into nearby.html. No-op if nearby.html is absent."""
-    if not NEARBY_PATH.is_file():
-        print(f"  {NEARBY_PATH.name} not found, skipping nearby build", file=sys.stderr)
-        return
+def update_nearby(members: list[dict], output_dir: Path) -> None:
+    """Inject the geo JSON from the source template into the public build."""
     html = NEARBY_PATH.read_text()
     html = replace_between(
         html,
@@ -1084,7 +1106,7 @@ def update_nearby(members: list[dict]) -> None:
         "<!-- GEO_DATA:END -->",
         render_geo_data(members),
     )
-    NEARBY_PATH.write_text(html)
+    (output_dir / "nearby.html").write_text(html)
 
 
 # Join Date cell formats seen (or plausible) on the roster sheet. Google
@@ -1165,11 +1187,8 @@ def render_outbreak_data(members: list[dict]) -> str:
     return json.dumps(entries, separators=(",", ":"), ensure_ascii=False)
 
 
-def update_outbreak(members: list[dict]) -> None:
-    """Inject the outbreak JSON into outbreak.html. No-op if outbreak.html is absent."""
-    if not OUTBREAK_PATH.is_file():
-        print(f"  {OUTBREAK_PATH.name} not found, skipping outbreak build", file=sys.stderr)
-        return
+def update_outbreak(members: list[dict], output_dir: Path) -> None:
+    """Inject the outbreak JSON from the source template into the public build."""
     html = OUTBREAK_PATH.read_text()
     html = replace_between(
         html,
@@ -1177,7 +1196,7 @@ def update_outbreak(members: list[dict]) -> None:
         "<!-- OUTBREAK_DATA:END -->",
         render_outbreak_data(members),
     )
-    OUTBREAK_PATH.write_text(html)
+    (output_dir / "outbreak.html").write_text(html)
 
 
 US_STATE_NAMES = {
@@ -1212,7 +1231,7 @@ def replace_between(html: str, start_marker: str, end_marker: str, replacement: 
     return pattern.sub(lambda _match: new_block, html, count=1)
 
 
-def update_index(members: list[dict]) -> None:
+def update_index(members: list[dict], output_dir: Path) -> None:
     html = INDEX_PATH.read_text()
     roster = render_roster_block(members)
     html = replace_between(
@@ -1239,14 +1258,11 @@ def update_index(members: list[dict]) -> None:
         "<!-- MAP_DATA:END -->",
         render_map_data(members),
     )
-    INDEX_PATH.write_text(html)
+    (output_dir / "index.html").write_text(html)
 
 
-def update_tree(members: list[dict]) -> None:
-    """Inject the downline JSON into tree.html. No-op if tree.html is absent."""
-    if not TREE_PATH.is_file():
-        print(f"  {TREE_PATH.name} not found, skipping downline build", file=sys.stderr)
-        return
+def update_tree(members: list[dict], output_dir: Path) -> None:
+    """Inject the downline JSON from the source template into the public build."""
     html = TREE_PATH.read_text()
     html = replace_between(
         html,
@@ -1254,7 +1270,7 @@ def update_tree(members: list[dict]) -> None:
         "<!-- DOWNLINE_DATA:END -->",
         render_downline_data(members),
     )
-    TREE_PATH.write_text(html)
+    (output_dir / "tree.html").write_text(html)
 
 
 def og_note_tags(member: dict) -> list[str]:
@@ -1295,18 +1311,29 @@ def render_members_txt(members: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def main() -> int:
-    print(f"Fetching roster from {SHEET_CSV_URL}")
-    try:
-        csv_text = fetch_csv()
-    except Exception as exc:
-        print(f"ERROR: Failed to fetch CSV: {exc}", file=sys.stderr)
-        return 1
+def stage_public_files(output_dir: Path) -> None:
+    """Copy only site files and image assets; cache metadata stays in the repo."""
+    for relative in PUBLIC_FILES:
+        source = REPO_ROOT / relative
+        destination = output_dir / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+    for relative in PHOTO_DIRS:
+        source_dir = REPO_ROOT / relative
+        if not source_dir.is_dir():
+            continue
+        for source in source_dir.iterdir():
+            if not source.is_file() or source.name.startswith(".") or source.suffix.lower() not in MUGSHOT_EXTS:
+                continue
+            destination = output_dir / relative / source.relative_to(source_dir)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
 
-    members = parse_members(csv_text)
-    if not members:
-        print("ERROR: No members parsed from CSV", file=sys.stderr)
-        return 1
+
+def build(output_dir: Path) -> None:
+    print(f"Fetching roster from {SHEET_CSV_URL}")
+    members = parse_members(fetch_csv())
+    validate_members(members)
     print(f"Parsed {len(members)} members (BKG #{members[0]['number']:03d}–#{members[-1]['number']:03d})")
 
     overrides = load_name_overrides()
@@ -1316,6 +1343,7 @@ def main() -> int:
 
     print("Looking up location + mugshot for each member via QRZ XML API")
     annotate_qrz(members)
+    validate_members(members)
 
     # After QRZ so updated callsigns resolve.
     print("Resolving sponsors for the downline tree")
@@ -1324,20 +1352,53 @@ def main() -> int:
     country_ogs = sum(1 for m in members if m.get("country_og"))
     print(f"Marked {state_ogs} state OG(s) + {country_ogs} country OG(s) on the map")
 
-    update_index(members)
+    # Copy after QRZ so newly downloaded and overridden photos are included.
+    stage_public_files(output_dir)
+    update_index(members, output_dir)
     print(f"Updated {INDEX_PATH.name}")
 
-    update_tree(members)
+    update_tree(members, output_dir)
     print(f"Updated {TREE_PATH.name}")
 
-    update_nearby(members)
+    update_nearby(members, output_dir)
     print(f"Updated {NEARBY_PATH.name}")
 
-    update_outbreak(members)
+    update_outbreak(members, output_dir)
     print(f"Updated {OUTBREAK_PATH.name}")
 
-    MEMBERS_TXT_PATH.write_text(render_members_txt(members))
-    print(f"Wrote {MEMBERS_TXT_PATH.name}")
+    (output_dir / "members.txt").write_text(render_members_txt(members))
+    print("Wrote members.txt")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output-dir", type=Path, default=REPO_ROOT / "dist",
+        help="public build directory (default: dist/)",
+    )
+    output_dir = parser.parse_args(argv).output_dir.resolve()
+    try:
+        source_root = REPO_ROOT.resolve()
+        if (output_dir == source_root or output_dir in source_root.parents
+                or (output_dir.is_relative_to(source_root) and output_dir != source_root / "dist")):
+            raise ValueError("Output must be dist/ or a directory outside the source repository")
+        # Never let a failed generation leave a half-built output directory.
+        # Source templates, QRZ fallback cache, and the mugshot cache remain
+        # in their existing locations; only public output is staged here.
+        output_dir.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            prefix=f".{output_dir.name}-", dir=output_dir.parent
+        ) as temporary:
+            staged = Path(temporary) / "public"
+            staged.mkdir()
+            build(staged)
+            if output_dir.exists():
+                shutil.rmtree(output_dir)
+            staged.rename(output_dir)
+    except Exception as exc:
+        print(f"ERROR: Build failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"Built public site in {output_dir}")
     return 0
 
 
