@@ -1,0 +1,72 @@
+{
+  "schema_version": "1",
+  "members": [
+    {
+      "bkg_number": 1,
+      "callsign": "N0SYN1",
+      "name": "Synthetic First",
+      "qth": "Illinois",
+      "qso_date": "2026-08-21",
+      "sponsor_bkg_number": null
+    },
+    {
+      "bkg_number": 7,
+      "callsign": "N0SYN7",
+      "name": "Synthetic Reviewed",
+      "qth": "Illinois",
+      "qso_date": "8/31/2026",
+      "sponsor_bkg_number": 1
+    },
+    {
+      "bkg_number": 12,
+      "callsign": "N0SYN12",
+      "name": "Zoë Example",
+      "qth": "",
+      "qso_date": "",
+      "sponsor_bkg_number": null
+    },
+    {
+      "bkg_number": 21,
+      "callsign": "VE3SYN",
+      "name": "Synthetic Canada",
+      "qth": "Canada",
+      "qso_date": "Aug 21, 2026",
+      "sponsor_bkg_number": 7
+    },
+    {
+      "bkg_number": 40,
+      "callsign": "N0SYN40",
+      "name": "Synthetic Orphan",
+      "qth": "",
+      "qso_date": "2026-08-25",
+      "sponsor_bkg_number": null
+    },
+    {
+      "bkg_number": 88,
+      "callsign": "K2SYN88",
+      "name": "Synthetic Moved",
+      "qth": "New York",
+      "qso_date": "2026-07-02",
+      "sponsor_bkg_number": 21
+    }
+  ],
+  "og_assignments": [
+    {
+      "region_key": "QTH:CANADA",
+      "region_label": "Canada",
+      "bkg_number": 21
+    },
+    {
+      "region_key": "US:IL",
+      "region_label": "IL",
+      "bkg_number": 7
+    },
+    {
+      "region_key": "US:VT",
+      "region_label": "VT",
+      "bkg_number": 88
+    }
+  ],
+  "generated_at": "2026-09-29T12:00:00.000Z",
+  "content_hash": "sha256:d10ba9858520dadc9d81239b542545bf2eb54820aca17025af29b1152e2feaf8"
+}

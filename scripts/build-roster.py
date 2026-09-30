@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Fetch the BKG roster CSV from Google Sheets and build the public site in dist/.
+"""Build the public site from Google Sheets (default) or an explicit JSON export.
+
+JSON experiments require --source json and an output directory outside this
+repository. They render reviewed membership values with optional sanitized
+enrichment, without refreshing QRZ. See docs/JSON-INPUT.md.
 
 The roster section of index.html is rebuilt between <!-- ROSTER:START --> and
 <!-- ROSTER:END --> markers. The members count is updated between
@@ -31,7 +35,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 
-from site_contract import PHOTO_DIRS, PUBLIC_FILES
+from site_contract import PHOTO_DIRS, PUBLIC_FILES, validate_dist
 
 SHEET_ID = "1GPNjke3fDf18amh3KbUpUAJUqMu4nOuFLm1F8CDzbrY"
 SHEET_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
@@ -824,8 +828,19 @@ def territory_og_badge_html(member: dict) -> str:
 
     State ribbons show the state code ("UT OG"); country ribbons show the
     country's flag emoji ("🇨🇦 OG") so long DXCC names don't blow out the
-    ribbon, with the full name in the hover title.
+    ribbon, with the full name in the hover title. JSON renders the stored
+    region labels independently of the holder's current location.
     """
+    if "og_regions" in member:
+        # Stored assignments remain attached to their designated region when
+        # the holder moves. A holder may have more than one reviewed region.
+        regions = member["og_regions"]
+        if not regions:
+            return ""
+        labels = [region["region_label"] for region in regions]
+        title = html_escape(", ".join(f"{label} OG" for label in labels))
+        label = html_escape(" / ".join(labels))
+        return f'\n                    <div class="state-og-badge" title="{title}">{label} OG</div>'
     if member.get("state_og"):
         label = html_escape(member.get("state") or "")
         title = label
@@ -933,7 +948,7 @@ def render_roster_block(members: list[dict]) -> str:
             cards.append(
                 render_member_card(
                     member,
-                    is_og=member["number"] in OG_BADGE_NUMBERS,
+                    is_og="og_regions" not in member and member["number"] in OG_BADGE_NUMBERS,
                     is_new=member["number"] in new_numbers,
                 )
             )
@@ -998,7 +1013,7 @@ def render_downline_data(members: list[dict]) -> str:
         }
         for m in sorted(members, key=lambda m: m["number"])
     ]
-    return json.dumps(nodes, separators=(",", ":"))
+    return embedded_json(nodes)
 
 
 def render_map_data(members: list[dict]) -> str:
@@ -1036,7 +1051,7 @@ def render_map_data(members: list[dict]) -> str:
             for country in sorted(by_country)
         },
     }
-    return json.dumps(data, separators=(",", ":"))
+    return embedded_json(data)
 
 
 def grid_to_latlon(grid: str) -> tuple[float, float] | None:
@@ -1094,7 +1109,7 @@ def render_geo_data(members: list[dict]) -> str:
             entry["grid"] = grid
         entries.append(entry)
     print(f"  Geo coords for {len(entries)}/{len(members)} members", file=sys.stderr)
-    return json.dumps(entries, separators=(",", ":"))
+    return embedded_json(entries)
 
 
 def update_nearby(members: list[dict], output_dir: Path) -> None:
@@ -1194,7 +1209,7 @@ def render_outbreak_data(members: list[dict]) -> str:
         entries.append(entry)
     print(f"  Join dates parsed for {dated}/{len(entries)} members", file=sys.stderr)
     print(f"  Outbreak coords for {located}/{len(entries)} members", file=sys.stderr)
-    return json.dumps(entries, separators=(",", ":"), ensure_ascii=False)
+    return embedded_json(entries)
 
 
 def update_outbreak(members: list[dict], output_dir: Path) -> None:
@@ -1226,6 +1241,14 @@ US_STATE_NAMES = {
 }
 STATE_CODES_BY_NAME = {name.lower(): code for code, name in US_STATE_NAMES.items()}
 STATE_CODES_BY_NAME.update({"washington dc": "DC", "washington, dc": "DC", "washington d.c.": "DC", "washington, d.c.": "DC"})
+
+
+def embedded_json(data) -> str:
+    """Escape HTML-sensitive characters while preserving JSON field values."""
+    return (json.dumps(data, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+            .replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+            .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
+
 
 def replace_between(html: str, start_marker: str, end_marker: str, replacement: str) -> str:
     pattern = re.compile(
@@ -1286,9 +1309,11 @@ def update_tree(members: list[dict], output_dir: Path) -> None:
 def og_note_tags(member: dict) -> list[str]:
     """OG labels for a callsign note, mirroring the roster badges.
 
-    The founder and OG_BADGE_NUMBERS get "OG"; the first member in a US
-    state or DX country gets "UT OG" / "Canada OG".
+    Sheets retains its founder/early-member and earliest-territory labels.
+    JSON uses only the stored assignment labels, without deriving new OGs.
     """
+    if "og_regions" in member:
+        return [f"{region['region_label']} OG" for region in member["og_regions"]]
     tags = []
     if member["number"] == 1 or member["number"] in OG_BADGE_NUMBERS:
         tags.append("OG")
@@ -1308,7 +1333,7 @@ def render_members_txt(members: list[dict]) -> str:
         "",
     ]
     for member in sorted(members, key=lambda m: m["callsign"]):
-        if member.get("name_override"):
+        if "og_regions" in member or member.get("name_override"):
             label = member["name"]
         else:
             label = first_name_initial(member["name"])
@@ -1321,13 +1346,15 @@ def render_members_txt(members: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def stage_public_files(output_dir: Path) -> None:
+def stage_public_files(output_dir: Path, *, include_photos: bool = True) -> None:
     """Copy only site files and image assets; cache metadata stays in the repo."""
     for relative in PUBLIC_FILES:
         source = REPO_ROOT / relative
         destination = output_dir / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
+    if not include_photos:
+        return
     for relative in PHOTO_DIRS:
         source_dir = REPO_ROOT / relative
         if not source_dir.is_dir():
@@ -1340,30 +1367,44 @@ def stage_public_files(output_dir: Path) -> None:
             shutil.copyfile(source, destination)
 
 
-def build(output_dir: Path) -> None:
-    print(f"Fetching roster from {SHEET_CSV_URL}")
-    members = parse_members(fetch_csv())
-    validate_members(members)
-    print(f"Parsed {len(members)} members (BKG #{members[0]['number']:03d}–#{members[-1]['number']:03d})")
+def build(output_dir: Path, *, source: str = "sheets", roster_json: Path | None = None,
+          enrichment_dir: Path | None = None) -> None:
+    if source == "json":
+        from roster_input import parse_roster_json, read_roster_json
+        from roster_enrichment import annotate_json_enrichment
 
-    overrides = load_name_overrides()
-    if overrides:
-        print(f"Applying {len(overrides)} name override(s) from {NAME_OVERRIDES_PATH.name}")
-        apply_name_overrides(members, overrides)
+        envelope, members = parse_roster_json(read_roster_json(roster_json))
+        for member in members:
+            member["state"], member["country"] = qth_location(member["qth"])
+        photos = annotate_json_enrichment(members, enrichment_dir, repo_root=REPO_ROOT)
+        stage_public_files(output_dir, include_photos=False)
+        for relative, photo in photos.items():
+            destination = output_dir / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(photo, destination)
+        # The public snapshot contains the reviewed contract alone. Enrichment
+        # cannot restore inactive identities or overwrite membership fields.
+        snapshot = output_dir / "data/v1/roster.json"
+        snapshot.parent.mkdir(parents=True, exist_ok=True)
+        snapshot.write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"Validated JSON roster: {len(members)} members ({envelope['content_hash']})")
+    else:
+        print(f"Fetching roster from {SHEET_CSV_URL}")
+        members = parse_members(fetch_csv())
+        validate_members(members)
+        print(f"Parsed {len(members)} members (BKG #{members[0]['number']:03d}–#{members[-1]['number']:03d})")
 
-    print("Looking up location + mugshot for each member via QRZ XML API")
-    annotate_qrz(members)
-    validate_members(members)
+        overrides = load_name_overrides()
+        if overrides:
+            print(f"Applying {len(overrides)} name override(s) from {NAME_OVERRIDES_PATH.name}")
+            apply_name_overrides(members, overrides)
 
-    # After QRZ so updated callsigns resolve.
-    print("Resolving sponsors for the downline tree")
-    resolve_sponsors(members)
-    state_ogs = sum(1 for m in members if m.get("state_og"))
-    country_ogs = sum(1 for m in members if m.get("country_og"))
-    print(f"Marked {state_ogs} state OG(s) + {country_ogs} country OG(s) on the map")
-
-    # Copy after QRZ so newly downloaded and overridden photos are included.
-    stage_public_files(output_dir)
+        print("Looking up location + mugshot for each member via QRZ XML API")
+        annotate_qrz(members)
+        validate_members(members)
+        # After QRZ so updated sheet callsigns resolve.
+        resolve_sponsors(members)
+        stage_public_files(output_dir)
     update_index(members, output_dir)
     print(f"Updated {INDEX_PATH.name}")
 
@@ -1386,12 +1427,31 @@ def main(argv: list[str] | None = None) -> int:
         "--output-dir", type=Path, default=REPO_ROOT / "dist",
         help="public build directory (default: dist/)",
     )
-    output_dir = parser.parse_args(argv).output_dir.resolve()
+    parser.add_argument("--source", choices=("sheets", "json"), default="sheets",
+                        help="membership source (default: sheets; JSON is experimental)")
+    parser.add_argument("--roster-json", type=Path,
+                        help="explicit local JSON export; otherwise JSON uses ROSTER_EXPORT_URL")
+    parser.add_argument("--enrichment-dir", type=Path,
+                        help="optional sanitized JSON enrichment cache; never refreshed during rendering")
+    args = parser.parse_args(argv)
+    output_dir = args.output_dir.resolve()
     try:
         source_root = REPO_ROOT.resolve()
         if (output_dir == source_root or output_dir in source_root.parents
                 or (output_dir.is_relative_to(source_root) and output_dir != source_root / "dist")):
             raise ValueError("Output must be dist/ or a directory outside the source repository")
+        if args.source == "sheets" and (args.roster_json or args.enrichment_dir):
+            raise ValueError("JSON options require explicit --source json")
+        if args.source == "json":
+            if output_dir.is_relative_to(source_root):
+                raise ValueError("Experimental JSON output must be outside the source repository, never production dist/")
+            if args.enrichment_dir:
+                cache = args.enrichment_dir.resolve()
+                if (cache.is_relative_to(source_root) or source_root.is_relative_to(cache)
+                        or cache.is_relative_to(output_dir) or output_dir.is_relative_to(cache)):
+                    raise ValueError("JSON enrichment must be outside the repository and separate from output")
+            if args.roster_json and args.roster_json.resolve().is_relative_to(output_dir):
+                raise ValueError("JSON input must be outside its output directory")
         # Never let a failed generation leave a half-built output directory.
         # Source templates, QRZ fallback cache, and the mugshot cache remain
         # in their existing locations; only public output is staged here.
@@ -1401,10 +1461,20 @@ def main(argv: list[str] | None = None) -> int:
         ) as temporary:
             staged = Path(temporary) / "public"
             staged.mkdir()
-            build(staged)
+            build(staged, source=args.source, roster_json=args.roster_json,
+                  enrichment_dir=args.enrichment_dir)
+            validate_dist(staged, source=args.source)
+            previous = Path(temporary) / "previous"
             if output_dir.exists():
-                shutil.rmtree(output_dir)
-            staged.rename(output_dir)
+                if not output_dir.is_dir():
+                    raise ValueError("Output must be a directory")
+                output_dir.rename(previous)
+            try:
+                staged.rename(output_dir)
+            except Exception:
+                if previous.exists():
+                    previous.rename(output_dir)
+                raise
     except Exception as exc:
         print(f"ERROR: Build failed: {exc}", file=sys.stderr)
         return 1

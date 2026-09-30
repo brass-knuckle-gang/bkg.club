@@ -284,6 +284,21 @@ class DeploymentTests(unittest.TestCase):
         fetch.assert_not_called()
         enrich.assert_not_called()
 
+    def test_failed_output_swap_restores_previous_build(self):
+        self.dist.mkdir()
+        sentinel = self.dist / "index.html"
+        sentinel.write_text("previous validated build")
+        rename = Path.rename
+
+        def fail_publish(path, target):
+            if path.name == "public" and Path(target).resolve() == self.dist.resolve():
+                raise OSError("fixture final rename failure")
+            return rename(path, target)
+
+        with patch.object(Path, "rename", autospec=True, side_effect=fail_publish):
+            self.assertNotEqual(self.build(), 0)
+        self.assertEqual(sentinel.read_text(), "previous validated build")
+
     def test_validator_rejects_missing_assets_photos_and_internal_files(self):
         self.assertEqual(self.build(), 0)
         for relative in (*site_contract.PUBLIC_FILES, "members.txt", "images/mugshots/W1NEW.png"):

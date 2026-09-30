@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bkg:public-roster:v1",
+  "title": "BKG public roster export v1",
+  "description": "Public fields of active approved/imported members, stable active sponsor references, and stored OG assignments. Private membership, application, QRZ, and audit data are excluded.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "content_hash", "members", "og_assignments"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC export generation time. Excluded from content_hash."
+    },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "SHA-256 of UTF-8 compact recursively key-sorted JSON containing only schema_version, members, and og_assignments. Unicode remains unescaped and array order is preserved."
+    },
+    "members": {
+      "type": "array",
+      "description": "Active members, ordered by ascending numeric BKG number. All strings come from the stored reviewed member record.",
+      "items": { "$ref": "#/$defs/member" }
+    },
+    "og_assignments": {
+      "type": "array",
+      "description": "Stored OG assignments with active holders, ordered by region_key using SQLite BINARY collation. Inactive holders are suppressed; OGs are never recomputed or reassigned by the export.",
+      "items": { "$ref": "#/$defs/og_assignment" }
+    }
+  },
+  "$defs": {
+    "bkg_number": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991,
+      "description": "Stable numeric member number. Render BKG plus this number for display."
+    },
+    "member": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bkg_number", "callsign", "name", "qth", "qso_date", "sponsor_bkg_number"],
+      "properties": {
+        "bkg_number": { "$ref": "#/$defs/bkg_number" },
+        "callsign": { "type": "string" },
+        "name": { "type": "string" },
+        "qth": {
+          "type": "string",
+          "description": "Reviewed location label. Empty means unknown; this is not raw QRZ data."
+        },
+        "qso_date": {
+          "type": "string",
+          "description": "Stored QSO date, which the website displays as Join Date. Preserved verbatim, including historical date formats or an empty value; never replaced by issuance/creation time."
+        },
+        "sponsor_bkg_number": {
+          "anyOf": [
+            { "$ref": "#/$defs/bkg_number" },
+            { "type": "null" }
+          ],
+          "description": "BKG number reached through the stored sponsor member ID, only when that sponsor is active. Null for inactive or unresolved sponsors. Historical names, callsigns, and number text are never exposed or rebound."
+        }
+      }
+    },
+    "og_assignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["region_key", "region_label", "bkg_number"],
+      "properties": {
+        "region_key": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stored unique region key, such as US:IL or QTH:CANADA."
+        },
+        "region_label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stored display label, independent of the holder's current QTH."
+        },
+        "bkg_number": { "$ref": "#/$defs/bkg_number" }
+      }
+    }
+  }
+}

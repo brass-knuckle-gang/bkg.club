@@ -36,6 +36,9 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           echo "artifact_name=github-pages-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
 
+      - name: Install image validation dependency
+        run: python3 -m pip install -r requirements-build.txt
+
       - name: Check offline fixtures
         run: python3 -m unittest discover -s tests -v
 
