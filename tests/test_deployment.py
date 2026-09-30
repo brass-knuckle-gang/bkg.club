@@ -183,6 +183,54 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual((self.dist / "images/mugshots/K4TST.jpg").read_bytes(), b"previous-photo")
         self.assertEqual(self.downloads, [])
 
+    def test_join_dates_use_portable_iso_formatting(self):
+        # Match Linux's unpadded strftime behavior even when tests run on macOS.
+        from datetime import datetime
+
+        class LinuxDatetime(datetime):
+            def strftime(self, fmt):
+                if fmt == "%Y-%m-%d":
+                    return f"{self.year}-{self.month:02d}-{self.day:02d}"
+                return super().strftime(fmt)
+
+        cases = {
+            "8/20/0026": "2026-08-20",
+            "8/20/26": "2026-08-20",
+            "0026-09-03": "2026-09-03",
+            "0026-09-03T12:34:56Z": "2026-09-03",
+            "0001-01-01": "2001-01-01",
+            "0068-01-01": "2068-01-01",
+            "0069-01-01": "1969-01-01",
+            "0024-02-29": "2024-02-29",
+            "0999-12-31": "0999-12-31",
+            "2026-09-03": "2026-09-03",
+            "02/29/2024": "2024-02-29",
+            "02/29/2025": None,
+            "0000-01-01": None,
+            "": None,
+        }
+        with patch.object(self.builder, "datetime", LinuxDatetime):
+            for raw, expected in cases.items():
+                with self.subTest(raw=raw):
+                    self.assertEqual(self.builder.parse_join_date(raw), expected)
+
+    def test_low_year_sheet_dates_build_and_validate(self):
+        self.csv = self.csv.replace("2025-01-02", "8/20/0026").replace("01/03/2025", "0026-09-03")
+        self.assertEqual(self.build(), 0)
+        site_contract.validate_dist(self.dist)
+        outbreak = self.data("outbreak.html", "OUTBREAK_DATA")
+        self.assertEqual([entry["date"] for entry in outbreak[:2]], ["2026-08-20", "2026-09-03"])
+
+    def test_validator_still_rejects_malformed_outbreak_dates(self):
+        self.assertEqual(self.build(), 0)
+        outbreak = self.data("outbreak.html", "OUTBREAK_DATA")
+        for invalid in ("26-08-20", "2026-02-30", "20260903"):
+            with self.subTest(date=invalid):
+                outbreak[0]["date"] = invalid
+                self.replace_data("outbreak.html", "OUTBREAK_DATA", outbreak)
+                with self.assertRaisesRegex(ValueError, "Invalid outbreak date"):
+                    site_contract.validate_dist(self.dist)
+
     def test_invalid_input_preserves_previous_dist(self):
         self.dist.mkdir()
         sentinel = self.dist / "index.html"
