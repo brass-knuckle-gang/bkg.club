@@ -1,0 +1,6 @@
+{
+  "W1OLD": {"call": "W1NEW", "image": "https://fixture.invalid/founder.jpg", "grid": "DN40", "lat": "40.5", "lon": "-111"},
+  "K2TST": {"call": "K2TST", "image": "https://fixture.invalid/unchanged.jpg", "grid": "FN30", "lat": "40.5", "lon": "-73"},
+  "VE3TST": {"call": "VE3TST", "image": "https://fixture.invalid/new.png", "lat": "43.651", "lon": "-79.381"},
+  "K4TST": {"call": "K4TST", "image": "https://fixture.invalid/unavailable.jpg", "grid": "CM87", "lat": "37.5", "lon": "-123"}
+}
