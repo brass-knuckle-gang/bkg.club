@@ -1,0 +1,432 @@
+<title>The Huntsville Effect</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Bangers&family=Comic+Neue:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet">
+<style>
+/* Layout: a board-meeting deck printed on a back-alley wall. One long column of "slides," each a numbered agenda item. */
+:root {
+    --bg: #070605;
+    --panel: #14110a;
+    --ink: #f4efe2;
+    --muted: #b9ae8f;
+    --brass: #d4af37;
+    --brass-hot: #ffd700;
+    --brass-deep: #8a6d12;
+    --pink: #ff1493;
+    --lime: #39ff14;
+    --red: #c0182b;
+    --grid: #2b2514;
+    --display: 'Bangers', 'Impact', 'Arial Black', sans-serif;
+    --numeral: 'Anton', 'Impact', 'Arial Narrow', sans-serif;
+    --memo: 'Special Elite', 'Courier New', monospace;
+    --body: 'Comic Neue', 'Comic Sans MS', 'Chalkboard SE', cursive;
+    color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    background:
+        radial-gradient(ellipse at 50% -10%, rgba(212,175,55,.16), transparent 60%),
+        repeating-linear-gradient(0deg, var(--bg) 0 2px, #0d0b07 2px 4px);
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-weight: 700;
+    font-size: 17px;
+    line-height: 1.55;
+}
+.wrap { max-width: 980px; margin: 0 auto; padding-inline: 16px; padding-block: 0 64px; }
+
+/* Marquee */
+.marquee { overflow: hidden; border-block: 3px solid var(--brass); background: #000; white-space: nowrap; }
+.marquee span { display: inline-block; padding: 8px 0; font-family: var(--display); letter-spacing: .06em; font-size: 1.15rem; color: var(--brass-hot); animation: scroll 38s linear infinite; padding-left: 100%; }
+@keyframes scroll { to { transform: translateX(-100%); } }
+@media (prefers-reduced-motion: reduce) { .marquee span { animation: none; padding-left: 16px; } }
+
+/* Cover */
+.cover { padding-block: 40px 28px; display: grid; gap: 18px; }
+.letterhead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; font-family: var(--memo); color: var(--muted); font-size: .9rem; border-bottom: 1px dashed var(--brass-deep); padding-bottom: 10px; }
+.letterhead b { color: var(--brass); font-weight: 400; }
+.eyebrow { font-family: var(--memo); color: var(--pink); letter-spacing: .12em; text-transform: uppercase; font-size: .85rem; }
+h1 { font-family: var(--display); font-weight: 400; font-size: clamp(3rem, 11vw, 6.6rem); line-height: .9; margin: 0; color: var(--brass-hot); letter-spacing: .02em; text-shadow: 4px 4px 0 var(--red), 8px 8px 0 #000; text-wrap: balance; }
+.subtitle { font-size: 1.2rem; max-width: 62ch; margin: 0; }
+.signoff { font-family: var(--memo); font-size: .92rem; color: var(--muted); display: grid; gap: 2px; }
+.stamp { justify-self: start; font-family: var(--display); font-size: 1.4rem; letter-spacing: .08em; color: var(--red); border: 4px double var(--red); padding: 2px 14px; transform: rotate(-4deg); margin-top: 6px; }
+
+/* Agenda items */
+section { padding-block: 34px; border-top: 2px solid var(--grid); display: grid; gap: 16px; }
+.item { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.item .no { font-family: var(--numeral); color: var(--pink); font-size: 1.05rem; letter-spacing: .08em; }
+h2 { font-family: var(--display); font-weight: 400; font-size: clamp(2rem, 6vw, 3rem); line-height: 1; margin: 0; color: var(--brass); letter-spacing: .03em; text-wrap: balance; }
+h3 { font-family: var(--display); font-weight: 400; font-size: 1.5rem; margin: 0; color: var(--brass-hot); letter-spacing: .04em; }
+p { margin: 0; max-width: 68ch; }
+.note { font-family: var(--memo); font-weight: 400; color: var(--muted); font-size: .92rem; max-width: 70ch; }
+.note b { color: var(--lime); font-weight: 400; }
+
+/* KPI wall */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.kpi { background: var(--panel); border: 2px solid var(--brass-deep); padding: 14px 16px 16px; display: grid; gap: 4px; align-content: start; }
+.kpi .label { font-family: var(--memo); font-weight: 400; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.kpi .val { font-family: var(--numeral); font-size: 2.7rem; line-height: 1.05; color: var(--brass-hot); font-variant-numeric: tabular-nums; }
+.kpi .val small { font-size: 1.2rem; color: var(--muted); }
+.kpi .sub { font-size: .92rem; }
+.kpi.hero { border-color: var(--brass-hot); box-shadow: 6px 6px 0 var(--red); }
+
+/* Charts */
+.chart { background: var(--panel); border: 2px solid var(--brass-deep); padding: 14px 12px 8px; overflow-x: auto; }
+.chart svg { display: block; width: 100%; min-width: 620px; height: auto; }
+.chart text { font-family: var(--memo); fill: var(--muted); font-size: 12px; }
+.chart .ann { fill: var(--ink); font-family: var(--body); font-weight: 700; font-size: 13px; }
+.chart .big { fill: var(--brass-hot); font-family: var(--numeral); font-size: 20px; }
+.chart .grid { stroke: var(--grid); stroke-width: 1; }
+.chart .axis { stroke: var(--brass-deep); stroke-width: 1.5; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; min-width: 520px; }
+th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--grid); vertical-align: middle; }
+th { font-family: var(--memo); font-weight: 400; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+td.num { font-family: var(--numeral); font-size: 1.25rem; color: var(--brass-hot); font-weight: 400; text-align: right; width: 4.5em; }
+td.call { font-family: var(--memo); font-weight: 400; color: var(--brass); white-space: nowrap; }
+.bar { height: 14px; background: linear-gradient(90deg, var(--brass-deep), var(--brass-hot)); min-width: 2px; }
+.bar.hot { background: linear-gradient(90deg, var(--red), var(--pink)); }
+
+/* Weekend split */
+.days { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; align-items: end; }
+.day { display: grid; gap: 6px; text-align: center; }
+.day .col { background: linear-gradient(0deg, var(--brass-deep), var(--brass-hot)); width: 100%; }
+.day.peak .col { background: linear-gradient(0deg, var(--red), var(--pink)); }
+.day .n { font-family: var(--numeral); font-size: 1.8rem; color: var(--brass-hot); line-height: 1; }
+.day .d { font-family: var(--memo); font-weight: 400; font-size: .8rem; color: var(--muted); }
+
+/* Two column */
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.split > * { min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-family: var(--memo); font-weight: 400; font-size: .88rem; border: 1px solid var(--lime); color: var(--lime); padding: 3px 10px; }
+.chip.intl { border-color: var(--pink); color: var(--pink); }
+
+/* Audit */
+.audit { display: grid; gap: 12px; }
+.finding { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; background: var(--panel); border-left: 6px solid var(--red); padding: 12px 16px; }
+.finding .sev { font-family: var(--memo); font-weight: 400; font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--bg); background: var(--brass); padding: 2px 8px; align-self: start; white-space: nowrap; }
+.finding p { min-width: 0; }
+.finding .res { grid-column: 2; font-family: var(--memo); font-weight: 400; font-size: .9rem; color: var(--lime); }
+
+/* Motion */
+.motion { background: #000; border: 3px solid var(--brass); padding: 20px; display: grid; gap: 10px; box-shadow: 8px 8px 0 var(--red); }
+.motion ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+.vote { font-family: var(--display); font-size: 1.6rem; letter-spacing: .05em; color: var(--lime); }
+footer { padding-top: 28px; font-family: var(--memo); font-weight: 400; color: var(--muted); font-size: .85rem; display: grid; gap: 6px; }
+
+@media (max-width: 520px) {
+    body { font-size: 16px; }
+    .kpi .val { font-size: 2.3rem; }
+    .finding { grid-template-columns: 1fr; }
+    .finding .res { grid-column: 1; }
+}
+</style>
+
+<div class="marquee" aria-hidden="true"><span>★ BOARD OF DIRECTORS MEETING IN PROGRESS ★ PLEASE TAKE OFF YOUR BRASS KNUCKLES BEFORE ENTERING THE CONFERENCE ROOM ★ THE KNUCKLES MAY BE PUT BACK ON FOR THE Q&amp;A ★ THERE IS NO CURE ★ COFFEE AND DONUTS ARE IN THE BACK ★ THE FCC HAS BEEN INVITED AND DID NOT RSVP ★</span></div>
+
+<main class="wrap">
+
+<header class="cover">
+    <div class="letterhead">
+        <span><b>BKG.club</b> · Brass Knuckle Gang, Incorporated (Not Incorporated)</span>
+        <span>Board Packet · Item 7 of 7 · Confidential*</span>
+    </div>
+    <div class="eyebrow">Quarterly Growth Review · Fiscal Year 2026</div>
+    <h1>The Huntsville Effect</h1>
+    <p class="subtitle">A formal statistical review of gang membership growth from Thursday, August 20, 2026, the Thursday before the Huntsville Hamfest, through Thursday, October 1, 2026. That is 43 days. We counted them twice.</p>
+    <div class="signoff">
+        <span>Prepared by: Gang Leadership, Office of Numbers and Stuff</span>
+        <span>Source: The official BKG roster spreadsheet, every row, including the weird ones</span>
+        <span>Reviewed by: Nobody. Approved anyway.</span>
+    </div>
+    <div class="stamp">AUDITED (BY US)</div>
+</header>
+
+<section aria-labelledby="s1">
+    <div class="item"><span class="no">AGENDA ITEM 01</span><h2 id="s1">Executive Summary</h2></div>
+    <p>Members of the Board, thank you for attending. We went to Huntsville with a folding table, a stack of membership forms, and no plan. We came back with more than double the gang. Our consultants describe this as "unprecedented." We do not have consultants, but we are confident they would say that.</p>
+    <div class="kpis">
+        <div class="kpi hero">
+            <span class="label">Total membership</span>
+            <span class="val">276 → 604</span>
+            <span class="sub">Gang size went up 2.19 times in 43 days.</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Net new members</span>
+            <span class="val">+328</span>
+            <span class="sub">That is 118.8% growth, issued as BKG #276 through BKG #604.</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Recruiting pace</span>
+            <span class="val">7.6<small>/day</small></span>
+            <span class="sub">Up from 0.72 per day during our first year. That is about 10.6 times faster.</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Best single day ever</span>
+            <span class="val">61</span>
+            <span class="sub">Saturday, August 22, on the floor of the Huntsville Hamfest.</span>
+        </div>
+        <div class="kpi">
+            <span class="label">U.S. states represented</span>
+            <span class="val">36 → 45</span>
+            <span class="sub">Nine new states. Five to go. We are aware of which five.</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Countries represented</span>
+            <span class="val">8 → 12</span>
+            <span class="sub">New: Canada, Croatia, Japan, and Poland. The gang is now international, legally speaking.</span>
+        </div>
+    </div>
+    <p class="note">For comparison: it took us from August 2, 2025 to August 19, 2026, which is 383 days, to recruit the first 276 members. It took 43 days to recruit the next 328. <b>We did not see this coming, and we would like that on the record.</b></p>
+</section>
+
+<section aria-labelledby="s2">
+    <div class="item"><span class="no">AGENDA ITEM 02</span><h2 id="s2">Total Membership Over Time</h2></div>
+    <p>Below is our cumulative membership, counted at the end of each day. In corporate language, the line goes "up and to the right." In gang language, the line goes up and to the right.</p>
+    <div class="chart" role="img" aria-label="Cumulative BKG membership from 276 on August 19 to 604 on October 1, 2026, with the steepest climb during Hamfest weekend, August 20 to 23."><svg id="cum" viewBox="0 0 860 330"></svg></div>
+</section>
+
+<section aria-labelledby="s3">
+    <div class="item"><span class="no">AGENDA ITEM 03</span><h2 id="s3">Daily New Members</h2></div>
+    <p>New members by join date. The tall pink bars are Hamfest weekend. The flat part in the middle is what analysts call "the hangover." The second spike is what analysts call "Canada and Nebraska showed up on the same Saturday."</p>
+    <div class="chart" role="img" aria-label="Daily new members from August 20 to October 1, 2026. Peak of 61 on August 22. A second peak of 31 on September 26. One day, September 5, had zero."><svg id="daily" viewBox="0 0 860 330"></svg></div>
+    <div class="table-wrap">
+        <table>
+            <thead><tr><th>Week</th><th>Dates (Thursday to Wednesday)</th><th style="text-align:right">New members</th><th>Board commentary</th></tr></thead>
+            <tbody>
+                <tr><td>1</td><td>Aug 20 – Aug 26</td><td class="num">127</td><td>Hamfest. Historic. We had to borrow pens.</td></tr>
+                <tr><td>2</td><td>Aug 27 – Sep 2</td><td class="num">36</td><td>Still riding the wave. Still finding forms in our pockets.</td></tr>
+                <tr><td>3</td><td>Sep 3 – Sep 9</td><td class="num">18</td><td>The hangover. Includes September 5, which had zero. See Audit Findings.</td></tr>
+                <tr><td>4</td><td>Sep 10 – Sep 16</td><td class="num">35</td><td>Recovery. The Kentucky chapter woke up.</td></tr>
+                <tr><td>5</td><td>Sep 17 – Sep 23</td><td class="num">46</td><td>Growth without a hamfest. Nobody can explain this either.</td></tr>
+                <tr><td>6</td><td>Sep 24 – Sep 30</td><td class="num">65</td><td>Best week since Huntsville. Alberta, eh.</td></tr>
+                <tr><td>—</td><td>Oct 1 (so far)</td><td class="num">1</td><td>Welcome, BKG #604. You are the most recent member and therefore the most important person in this room.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section aria-labelledby="s4">
+    <div class="item"><span class="no">AGENDA ITEM 04</span><h2 id="s4">Hamfest Weekend Breakdown</h2></div>
+    <p>From Thursday through Sunday, the gang added 118 members. That is 36% of all growth in this review period, achieved in 4 of the 43 days. The Board would like to formally thank the Huntsville Hamfest and the ARRL National Convention for hosting what was, from our perspective, a recruiting event.</p>
+    <div class="days" aria-label="Hamfest weekend new members by day">
+        <div class="day"><span class="n">6</span><div class="col" style="height:16px"></div><span class="d">THU AUG 20<br>Travel day</span></div>
+        <div class="day"><span class="n">27</span><div class="col" style="height:71px"></div><span class="d">FRI AUG 21<br>Setup day</span></div>
+        <div class="day peak"><span class="n">61</span><div class="col" style="height:160px"></div><span class="d">SAT AUG 22<br>All-time record</span></div>
+        <div class="day"><span class="n">24</span><div class="col" style="height:63px"></div><span class="d">SUN AUG 23<br>Teardown, still recruiting</span></div>
+    </div>
+    <p class="note">On Saturday alone the gang issued 61 numbers, roughly one every eight minutes of a typical show day. <b>Our previous best single day was May 16, 2026, with 16 members. It was not close.</b></p>
+</section>
+
+<section aria-labelledby="s5">
+    <div class="item"><span class="no">AGENDA ITEM 05</span><h2 id="s5">Top Earners</h2></div>
+    <p>The following members recruited the most new members during the review period. In a normal company, they would get a bonus. Here, they get this table.</p>
+    <div class="table-wrap">
+        <table id="leaders">
+            <thead><tr><th>Rank</th><th>Callsign</th><th>Member</th><th style="text-align:right">Recruits</th><th style="width:38%">Output</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <div class="kpis">
+        <div class="kpi">
+            <span class="label">Members who recruited someone</span>
+            <span class="val">111</span>
+            <span class="sub">Different sponsors brought in at least one new member during the period.</span>
+        </div>
+        <div class="kpi">
+            <span class="label">First-time recruiters</span>
+            <span class="val">79</span>
+            <span class="sub">Of those 111, 79 had never sponsored anyone before. The pyramid is a tree now. Please do not call it a pyramid.</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Founder output</span>
+            <span class="val">44</span>
+            <span class="sub">All-time recruits by BKG #1, KI7QCF. Still number one. Still undefeated.</span>
+        </div>
+    </div>
+</section>
+
+<section aria-labelledby="s6">
+    <div class="item"><span class="no">AGENDA ITEM 06</span><h2 id="s6">Territory Expansion</h2></div>
+    <div class="split">
+        <div style="display:grid;gap:12px">
+            <h3>New Territories Acquired</h3>
+            <p>We entered 15 new states, provinces, and countries during the review period. None of these were planned. We would like to apologize to nobody.</p>
+            <div class="chips">
+                <span class="chip">Delaware</span><span class="chip">Iowa</span><span class="chip">Kansas</span><span class="chip">Mississippi</span><span class="chip">Nebraska</span><span class="chip">South Dakota</span><span class="chip">Vermont</span><span class="chip">West Virginia</span><span class="chip">Wyoming</span>
+                <span class="chip intl">Alberta</span><span class="chip intl">Ontario</span><span class="chip intl">Canada</span><span class="chip intl">Croatia</span><span class="chip intl">Japan</span><span class="chip intl">Poland</span>
+            </div>
+            <p class="note">Green: new U.S. states. Pink: new international territory. <b>Alberta alone delivered 13 members. That is more than 30 of our 45 U.S. states have in total.</b></p>
+        </div>
+        <div style="display:grid;gap:12px;align-content:start">
+            <h3>Where the New Members Came From</h3>
+            <div class="table-wrap">
+                <table id="regions" style="min-width:0">
+                    <thead><tr><th>Region</th><th style="text-align:right">New</th><th style="width:50%"></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <p>Special recognition goes to the home team. Alabama went from <b style="color:var(--brass-hot)">9 members to 36</b>, which is four times bigger in six weeks. The Southeast as a whole (Georgia, Alabama, Tennessee, Florida, the Carolinas) produced 118 new members, which is the same as the entire Hamfest weekend, which is a coincidence, which we find spooky.</p>
+</section>
+
+<section aria-labelledby="s7">
+    <div class="item"><span class="no">AGENDA ITEM 07</span><h2 id="s7">Audit Findings</h2></div>
+    <p>In the interest of transparency and good corporate governance, our internal audit team (one guy with a spreadsheet) reviewed every row. The following irregularities were found.</p>
+    <div class="audit">
+        <div class="finding"><span class="sev">Finding 1</span><p>Two members are recorded as joining in the year 26 A.D. One join date reads "8/20/0026." Another reads "0026-09-03."</p><span class="res">Resolution: Corrected to 2026. Ham radio was not invented yet, so the auditors accepted the correction.</span></div>
+        <div class="finding"><span class="sev">Finding 2</span><p>88 of the 328 new members, or 27%, had their names entered in ALL CAPITAL LETTERS.</p><span class="res">Resolution: None required. Excitement is a leading indicator.</span></div>
+        <div class="finding"><span class="sev">Finding 3</span><p>Five new members are listed by first name only, including Don, Steve, Geoff, Ethan, and Brent. Like Cher.</p><span class="res">Resolution: Their callsigns are on file. That is all the government needs, and it is all we need.</span></div>
+        <div class="finding"><span class="sev">Finding 4</span><p>On Saturday, September 5, the gang recruited zero members. This is the only day in the review period with no growth.</p><span class="res">Resolution: A meeting has been scheduled about the meeting. Then we recruited 14 people the next Saturday.</span></div>
+        <div class="finding"><span class="sev">Finding 5</span><p>Membership numbers were not always issued in date order. BKG #283 is dated August 19, the day before BKG #276.</p><span class="res">Resolution: Hamfest paperwork was processed in the order it came out of people's pockets. This is fine.</span></div>
+    </div>
+</section>
+
+<section aria-labelledby="s8">
+    <div class="item"><span class="no">AGENDA ITEM 08</span><h2 id="s8">Forward Guidance</h2></div>
+    <p>If the gang keeps recruiting at the review-period pace of 7.6 members per day, the following milestones are projected. These projections are not financial advice. They are barely advice.</p>
+    <div class="kpis">
+        <div class="kpi">
+            <span class="label">Member #1,000</span>
+            <span class="val">Nov 22</span>
+            <span class="sub">Estimated date, 2026. Whoever it is, please be ready to pose for a picture.</span>
+        </div>
+        <div class="kpi">
+            <span class="label">Year-end membership</span>
+            <span class="val">~1,300</span>
+            <span class="sub">Projected for December 31, 2026, assuming no hamfests. With a hamfest, all bets are off.</span>
+        </div>
+        <div class="kpi">
+            <span class="label">States remaining</span>
+            <span class="val">5</span>
+            <span class="sub">Still missing: Alaska, Hawaii, Maine, Minnesota, and Wisconsin. We know who you are. We are coming with a CW key.</span>
+        </div>
+    </div>
+    <p class="note">Risk factors: band conditions, the solar cycle, running out of membership forms, and the possibility that Huntsville was a one-time event. <b>Management believes the possibility that Huntsville was a one-time event is low, because September did 178 members without one.</b></p>
+</section>
+
+<section aria-labelledby="s9">
+    <div class="item"><span class="no">CLOSING</span><h2 id="s9">Motion Before the Board</h2></div>
+    <div class="motion">
+        <p>Whereas the gang had no growth strategy, and whereas the gang more than doubled anyway, be it resolved that:</p>
+        <ol>
+            <li>We keep doing whatever this was.</li>
+            <li>We bring more membership forms to the next hamfest. A lot more.</li>
+            <li>Every new member gets on the air and makes a QSO with someone who is not yet in the gang.</li>
+            <li>Nobody asks how the Board meeting went. It went great.</li>
+        </ol>
+        <span class="vote">MOTION SECONDED. MOTION CARRIED. 🤜</span>
+    </div>
+</section>
+
+<footer>
+    <span>Data: the BKG roster spreadsheet as of October 1, 2026, 604 rows. The review period runs Thursday, August 20 through Thursday, October 1, 2026, inclusive, and is counted by each member's recorded join date.</span>
+    <span>*Not actually confidential. Please share it with everyone you know, especially people who are not in the gang yet.</span>
+</footer>
+
+</main>
+
+<script>
+(function () {
+    var NS = 'http://www.w3.org/2000/svg';
+    var daily = [6,27,61,24,3,3,3,5,2,8,6,1, 6,8,5,4,0,3,4,1,1,1,1,14,7,2,6,4,7,7,13,3,4,7,5,5,9,31,12,3,2,3, 1];
+    var start = new Date(2026, 7, 20);
+    function label(i) { var d = new Date(start); d.setDate(d.getDate() + i); return d; }
+    var mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    function el(name, attrs, parent, text) {
+        var n = document.createElementNS(NS, name);
+        for (var k in attrs) n.setAttribute(k, attrs[k]);
+        if (text != null) n.textContent = text;
+        parent.appendChild(n); return n;
+    }
+    var css = getComputedStyle(document.documentElement);
+    function tok(t) { return css.getPropertyValue(t).trim(); }
+
+    // Daily bars
+    var s = document.getElementById('daily');
+    var L = 44, R = 846, T = 30, B = 290, max = 70, n = daily.length, step = (R - L) / n;
+    function y(v) { return B - (v / max) * (B - T); }
+    [0, 20, 40, 60].forEach(function (v) {
+        el('line', { x1: L, x2: R, y1: y(v), y2: y(v), 'class': 'grid' }, s);
+        el('text', { x: L - 8, y: y(v) + 4, 'text-anchor': 'end' }, s, v);
+    });
+    daily.forEach(function (v, i) {
+        var hot = i < 4;
+        el('rect', { x: L + i * step + 2, y: y(v), width: step - 4, height: B - y(v), fill: hot ? tok('--pink') : (i === 37 ? tok('--brass-hot') : tok('--brass')) }, s);
+        var d = label(i);
+        if (d.getDate() === 20 || d.getDate() === 1 || d.getDate() === 10 || (d.getDate() === 20 && d.getMonth() === 8)) {
+            el('text', { x: L + i * step + step / 2, y: B + 18, 'text-anchor': i === n - 1 ? 'end' : 'middle' }, s, mon[d.getMonth()] + ' ' + d.getDate());
+        }
+    });
+    el('line', { x1: L, x2: R, y1: B, y2: B, 'class': 'axis' }, s);
+    el('text', { x: L + 2 * step + step + 8, y: y(61) + 8, 'class': 'big' }, s, '61');
+    el('text', { x: L + 2 * step + step + 8, y: y(61) + 26, 'class': 'ann' }, s, 'Hamfest Saturday');
+    el('text', { x: L + 37 * step + step / 2, y: y(31) - 26, 'class': 'big', 'text-anchor': 'middle' }, s, '31');
+    el('text', { x: L + 37 * step + step / 2, y: y(31) - 10, 'class': 'ann', 'text-anchor': 'end' }, s, 'Alberta + Nebraska Saturday');
+    el('text', { x: L + 16 * step + step / 2, y: y(0) - 44, 'class': 'ann', 'text-anchor': 'middle' }, s, 'The hangover');
+    el('line', { x1: L + 16 * step + step / 2, x2: L + 16 * step + step / 2, y1: y(0) - 38, y2: y(0) - 6, stroke: tok('--muted'), 'stroke-dasharray': '3 3' }, s);
+    el('text', { x: L, y: 16 }, s, 'NEW MEMBERS PER DAY');
+
+    // Cumulative line
+    var c = document.getElementById('cum');
+    var cum = [276]; daily.forEach(function (v) { cum.push(cum[cum.length - 1] + v); });
+    var lo = 200, hi = 650, m = cum.length, stp = (R - L) / (m - 1);
+    function yc(v) { return B - ((v - lo) / (hi - lo)) * (B - T); }
+    function xc(i) { return L + i * stp; }
+    el('rect', { x: xc(0), y: T, width: xc(4) - xc(0), height: B - T, fill: tok('--pink'), opacity: '0.14' }, c);
+    el('text', { x: xc(0) + 6, y: T + 16, 'class': 'ann' }, c, 'Hamfest');
+    el('text', { x: xc(0) + 6, y: T + 32, 'class': 'ann' }, c, 'weekend');
+    [300, 400, 500, 600].forEach(function (v) {
+        el('line', { x1: L, x2: R, y1: yc(v), y2: yc(v), 'class': 'grid' }, c);
+        el('text', { x: L - 8, y: yc(v) + 4, 'text-anchor': 'end' }, c, v);
+    });
+    var pts = cum.map(function (v, i) { return xc(i) + ',' + yc(v); });
+    el('polygon', { points: xc(0) + ',' + B + ' ' + pts.join(' ') + ' ' + xc(m - 1) + ',' + B, fill: tok('--brass'), opacity: '0.16' }, c);
+    el('polyline', { points: pts.join(' '), fill: 'none', stroke: tok('--brass-hot'), 'stroke-width': 3, 'stroke-linejoin': 'round' }, c);
+    el('line', { x1: L, x2: R, y1: B, y2: B, 'class': 'axis' }, c);
+    el('circle', { cx: xc(0), cy: yc(276), r: 5, fill: tok('--ink') }, c);
+    el('text', { x: xc(0) + 10, y: yc(276) + 18, 'class': 'ann' }, c, '276 on Aug 19');
+    el('circle', { cx: xc(4), cy: yc(394), r: 5, fill: tok('--pink') }, c);
+    el('text', { x: xc(4) + 10, y: yc(394) + 18, 'class': 'ann' }, c, '394 after Sunday');
+    el('circle', { cx: xc(m - 1), cy: yc(604), r: 6, fill: tok('--brass-hot') }, c);
+    el('text', { x: xc(m - 1) - 10, y: yc(604) - 12, 'class': 'big', 'text-anchor': 'end' }, c, '604 TODAY');
+    for (var i = 1; i < m; i++) {
+        var d = label(i - 1);
+        if (d.getDate() === 1 || d.getDate() === 10 || d.getDate() === 20) {
+            el('text', { x: xc(i), y: B + 18, 'text-anchor': i === m - 1 ? 'end' : 'middle' }, c, mon[d.getMonth()] + ' ' + d.getDate());
+        }
+    }
+    el('text', { x: L, y: 16 }, c, 'TOTAL MEMBERS, END OF DAY');
+
+    // Leaderboard
+    var leaders = [
+        ['N4BKY', 'Becky S.', 'Alabama', 23, '🥇'], ['KI7QCF', 'Forrest S. (BKG #1)', 'Utah', 21, '🥈'], ['N9HO', 'Justin R.', 'Alabama', 21, '🥈'],
+        ['K5OHY', 'Tim H.', 'Texas', 15, '4'], ['VE6LK', 'Vince D.', 'Canada', 15, '4'], ['N1RWJ', 'Rob J.', 'Rhode Island', 13, '6'],
+        ['K4ZSR', 'Zach R.', 'Kentucky', 11, '7']
+    ];
+    var tb = document.querySelector('#leaders tbody');
+    leaders.forEach(function (r, i) {
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td>' + r[4] + '</td><td class="call"></td><td></td><td class="num">' + r[3] + '</td><td><div class="bar' + (i === 0 ? ' hot' : '') + '" style="width:' + (r[3] / 23 * 100) + '%"></div></td>';
+        tr.children[1].textContent = r[0];
+        tr.children[2].textContent = r[1] + ', ' + r[2];
+        tb.appendChild(tr);
+    });
+
+    // Regions
+    var regions = [['Georgia', 29], ['Alabama', 27], ['Texas', 24], ['California', 23], ['Tennessee', 20], ['Florida', 17], ['North Carolina', 17], ['Alberta', 13], ['Pennsylvania', 12]];
+    var rb = document.querySelector('#regions tbody');
+    regions.forEach(function (r) {
+        var tr = document.createElement('tr');
+        tr.innerHTML = '<td></td><td class="num">' + r[1] + '</td><td><div class="bar" style="width:' + (r[1] / 29 * 100) + '%"></div></td>';
+        tr.children[0].textContent = r[0];
+        rb.appendChild(tr);
+    });
+})();
+</script>
