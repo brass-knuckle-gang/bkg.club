@@ -106,6 +106,16 @@ td.call { font-family: var(--memo); font-weight: 400; color: var(--brass); white
 .chip { font-family: var(--memo); font-weight: 400; font-size: .88rem; border: 1px solid var(--lime); color: var(--lime); padding: 3px 10px; }
 .chip.intl { border-color: var(--pink); color: var(--pink); }
 
+
+/* Case studies */
+.cases { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.case { background: var(--panel); border: 2px solid var(--brass-deep); padding: 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.case .who { font-family: var(--memo); font-weight: 400; color: var(--pink); font-size: .85rem; letter-spacing: .08em; text-transform: uppercase; }
+.case dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: .95rem; }
+.case dt { font-family: var(--memo); font-weight: 400; color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; padding-top: 3px; }
+.case dd { margin: 0; min-width: 0; }
+.case .verdict { font-family: var(--memo); font-weight: 400; color: var(--lime); font-size: .9rem; border-top: 1px dashed var(--brass-deep); padding-top: 10px; }
+
 /* Audit */
 .audit { display: grid; gap: 12px; }
 .finding { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; background: var(--panel); border-left: 6px solid var(--red); padding: 12px 16px; }
@@ -134,7 +144,7 @@ footer { padding-top: 28px; font-family: var(--memo); font-weight: 400; color: v
 <header class="cover">
     <div class="letterhead">
         <span><b>BKG.club</b> · Brass Knuckle Gang, Incorporated (Not Incorporated)</span>
-        <span>Board Packet · Item 7 of 7 · Confidential*</span>
+        <span>Board Packet · Confidential*</span>
     </div>
     <div class="eyebrow">Quarterly Growth Review · Fiscal Year 2026</div>
     <h1>The Huntsville Effect</h1>
@@ -204,7 +214,7 @@ footer { padding-top: 28px; font-family: var(--memo); font-weight: 400; color: v
                 <tr><td>3</td><td>Sep 3 – Sep 9</td><td class="num">18</td><td>The hangover. Includes September 5, which had zero. See Audit Findings.</td></tr>
                 <tr><td>4</td><td>Sep 10 – Sep 16</td><td class="num">35</td><td>Recovery. The Kentucky chapter woke up.</td></tr>
                 <tr><td>5</td><td>Sep 17 – Sep 23</td><td class="num">46</td><td>Growth without a hamfest. Nobody can explain this either.</td></tr>
-                <tr><td>6</td><td>Sep 24 – Sep 30</td><td class="num">65</td><td>Best week since Huntsville. Alberta, eh.</td></tr>
+                <tr><td>6</td><td>Sep 24 – Sep 30</td><td class="num">65</td><td>Best week since Huntsville. Alberta, eh. See Agenda Item 07.</td></tr>
                 <tr><td>—</td><td>Oct 1 (so far)</td><td class="num">1</td><td>Welcome, BKG #604. You are the most recent member and therefore the most important person in this room.</td></tr>
             </tbody>
         </table>
@@ -276,8 +286,42 @@ footer { padding-top: 28px; font-family: var(--memo); font-weight: 400; color: v
     <p>Special recognition goes to the home team. Alabama went from <b style="color:var(--brass-hot)">9 members to 36</b>, which is four times bigger in six weeks. The Southeast as a whole (Georgia, Alabama, Tennessee, Florida, the Carolinas) produced 118 new members, which is the same as the entire Hamfest weekend, which is a coincidence, which we find spooky.</p>
 </section>
 
+<section aria-labelledby="s6b">
+    <div class="item"><span class="no">AGENDA ITEM 07</span><h2 id="s6b">Special Recognition: The Canadian OGs</h2></div>
+    <p>On September 17, the gang had zero members in Canada. Two meters is line of sight, the nearest members were hundreds of miles away on the wrong side of the border, and the rules say you only get in by making a 2-meter CW contact with someone already in the gang. Two Canadians looked at that problem and decided to overcome it in the most difficult ways available. The Board recognizes them both.</p>
+    <div class="cases">
+        <article class="case">
+            <span class="who">Case Study A · Alberta</span>
+            <h3>Vince, VE6LK, BKG #500</h3>
+            <p>Vince did not want an easy induction at a picnic table or on a summit with everyone standing around. His rule was that each station had to be in its own country. So he drove more than three hours south from home to the Alberta–Montana border. Devin "Gato" Felix, N7HNT, drove about four hours north from Helena, Montana, to meet him on the other side.</p>
+            <dl>
+                <dt>Driving</dt><dd>Roughly seven hours, combined, one way</dd>
+                <dt>Distance</dt><dd>About 2.5 kilometers, station to station</dd>
+                <dt>Power</dt><dd>5 watts or less, the whole time</dd>
+                <dt>Result</dt><dd>First Canadian member, September 18, 2026</dd>
+            </dl>
+            <p>Vince's write-up asks whether a contact across the border counts as DX. His ruling was yes, even at 2.5 kilometers. The Board agrees.</p>
+            <p class="verdict">Return on investment: In the 11 days after he joined, Vince recruited 15 new members, including 13 in Alberta. Seven hours of driving helped deliver the gang's second-biggest day ever, September 26, with 31 new members.</p>
+        </article>
+        <article class="case">
+            <span class="who">Case Study B · Ontario</span>
+            <h3>Josh, VE3YTX, BKG #531</h3>
+            <p>Josh is a new ham who caught the CW bug. When he started, there were no members in Canada, and the closest ones were about 200 miles away in the United States. On 2 meters, that is a rough situation. A member suggested he build his own Yagi antenna and try for a 2-meter CW contact through a satellite instead.</p>
+            <dl>
+                <dt>Method</dt><dd>2-meter CW, by satellite, through space</dd>
+                <dt>Antenna</dt><dd>A homebrew Yagi he built for the job</dd>
+                <dt>Contact</dt><dd>N9HO, the gang's Alabama and Satellite OG</dd>
+                <dt>Attempts</dt><dd>One. It worked on the first try.</dd>
+            </dl>
+            <p>His write-up is titled "A New Ham's Guide to Overcomplicating Everything." The Board would like to state that this is the correct amount of complicated.</p>
+            <p class="verdict">Return on investment: Ontario OG, joined September 22, 2026. He recruited 3 more Ontario members within 3 days.</p>
+        </article>
+    </div>
+    <p class="note">Combined impact: Canada went from 0 members to 19 in 12 days. One man drove to a border. One man went to space. <b>Both of these are now considered official BKG recruiting strategies.</b></p>
+</section>
+
 <section aria-labelledby="s7">
-    <div class="item"><span class="no">AGENDA ITEM 07</span><h2 id="s7">Audit Findings</h2></div>
+    <div class="item"><span class="no">AGENDA ITEM 08</span><h2 id="s7">Audit Findings</h2></div>
     <p>In the interest of transparency and good corporate governance, our internal audit team (one guy with a spreadsheet) reviewed every row. The following irregularities were found.</p>
     <div class="audit">
         <div class="finding"><span class="sev">Finding 1</span><p>Two members are recorded as joining in the year 26 A.D. One join date reads "8/20/0026." Another reads "0026-09-03."</p><span class="res">Resolution: Corrected to 2026. Ham radio was not invented yet, so the auditors accepted the correction.</span></div>
@@ -289,7 +333,7 @@ footer { padding-top: 28px; font-family: var(--memo); font-weight: 400; color: v
 </section>
 
 <section aria-labelledby="s8">
-    <div class="item"><span class="no">AGENDA ITEM 08</span><h2 id="s8">Forward Guidance</h2></div>
+    <div class="item"><span class="no">AGENDA ITEM 09</span><h2 id="s8">Forward Guidance</h2></div>
     <p>If the gang keeps recruiting at the review-period pace of 7.6 members per day, the following milestones are projected. These projections are not financial advice. They are barely advice.</p>
     <div class="kpis">
         <div class="kpi">
@@ -327,6 +371,7 @@ footer { padding-top: 28px; font-family: var(--memo); font-weight: 400; color: v
 
 <footer>
     <span>Data: the BKG roster spreadsheet as of October 1, 2026, 604 rows. The review period runs Thursday, August 20 through Thursday, October 1, 2026, inclusive, and is counted by each member's recorded join date.</span>
+    <span>Canadian case studies: "Does a Cross-Border Contact Count as DX?" by Vince, VE6LK, and "A New Ham's Guide to Overcomplicating Everything: 2M Satellite CW To Get in a Gang?" by Josh, VE3YTX, both on QRPer.com.</span>
     <span>*Not actually confidential. Please share it with everyone you know, especially people who are not in the gang yet.</span>
 </footer>
 
