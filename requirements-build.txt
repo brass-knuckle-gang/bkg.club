@@ -1,0 +1,2 @@
+# Validate and remove metadata from optional JSON-roster profile photos.
+Pillow==12.3.0

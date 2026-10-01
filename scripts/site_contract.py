@@ -99,9 +99,12 @@ def coordinates(entry):
         require(type(value) in (float, int) and math.isfinite(value) and abs(value) <= limit, f"Invalid {key}")
 
 
-def validate_dist(output_dir):
+def validate_dist(output_dir, *, source="sheets"):
+    require(source in ("sheets", "json"), "Invalid build source")
     output_dir = Path(output_dir)
     required = set(PUBLIC_FILES) | {"members.txt"}
+    if source == "json":
+        required.add("data/v1/roster.json")
     actual = set()
     for path in output_dir.rglob("*"):
         require(not path.is_symlink(), f"Symlink in public output: {path}")
@@ -144,6 +147,16 @@ def validate_dist(output_dir):
     require(len(set(call.upper() for call in calls)) == len(calls), "Duplicate callsign")
     require(len(set(numbers)) == len(numbers) and numbers == sorted(numbers), "Duplicate/unsorted member number")
     require(isinstance(outbreak, list) and [identity(entry) for entry in outbreak] == identities, "Outbreak roster differs from downline")
+    if source == "json":
+        from roster_input import parse_roster_json
+
+        _, reviewed = parse_roster_json((output_dir / "data/v1/roster.json").read_text(encoding="utf-8"))
+        require(identities == [(m["callsign"], m["name"], m["number"]) for m in reviewed],
+                "Public JSON identities differ from pages")
+        sponsors = {m["number"]: m["callsign"] for m in reviewed}
+        require([entry["sponsor"] for entry in downline] == [
+            sponsors.get(m["sponsor_bkg_number"]) for m in reviewed
+        ], "Public JSON sponsors differ from pages")
     by_call = {entry["call"]: entry for entry in downline}
     for entry, ob in zip(downline, outbreak):
         sponsor = entry.get("sponsor")
@@ -203,6 +216,9 @@ def validate_dist(output_dir):
     roster = PageParser()
     roster.feed(block(index, ROSTER_START, "<!-- ROSTER:END -->"))
     require(roster.calls == calls and roster.names[:-1] == [item[1] for item in identities], "Roster cards differ from generated data")
+    if source == "json":
+        photos = {relative for relative in actual if Path(relative).parent.as_posix() in PHOTO_DIRS}
+        require(photos <= set(roster.links), "JSON build contains photos outside the active roster")
     card_numbers = [int(n) for n in re.findall(r'class="member-number">BKG #(\d+)</div>', block(index, ROSTER_START, "<!-- ROSTER:END -->"))]
     require(card_numbers == numbers + [max(numbers) + 1], "Roster member numbers differ from generated data")
     notes = (output_dir / "members.txt").read_text()
@@ -211,3 +227,7 @@ def validate_dist(output_dir):
     parsed = [re.fullmatch(r"([A-Za-z0-9/]+) 🤜 (.*?) BKG #(\d+)(?: \([^\n]*\))?", line) for line in entries]
     require(all(parsed), "Invalid members.txt entry")
     require([(match[1], int(match[3])) for match in parsed] == sorted(zip(calls, numbers)), "members.txt differs from roster")
+    if source == "json":
+        notes_by_call = {match[1]: match[2] for match in parsed}
+        require(notes_by_call == {m["callsign"]: m["name"] for m in reviewed},
+                "members.txt differs from reviewed JSON names")

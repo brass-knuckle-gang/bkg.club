@@ -2,6 +2,8 @@
 
 This implements only the deployment-safety portion of [#30](https://github.com/jsvana/bkg.club/issues/30). GitHub Pages, `www.bkg.club`, the Google Sheets CSV URL, and the existing production triggers remain unchanged: pushes to `main`, manual dispatch on `main`, and `0 */6 * * *` (every six hours). The `deploy` concurrency group still serializes runs without cancelling an active deployment. Pull requests run only offline fixture checks with read-only permissions and no production environment or secrets.
 
+The optional [JSON input experiment](JSON-INPUT.md) builds outside the repository and uses a separate enrichment cache. It is not selected by this workflow. Its `/data/v1/roster.json` is rejected by the default production validator; a later source switch requires the checklist in that document.
+
 ## Build contract
 
 `python3 scripts/build-roster.py` writes `dist/`. The explicit allowlist in `scripts/site_contract.py` preserves all seven public pages, `CNAME`, favicon/logo, shared CSS, the existing public mobile mockup, `members.txt`, and supported photo files. Repository scripts, QRZ cache, name/location override inputs, and photo-source metadata are excluded. Source page templates are unchanged; only their existing generated sections are replaced in the public copies.
@@ -14,7 +16,9 @@ Only a successful generation and validation can upload a Pages artifact. The sep
 
 After upload, QRZ-cache persistence uses a separate clean Git worktree at the original source revision. Only that worktree commits, fetches/rebases against current `main`, and pushes the cache delta. It cannot change the build checkout or uploaded files. Persistence conflicts/failures are reported but do not block deployment of the validated artifact. Bot-token pushes and `[skip ci]` retain the existing loop prevention.
 
-Run the checks locally without credentials or network access:
+Install the pinned photo-validation dependency in an isolated environment
+(see [JSON setup](JSON-INPUT.md#render-a-local-export-outside-the-production-artifact)),
+then run the checks without credentials or network access:
 
 ```sh
 python3 -m unittest discover -s tests -v
