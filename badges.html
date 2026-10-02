@@ -137,9 +137,10 @@ const FRQ_BASE = BAND_MID + FRQ_CAP / 2;
 const FLICK_W = 6.5, FLICK_A = [26.0, 43.0], FLICK_R = BAND_MID;
 const KNUCKLE_W = 432.0, KNUCKLE_CY = 372.0;
 const CALL_BASE = 582.0, CALL_CAP = 59.1, CALL_TRACK = 4.0;
-// Medallion spec: callsign ink never wider than 720/2048 of the canvas; longer
-// calls scale down uniformly (tracking untouched), short ones never stretch.
-const CALL_MAX_W = 360.0, CALL_MIN_CAP = CALL_CAP * 88 / 108;
+// Medallion spec: callsign ink never wider than 35% of the badge diameter;
+// longer calls (KE9BHN) scale down uniformly with tracking untouched, short
+// ones (K4MW) never stretch.
+const CALL_MAX_W = 0.35 * 2 * R_DISC, CALL_MIN_CAP = CALL_CAP * 88 / 108;
 const RULE_Y = 550.0, RULE_W = 4.0, RULE_LEN = 68.0, RULE_GAP = 26.0;
 const BKG_BASE = 678.0, BKG_CAP = 72.0;
 const BKG_SOLO_BASE = 672.0, BKG_SOLO_CAP = 80.0, RULE_SOLO_Y = 566.0;
