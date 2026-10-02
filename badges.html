@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>~*~BKG BADGE PRESS~*~ Stamp Ur Own Brass!!</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bangers&family=Comic+Neue:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/bkg.css">
+</head>
+<body>
+    <div class="tiled-bg"></div>
+    <div class="grunge-overlay"></div>
+    <div class="floating-knuckle">🤜</div>
+    <div class="floating-knuckle">🤛</div>
+    <div class="floating-knuckle">🤜</div>
+    <div class="floating-knuckle">🤛</div>
+
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-area">
+                <div>
+                    <a href="index.html" class="logo-text"><span>BKG</span>.club</a>
+                    <div class="tagline">Get ur brass on the air!! ✨</div>
+                </div>
+            </div>
+            <nav class="nav-links">
+                <a href="index.html#home">HOME</a>
+                <a href="index.html#bylaws">BYLAWS</a>
+                <a href="index.html#join">JOIN</a>
+                <a href="index.html#roster">ROSTER</a>
+                <a href="index.html#map">MAP</a>
+                <a href="nearby.html">NEARBY</a>
+                <a href="tree.html">DOWNLINE</a>
+                <a href="recruit.html">RECRUIT</a>
+                <a href="clubs.html">CLUBS</a>
+                <a href="safety.html">SAFETY</a>
+                <a href="outbreak.html">OUTBREAK</a>
+                <a href="badges.html" class="active">BADGES</a>
+                <a href="https://discord.gg/wDs5dth22k" target="_blank" rel="noopener">DISCORD</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="marquee-container">
+        <div class="marquee-text">
+            ★彡 THE BADGE PRESS IS HOT!! 彡★ PICK A MEMBER, PULL A BADGE!! 彡★ OG SEAT HOLDERS GET THE TAB!! 彡★ SVG FOR THE PRINTER, PNG FOR THE GROUP CHAT!! 彡★ 2 METER CW OR BUST!!! 彡★
+        </div>
+    </div>
+
+    <main class="main-wrapper press-wrapper">
+        <a href="index.html" class="back-link">⟵ BACK 2 HQ</a>
+        <h2 class="section-title">THE BADGE PRESS</h2>
+        <div class="section-subtitle">🤜 Pick a member, pull the badge. <span class="press-count" id="rosterCount"></span> 🤜</div>
+
+        <div class="press-grid">
+            <div>
+                <div class="press-stage" id="stage">
+                    <div id="preview"></div>
+                    <span class="stage-note" id="stageNote"></span>
+                </div>
+                <div class="press-btns">
+                    <button class="press-btn key" id="dlSvg">Download SVG</button>
+                    <button class="press-btn" id="dlPng">Download PNG</button>
+                    <button class="press-btn" id="copySvg">Copy SVG</button>
+                    <button class="press-btn" id="dlZip">Download all OG badges</button>
+                </div>
+            </div>
+
+            <div>
+                <div class="press-panel">
+                    <h3 class="press-panel-title">ROSTER</h3>
+                    <div class="form-row">
+                        <input type="text" id="search" placeholder="Callsign, name, state or number" autocomplete="off" aria-label="Search the roster">
+                    </div>
+                    <ul id="results" class="press-results" role="listbox" aria-label="Roster results"></ul>
+                </div>
+
+                <div class="press-panel">
+                    <h3 class="press-panel-title">BADGE</h3>
+                    <div class="form-row">
+                        <label for="callsign">Callsign</label>
+                        <input type="text" id="callsign" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="form-row">
+                        <label for="tab">Bottom tab</label>
+                        <input type="text" id="tab" autocomplete="off" spellcheck="false" placeholder="Leave empty for no tab">
+                    </div>
+                    <div class="form-row">
+                        <label for="freq">Frequency</label>
+                        <input type="text" id="freq" autocomplete="off">
+                    </div>
+                    <div class="form-row">
+                        <label for="top">Ring text</label>
+                        <input type="text" id="top" autocomplete="off">
+                    </div>
+                    <div class="form-row">
+                        <label>Finish</label>
+                        <div class="seg" role="group" aria-label="Finish">
+                            <button data-style="emboss" aria-pressed="true">Embossed</button>
+                            <button data-style="flat" aria-pressed="false">Flat</button>
+                            <button data-style="mono" aria-pressed="false">One colour</button>
+                        </div>
+                    </div>
+
+                    <details class="press-details">
+                        <summary>Refresh roster data</summary>
+                        <p id="refreshNote"></p>
+                        <div class="form-row">
+                            <textarea id="pasteJson" placeholder="Paste the export JSON here" spellcheck="false"></textarea>
+                        </div>
+                        <div class="press-btns">
+                            <button class="press-btn" id="applyJson">Load pasted roster</button>
+                            <button class="press-btn" id="pickFile">Load a file</button>
+                        </div>
+                        <input type="file" id="fileInput" accept=".json,application/json" hidden>
+                    </details>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="toast" class="press-toast" role="status" aria-live="polite"></div>
+
+    <footer class="footer">
+        <div class="footer-text">© 2024 BRASS KNUCKLE GANG | All Rights Reserved | 73 de BKG 🤜</div>
+        <div class="footer-links">
+            <a href="clubs.html">CLUBS</a>
+            <a href="index.html#roster">ROSTER</a>
+            <a href="https://discord.gg/wDs5dth22k" target="_blank" rel="noopener">DISCORD</a>
+            <a href="index.html#home">TOP</a>
+        </div>
+    </footer>
+
+<script>
+/* ---- badge generator: port of bkg_badge.py ---- */
+const CX = 512, CY = 460, R_DISC = 421.5;
+const RING_OUTER = [401.0, 13.5], RING_THIN = [376.0, 4.0], RING_INNER = [259.0, 6.5];
+const BAND_MID = ((RING_INNER[0] + RING_INNER[1] / 2) + (RING_THIN[0] - RING_THIN[1] / 2)) / 2;
+const TOP_CAP = 58.0, TOP_SWEEP = 176.0, FRQ_CAP = 46.0, FRQ_SWEEP = 76.5;
+const TOP_BASE = BAND_MID - TOP_CAP / 2;
+const FRQ_BASE = BAND_MID + FRQ_CAP / 2;
+const FLICK_W = 6.5, FLICK_A = [26.0, 43.0], FLICK_R = BAND_MID;
+const KNUCKLE_W = 432.0, KNUCKLE_CY = 372.0;
+const CALL_BASE = 582.0, CALL_CAP = 59.1, CALL_TRACK = 4.0;
+const RULE_Y = 550.0, RULE_W = 4.0, RULE_LEN = 68.0, RULE_GAP = 26.0;
+const BKG_BASE = 678.0, BKG_CAP = 72.0;
+const BKG_SOLO_BASE = 672.0, BKG_SOLO_CAP = 80.0, RULE_SOLO_Y = 566.0;
+const CLEAR = 9.0;
+const TAB_AXIS = 452.6, TAB_T = 50.0, TAB_BLACK_T = 63.0, TAB_SW = 9.6;
+const TAB_BASE = 485.8, TAB_CAP = 56.7, TAB_TRACK = 8.0;
+
+class Face {
+  constructor(d) { this.upm = d.upm; this.cap = d.cap; this.g = d.g; }
+  adv(ch, em) { const g = this.g[ch] || this.g[" "]; return g.a * em / this.upm; }
+  path(ch) { const g = this.g[ch]; return g ? g.d : ""; }
+  emForCap(c) { return c * this.upm / this.cap; }
+  // Ink extents, not advance boxes: side bearings are asymmetric, so
+  // centring on the advance total leaves visible ink off-centre.
+  ink(text, cap, tracking) {
+    const em = this.emForCap(cap), s = em / this.upm;
+    let x = 0, lo = null, hi = null;
+    for (const ch of text) {
+      const g = this.g[ch];
+      if (g && g.r > g.l) {
+        const l = x + g.l * s, r = x + g.r * s;
+        lo = lo === null ? l : Math.min(lo, l);
+        hi = hi === null ? r : Math.max(hi, r);
+      }
+      x += this.adv(ch, em) + tracking;
+    }
+    return lo === null ? [0, Math.max(x - tracking, 0)] : [lo, hi];
+  }
+  inkWidth(t, c, k) { const [a, b] = this.ink(t, c, k); return b - a; }
+}
+
+let SANS, SERIF;
+function loadFaces(data) { SANS = new Face(data.sans); SERIF = new Face(data.serif); }
+
+const f2 = v => v.toFixed(2);
+const wrap = (d, m) =>
+  `<g transform="matrix(${m[0].toFixed(5)},${m[1].toFixed(5)},${m[2].toFixed(5)},${m[3].toFixed(5)},${m[4].toFixed(3)},${m[5].toFixed(3)})"><path d="${d}"/></g>`;
+
+function straight(font, text, cap, x, y, tracking) {
+  const em = font.emForCap(cap), s = em / font.upm;
+  const [lo, hi] = font.ink(text, cap, tracking);
+  let xx = x - (lo + hi) / 2, out = "";
+  for (const ch of text) {
+    const d = font.path(ch);
+    if (d) out += wrap(d, [s, 0, 0, -s, xx, y]);
+    xx += font.adv(ch, em) + tracking;
+  }
+  return [out, hi - lo];
+}
+
+function arced(font, text, cap, r, centreDeg, tracking, up) {
+  const em = font.emForCap(cap), s = em / font.upm;
+  const [lo, hi] = font.ink(text, cap, tracking);
+  const sgn = up === "out" ? 1 : -1;
+  let th = centreDeg * Math.PI / 180 - sgn * (lo + hi) / 2 / r, out = "";
+  for (const ch of text) {
+    const a = font.adv(ch, em);
+    const mid = th + sgn * a / 2 / r, ct = Math.cos(mid), st = Math.sin(mid);
+    const m = up === "out"
+      ? [-st * s, ct * s, ct * s, st * s, CX + r * ct, CY + r * st]
+      : [st * s, -ct * s, -ct * s, -st * s, CX + r * ct, CY + r * st];
+    const d = font.path(ch);
+    // m[0..1] already carry the font scale; divide it back out of the
+    // half-advance back-off or every glyph lands half an advance forward.
+    if (d) out += wrap(d, [m[0], m[1], m[2], m[3], m[4] - (a / 2) * m[0] / s, m[5] - (a / 2) * m[1] / s]);
+    th += sgn * (a + tracking) / r;
+  }
+  return out;
+}
+
+function fitTracking(font, text, cap, r, targetDeg) {
+  const n = Math.max(text.length - 1, 1);
+  return (targetDeg * Math.PI / 180 * r - font.inkWidth(text, cap, 0)) / n;
+}
+
+// A centred run is widest at its baseline corners and the ring curves up
+// to meet them, so shrink until those corners clear it.
+function fitCap(font, text, cap, baseline, tracking, ringR, ringSw) {
+  const limit = ringR - ringSw / 2 - CLEAR;
+  for (let i = 0; i < 40; i++) {
+    const half = font.inkWidth(text, cap, tracking) / 2;
+    if (Math.hypot(half, baseline - CY) <= limit) return cap;
+    cap *= 0.97;
+  }
+  return cap;
+}
+
+const polar = (r, deg) => [CX + r * Math.cos(deg * Math.PI / 180), CY + r * Math.sin(deg * Math.PI / 180)];
+
+// Tab truncated at the disc radius so it tucks under rather than relying
+// on the disc to cover it -- keeps one-colour output cuttable.
+function tabPath(axisR, t, a0, a1, cutR) {
+  const ro = axisR + t;
+  const c = (cutR ** 2 + axisR ** 2 - t ** 2) / (2 * cutR * axisR);
+  const d = Math.acos(Math.max(-1, Math.min(1, c))) * 180 / Math.PI;
+  const p = (r, a) => { const [x, y] = polar(r, a); return `${f2(x)},${f2(y)}`; };
+  return `M${p(ro, a0)} A${f2(ro)},${f2(ro)} 0 0 1 ${p(ro, a1)} A${f2(t)},${f2(t)} 0 0 1 ${p(cutR, a1 + d)} ` +
+         `A${f2(cutR)},${f2(cutR)} 0 0 0 ${p(cutR, a0 - d)} A${f2(t)},${f2(t)} 0 0 1 ${p(ro, a0)} Z`;
+}
+
+function badge(o) {
+  const top = o.top ?? "BRASS KNUCKLE GANG", freq = o.freq ?? "144.025 MHz";
+  const callsign = o.callsign ?? "", tab = o.tab ?? "";
+  const mono = o.mono || null, flat = !!o.flat;
+  const steel = mono || "url(#steel)", field = mono ? "none" : "url(#disc)";
+  const out = [];
+  let txt = "";
+
+  if (tab) {
+    const trk = Math.max(3.0, TAB_TRACK - 0.8 * Math.max(tab.length - 5, 0));
+    const half = (SANS.inkWidth(tab, TAB_CAP, trk) / TAB_BASE) * 180 / Math.PI / 2;
+    const a0 = 90 - half - 0.5, a1 = 90 + half + 0.5;
+    txt = arced(SANS, tab, TAB_CAP, TAB_BASE, 90, trk, "in");
+    out.push(`<path d="${tabPath(TAB_AXIS, TAB_BLACK_T, a0, a1, R_DISC)}" fill="${field}"/>`);
+    out.push(`<path d="${tabPath(TAB_AXIS, TAB_T, a0, a1, R_DISC - TAB_SW)}" fill="none" stroke="${steel}" stroke-width="${TAB_SW.toFixed(2)}"/>`);
+  }
+
+  out.push(`<circle cx="${CX}" cy="${CY}" r="${R_DISC}" fill="${field}"/>`);
+  if (tab) out.push(`<g fill="${steel}">${txt}</g>`);
+
+  for (const [r, sw] of [RING_OUTER, RING_THIN, RING_INNER])
+    out.push(`<circle cx="${CX}" cy="${CY}" r="${r}" fill="none" stroke="${steel}" stroke-width="${sw}"/>`);
+
+  if (top) out.push(`<g fill="${steel}">${arced(SANS, top, TOP_CAP, TOP_BASE, -90, fitTracking(SANS, top, TOP_CAP, TOP_BASE, TOP_SWEEP), "out")}</g>`);
+  if (freq) out.push(`<g fill="${steel}">${arced(SANS, freq, FRQ_CAP, FRQ_BASE, 90, fitTracking(SANS, freq, FRQ_CAP, FRQ_BASE, FRQ_SWEEP), "in")}</g>`);
+
+  for (const [lo, hi] of [[FLICK_A[0], FLICK_A[1]], [180 - FLICK_A[1], 180 - FLICK_A[0]]]) {
+    const [x0, y0] = polar(FLICK_R, lo), [x1, y1] = polar(FLICK_R, hi);
+    out.push(`<path d="M${f2(x0)},${f2(y0)} A${FLICK_R},${FLICK_R} 0 0 1 ${f2(x1)},${f2(y1)}" fill="none" stroke="${steel}" stroke-width="${FLICK_W}" stroke-linecap="round"/>`);
+  }
+
+  const k = KNUCKLE_W / 436.0;
+  out.push(`<g transform="translate(${CX} ${KNUCKLE_CY}) scale(${k.toFixed(5)} ${(k * (421.5 / 430.5)).toFixed(5)}) translate(-516 -417.5)"><path d="${KNUCKLE_D}" fill-rule="evenodd" fill="${steel}"/></g>`);
+
+  let gap, ruleY;
+  if (callsign) {
+    const cc = fitCap(SANS, callsign, CALL_CAP, CALL_BASE, CALL_TRACK, RING_INNER[0], RING_INNER[1]);
+    const [d, w] = straight(SANS, callsign, cc, CX, CALL_BASE, CALL_TRACK);
+    out.push(`<g fill="${steel}">${d}</g>`);
+    gap = w / 2 + RULE_GAP; ruleY = RULE_Y;
+  } else { gap = 50.0; ruleY = RULE_SOLO_Y; }
+  for (const sgn of [-1, 1]) {
+    const x = sgn > 0 ? CX + gap : CX - gap - RULE_LEN;
+    out.push(`<rect x="${f2(x)}" y="${f2(ruleY - RULE_W / 2)}" width="${RULE_LEN}" height="${RULE_W}" rx="${RULE_W / 2}" fill="${steel}"/>`);
+  }
+
+  let base = callsign ? BKG_BASE : BKG_SOLO_BASE, cap = callsign ? BKG_CAP : BKG_SOLO_CAP;
+  cap = fitCap(SERIF, "BKG", cap, base, 0, RING_INNER[0], RING_INNER[1]);
+  out.push(`<g fill="${steel}">${straight(SERIF, "BKG", cap, CX, base, 0)[0]}</g>`);
+
+  const defs = mono ? "" : `<defs><radialGradient id="disc" cx="50%" cy="40%" r="66%"><stop offset="0%" stop-color="#262626"/><stop offset="72%" stop-color="#151515"/><stop offset="100%" stop-color="#090909"/></radialGradient><linearGradient id="steel" gradientUnits="userSpaceOnUse" x1="512" y1="30" x2="512" y2="990"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="35%" stop-color="#EDEDEA"/><stop offset="70%" stop-color="#D8D8D4"/><stop offset="100%" stop-color="#BFBFBA"/></linearGradient><filter id="lift" x="-6%" y="-6%" width="112%" height="112%"><feDropShadow dx="0" dy="2" stdDeviation="1.6" flood-color="#000" flood-opacity="0.6"/></filter></defs>`;
+  const g = (flat || mono) ? "<g>" : '<g filter="url(#lift)">';
+  const label = [top, callsign, freq, tab].filter(Boolean).join(" \u2014 ");
+  const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="${esc(label)}">\n<title>${esc(label)}</title>\n${defs}\n${g}${out.join("")}</g>\n</svg>\n`;
+}
+
+</script>
+<script>
+const KNUCKLE_D = "M481.0,545.4C438.0,541.4 382.9,530.2 372.6,523.5C369.6,521.5 367.0,517.2 367.0,514.2C367.0,510.3 370.5,508.7 380.5,507.9C388.3,507.4 390.8,506.8 393.9,504.7C404.6,497.6 402.6,483.5 389.9,476.5C384.5,473.5 384.5,473.5 366.3,473.8C345.4,474.2 340.1,473.3 328.7,467.3C306.5,455.6 294.8,429.5 298.9,400.5C301.0,385.5 302.5,382.6 313.0,371.5C318.2,366.0 324.9,358.7 327.9,355.2C334.6,347.5 337.7,346.3 347.8,347.9C379.4,352.8 403.5,339.6 411.7,312.9C414.7,303.3 413.8,303.8 439.1,295.5C463.8,287.4 463.9,287.4 473.4,295.9C481.6,303.4 486.4,306.2 497.0,309.5C519.7,316.6 541.3,312.0 559.0,296.5C569.1,287.5 568.8,287.5 592.9,295.5C614.8,302.8 617.7,304.5 620.1,311.7C623.8,323.4 635.2,337.2 645.7,342.7C656.1,348.3 662.3,349.3 680.9,348.5L697.2,347.8L711.3,362.5C719.1,370.6 726.8,379.0 728.3,381.1C734.6,389.6 736.6,416.3 732.1,431.0C722.8,461.3 701.7,476.6 672.0,474.4C653.0,473.0 650.0,473.3 643.4,476.6C635.9,480.4 631.8,485.4 631.3,491.7C630.4,502.2 636.6,507.1 652.1,508.0C663.7,508.7 667.0,510.5 667.0,516.1C667.0,522.1 659.9,525.9 638.7,530.9C581.1,544.7 526.6,549.7 481.0,545.4ZM551.1,525.2C582.2,517.9 605.1,500.5 614.1,477.1C618.8,465.1 616.4,450.3 608.5,442.5C602.3,436.3 597.5,435.0 580.0,435.1C563.0,435.2 558.3,434.3 538.6,427.0C522.4,421.1 512.3,420.3 502.0,424.1C474.9,434.4 475.1,434.3 454.0,434.9C436.2,435.5 434.1,435.7 429.7,437.9C418.8,443.2 413.7,457.4 417.4,471.9C424.9,501.4 451.2,520.8 491.5,526.6C505.1,528.6 539.9,527.7 551.1,525.2ZM683.1,459.0C728.6,450.4 731.8,383.8 687.4,370.0C662.4,362.3 637.3,376.7 630.5,402.7C622.2,434.5 650.8,465.1 683.1,459.0ZM370.5,457.5C383.3,454.1 394.4,444.8 400.3,432.3C404.5,423.4 405.0,405.4 401.2,396.0C385.6,356.8 327.1,360.1 315.8,400.8C306.4,435.0 336.5,466.3 370.5,457.5ZM470.3,416.5C485.3,412.6 496.6,403.6 503.3,390.2C507.5,381.6 507.5,381.6 507.5,369.1C507.5,355.1 505.5,348.9 497.5,338.0C474.3,306.3 424.2,316.9 412.6,355.9C402.3,390.7 435.5,425.6 470.3,416.5ZM585.3,416.5C621.7,407.0 633.7,362.5 607.6,334.2C578.3,302.6 525.0,325.0 525.0,369.0C525.0,400.7 555.1,424.4 585.3,416.5Z";
+const GZ = "H4sIACQIwGoC/+2cWbMsSXaV/0pyHxiMOsJn96g35kRkA8GQiHprNCGQRKsbocn6v7O+tT3ynnNuodKTzDDDrKvjxskIDx/2sPba2/2vvvzq53/8qy/f/9WXP/3FH335PqeUvvvy2z//xZfvxxrfffl9frnxfz/Xj6N/9+UPv3yffkPP/HLf/86X7798+fV3X/7Ofqis7IfG9DMlt3jmZ2r6VtK4jXkba971wyMv/+mHn81xS8/c8r2k/kw/0N7f3e2NPt1eq25v1Ku9cvTbWy5nyb7ecj9uuZ451Vtdt1lvq5yt3nKZNy5rcFd6vc1+K0fTg/NW69B761Z7fdY+z6y26py3NW4tt1O/tJ5uuvQ0ueuj35b6n5Ye1VB6vuWZNaR+lqL747hVfV/Xs864bzXpd318NT1fbz3rmvPZ1Zs+jpuvOT/bWvdW0rMndbvoo7Xemqar93bWQ8/MdqtDXVi6b+XWD91rCLqeZR6+L3RxrbNoWH3lWylZ39C929FQD/1eNcxDf8/rxrUd3fdt6H31vbWY0qZ3S9Xc5XQWTW3VWIrmRdd7belZdC2r6jemU79pnOVI/pZkwG3rvTNrHmiHq77v+zy0IEe65cbz/cZclqolTBrLSDcNlyaPqpFm7hh4Tl0T0fSwOqWB5xYTlYcWqyBI6UnnJCHuXG+6smxN79TDA1b/GmNNWhZ1QzOpniI8W5gseX/vkuQyLHm9hbTPS/ImHehaOf0vPRFm/fbUvx+5LX5yM39/N1O3APflZmpelwBXvt01JXrrTaNAdHtCzhiTLmUdlkGkm99KPDuaplwvzzruas7LP5BqfkuaUs1QL50Z0XKOM6+iGVT7utKkr7n691xrPF/9+lspbu7tkHJowuifR/MPPo2mhQnQRF/qLflXh9SY5L0hi80dZiGbZ/jwx7kyPP+e/LjHrtf52F0isb+f+Un9kZTQPfSU3mZGqt77ymh0rdJLfm+tx+Ol+3VmY0+O/qrueSz/cI+lr/TeVPVcXyujPnak5z7msyZJej3QTEs+93rWP3OfY72/u8RmtGi1hNgcc7c6ikY41vMty3ysqpvUbtLINwahGXqThmcJ8lvPZy6shQas/9JdL+VW72rqmbWcmpu3pimbvCtDJu2U7FY//KYHTx5Ax/YX3b23q3tHdK+OWMB+iaMUQjb5WYtG29dT//Z7v/F5WPPzsKZtd3QvbPc/evmC0KAtK9z5FY2xaYaPoiXpsiLjIb3Wn/xyulYnH9HR0JuGX4nVifGeiG8Y/nULeyxTL6sy04l90S+y3XIxUnLJ9sQrVE1ORUwkIjKBWgdZvS7p0Gsj04iM+8Cm6H5hnIqNOEbJRj0fYeRH9u8NYz9SGHm932Rkaa5hqNW6Ou2PceXbXOkKv9Oz1rs72rRyk+YKY6hqcZ2hfuW2h/vDz2wZsxRIo1RzGm/GgmHI9F+1kytn1aBLwaVhj49nlePj3617+OpWvNN7tCG/4ib7MTxMXeXLatwn+x0ZjOrnsd1dZjjLbzXcra51oSHZfyvlCDuvfvAO/aIN+kmbuAQPwgud90K3LZFjL/S4JFItSrKSJCTNZy/Wg5Ek3lqExKhXLBqeFu+DZ22yOF2LhoVRDzDOtU63ooa3fJaXiK0wZqGqbV7GTP5Vej7lX24LF4rTOafkQnYIF4TWSVQKayBNLK2FWZparoQ/VC8011VGuthva10SvlN/K/hWLa9sZJOccmVOfdX8xdpIaLWGXZ+sGQAiaQcD4ONHCZ+vtn2PnC/Nv7SpW6x0dX9wGKyZfPpaz9aOeztOHJSEjsvoJ6KIuOqyJnddq6oOa3qFjzSNHfUqBjAlgI0GtHVBAwld0POakNAFtSsJHi1LtqUjmUGqQ1O6MJvBjq9aRa4IZZMuyX+fTX2qC11oCK/aY/BowwR4SGhxKt2uuthNVQsXy82CGEAMfIMmATFI+H2tmV1JvWt19/LXzxambgtTXhZm2sJkW+mC2wFaLiNLrI2WM5AlF02uFv0um/HUv09sh7AJfQLYqB/WV/ydtLemZO21g1rWzNw8YHX0CO2ttDtBc5pkDVoouWIZQFcYEBZBrQFysLmaKFlsuXHjErQe9KpPGcXJ9cu14hiRLAyPJeyyArX79971OzBgBprrmnC+ZSuAUcMq1H1viRshcXreEteROF21SL6mJkQriVtPgVukrmsZkSzBSSIBSxZ4ZdJQ/2hlL8maSJ7kUis6EFpJjyTqtHXVb77m7vuQJj8jSSqGHKDCemit3JYmHVWUa6vqLPCWSW6diQWeF08qV1bRV0IHtUkggUXVskxcsnUzTPN8ocb2EqqwZiVvobpsSll2lL0o9HmytvpaVQ8BZ0YA2eqQNYNdOCqrbdSH2RxgbtkIVpYYAokYsrkF7yVPWrAlx7SNbYBDSUsFayM5TPRAlQIaFQ+h03d5XqTncLuoLTZKahuSA6wqqGqx6tk2EXf08CcdbdDkDCwrYEntabAeIPehav2alZI/OvOXqhmjFAuTVQ3NaWeAdA3vsPtWaIjqycJLzfA/PfwM/zXGOYycULWc8F8rVG7ZYS7f1bT8Y8VJoRYNe47DzBZhrqV03xd9gNCjEIJU1BVnicSocdpCTUexnSotxX3BmGcHQBVbRICGe6JtbBH2ah2PQVf6Y3U7p9bk2ibgqT4wNygubzqikenHVRBaNgwCVrsRIh2OS3HbDVchkeC++j3iXD0vEcBFa/kty4SllnGN0LJtSDBuB05OzamvC9yj4Qaq2gvjVRyfDeaxV7G/VnFDsrwNpnyEDELBRQJxhyDZ4h+SeQFTaWRglANDyF2rxfGUzJKVWx0b4dyxBZoywdhAZFqFsBUzbIVEM2wFtgRFlbo0DJ5aY3CDQM3eTiJN6FoifM4YwmZXaQOIq01Y9+oVDjjUNhxqGw4BFsMt9BYhbUPNWI+24RD2bC67ejyPItUTmOBwGrtUU6xfMzzjeoImjRJZM+wb0GFNh+S1Yosc6dx8LcX3wA7MhZBAk4BaP6w5DCrW7wUbe8DG0AK8o/pU0SpL7NxaAGxDkjHwy/d4W34v9nfLUIT3WTP6jgaVAfTUmPRZ3+fm3zNQJyd7Qd5XhOz2fBWY4sr3DBN7wBe0sjjWxdlsuNgvuDgvIUwRtZVtSl5hOeRNMoWD5zUakAxu85gVBsrBSTuhMtRPz590CeeVD2s4eliWA3q1+oSlaWZpYEFgTKQdaqYxZNQHH4sh0VRV+101r6UvWKqwUMai9Ihrr9sorpc69Y/4I3+DP7ZRZDDlRI3nj+APVtMDMmUw/RyxI4ZLU7tWaAdEwgoAuACAoM4WnJZME5wWmoo1lAuB0mJNrGt961qpW9eSf2+bAmuSPl5nYmjNVxofIaONuebT0jN6Uu06NLm1uqOtT/c7oqPhaCnv+/DBI8g8j99yzgSUDz7Yk4a3SI7mPAEvgDU3wArXxTcqtkmhDZZZ4YubIYzB5nIvDODfjSgJtllQve8rOrOifZ5HnPzx6ITghrXNsKNgwpt5LJtorsfyfXc3kk0Kz8tcuR3MFgwc97gCmxyD52H1sckx3GFI3e1jYupeKl0tZsdnq922mKWXmG3fuzaD2rJ9L+J+c1B8wrsE/VLSuueJ4k4bumwjVKzojr1Rdvi7suHutjo9rI5JPi1ad3vV+FgShXbWCFZlLc7wuQAPmCoWs1qVgLaCoVKniJ8L3rFNUx/cayW8WjM00XaL1kFB+qdjHRt7CbTDJpQCN5ElUMMmfWxR3xA0bTZXHRyo2xExpd1LWQ5u+gpb0DX/mlS7W65Ee1yZgmbarfp5IzzeXyZ05dgYtiYlXWiyXJKMXQaAM45hWOYQ0voTrHUDwEtPrRRcZ/J9TxvgV5COhAkfAv2L71xjA/q6/dr2c0yZfsce83wAeWQdumCarhXG9j3Oht/5fobVmPG+fNjJqtDf3X8L4fcvKih4wxnQQdJ0kalQCE3hveBoEjZf7Qf+FpQSfwmb+Y+vdMAGkiHLI18sVLslS4WNd0pCWULbCvnHoxXL3F3yZn4WLS0W0LuW4YEo2gnXcOKIaBsB+xqTDfg6mi19z+FA4TVrRp56xOcdfN4c3HWLcANgGHk2JpiwFp6FCA1dIiZvMbB/cg0sB1dGTgUycl1kpMQ/SOa6MJkY8mk5kzyeRPjIMSQ3Jhhf1We2z+oKqu27ZHI7EFEi1RllJuMwHBq1ozg0Igiv/VBoJLN9DLv9TiAuOGmmCBEiEJeugPxhSLlmbARXTTIZBol6x6Izd9ImRfGCk8nsM/Nurn/dK5HtEWrbHK7zIAAKgMR7y/eAChogujWAsuBhGqDxmue5mhJoZI7iA00BCdpTmWTd4+3lqU5yBgQ5eC2mArmwh+IqU8WVIKeB8kDVq3kqHexMp6a8YP/0WrDa3zPh/cWEE2AYDG8PBXQt8CnQU7eJndVwEFdGAwF0vihrAmSs0aYZqwNhOdoAuQ0/PbHKgFyUNRS7E7FnckAH3uAuS3TaGsHtAIRzLARSwvx1jAn8EApcgz8yELIDVjt92aMQzTuJAK2xaKvY7iswf0r+/TfAlRMJR7yTbaLNXJ/EqdnhUI7QC9CXbLz0ezMAwOlA/YCW4MMc9HAd+d7Vpv7TDIYho42OXqqJiR06wWXM8Z5zL9A/ey3Q+qBRx/pGo5gXLD0aBagh+0JAgW4ztzW+T3+6PUnzPQEZv2c/X+E1mrH/icABII4Q9xHinkhkJYu7M1mKAeoxYuh4xsFUNGMKlssxGmYCdcCWKpyuY/pvLR9+RrjK7zSTPcPKjkrZJBFCEaZbRJZjP13vpFqZoH/+yn/UDxPUvjE5vSo69ZsmCu762lPRke8ZmV7Z9vlfvAL99r7N9jVNcLWpP+02x1MmSDY6PQvIW/fR1r+8FnBtDdvGvl7AZWO/kxyiNSzDLZ3AfIdSwbU3B1CkRoEpqBB06DJjHyQxKrYdfttxJWwlbGbPwWZi/IZ8Ic5+aHGHzf06IZw7GaZKjs3Uh5z+YWOLcQ6GE7Ve5pg6FgcIgg9N5q9OcLBV0GAC2iWFCtJn0ragc8wbVHARqOQ96HSLZLOZsHdbxzuVPBxnWvY2lU+sDxdilQSuoZKAH1Ry34PNFQ+epqCIRSH2ZjgIW1WuPT/LSHcp21MxwH3ompCBB0qJZ0gMNky/hqvPYm4Vj2JuAuTspfM63691bp9cX/ksM8hGy/LnO9+qR55xp7j4neT8qwttzPy+RT3wYy3GO7/5ktz0gbgbL5hcV0jb3NJWCFHPiWJCnZP8B90dN8uXNEQmWMj0meVVXJUANzBj/s1GkyKvwUZdJtJp0dqc9UGIuSoICI1BQwhGYZbtEuvNhDtxqMNP4qE0A0VGbz20f/0CTR8s4cj9x6ZDOOBBqMb9SMcDzKtvCEp1oFSvDwgnCdAjhOvi+B6vwPz4qPr1x76SS5YJuMzGz/a7c31YsJm/XbDZHxAllUmCnsOYzuRSDoNQ56KyczFVQNdg9HBZgHDedDrBdQ3yPQVSJS0Tzsgn6QUMazVCh3RpDyu3vquuIORT0BT85PAVqgAcRU1IsolGbRueGC9qGsm0gt7reqfG34jAMS2YdcKQDq2n3+ES0mHvrB5rDYCuUrIHjDvcMDEVnsWIoYSfNXFNf52aIeDW2FP2VzPlLUSGjiBh/SNr7KIHjAfgHX82w5hoZHs9/s1LJddPoFG192gEy1oPnBjBhrMNEPIl6mA0OmctIAhgRuzchtwIiShCP/wumDs134OxA4O3reYVNe/lYXqpH6ZCSQuQ5KmuNjk8d65cKe3h0cmMZUw5hC8mHjU0bdHivl+JoH/72dEElBvt0g+CA0O5NjavGVAOZyHXMr6Bcr6Da5wjsnA8WeJFu512xZUl3E4NpNdBIfqdKh+et5vR+5R60BxXWnfpx/6db/v55tdN/B5hZNuOJB1nY+VXCStv8xULQlKrRa7b4SohcENhBMw6yuLoj7i8yTQU/62RYABP7xAXoaMNAiLa7GRQshOR/qa9WwuAaRSyIiEa3q35ebOrJfJ1tGf2ewQrwfe+AZwuHvJ7keOzsjePw0wfZFiUUvib4e08fi/6v3uhnw/mqs/8DTw0LtvwUD33AlHmZbLaSn462KrVkUITRnPEwIKSzWyCjyTwjgjCylgma50xkBHQdfshQ8XaXU/iwEP/dvUX2fsIWnoEL3SJsJ7FcCRabcnMJa1laFKpKsMaQhaO4wX7zp+SdlbyjZRpHdD4WrKOLwmAghqQow4nvrZatK0WM9QCCA1zlCOmcT7qb00tqM1wXRhhL/+GKVMfHsPpupr+vz78mD78+xdIOD6ChPSNPoCxewp9OPbKkJNF/rFCC5xM2OQEMjLvexMOZMs0ig6Di9uCX13twYpi4uejMvaeP2jEGPfq+sfDFIKTtkckSDz1LicowdKnAEYdO0j9ikvxmNJjh/KRC9X1pRH/4VMhWN2FYG28akzrFvQIM5nnN3kTKMfkyh15vwllq3b1J83wjGTlxBmfvgzfoT5cpu9Kumdniob/FNcSRSTIsK9xn13UASofrkdy8tbstnAn+TQXnOSoj6QuDs7DAfcyv4quYW3MhuOyIB4hbwFSFLO0oElzn67hcO4u7YpZ+NdcbVoKUeuMMkFZNsCTMwKuwziClAFQMWd20wYZNbhfVl/v27hIV+FCFKVSmwdGG+QtiTUihY/e59M8BBU8mt10UnXrerhM6YBgNSmKYX8+VlTbmL89dvXtvgcJ8ntU4c4I70j/U3LgEI7IvphVINTyNZVnW5I8IVyy6roGF7ZcwHKCP3okfyOMK04bmrh2+hBDwT3ht4ODGdwZNaM9GPNuJAYPV31vdSB6mjmy+CiD071R6EL/SVVQKGP6F+SFRGMsUywQ4aVV1PmpwyEbCeuOzMFo1OJUXDdFm+wz1CffUzpIZTI1aU4fRWBJbnKT06EJVpv/eKlND4tRNgNWX5WtGklSkD+kaZtHWL7VlG3o9Z9eJM22Onl74Vc5Yr5YtMA0kM1YvHApGpqCW/LCiAgute4IozxLi8I9pxpRBO7HZqLUajBRczNRc7OPM3IrTrPvTgvzF2Os5c+Q8j2YzuECYgfKDivsEvNXAup5zc8RcW3e8/M1XS6VpD8OMBTtPaxDiMqMIjyiQg3cGQCgbjlcx+R0im2FSbG0SefhIvTItgYxXfZQS9klRFC4xTmSh32rwbUCKrUf6/Gfd5/XjsWDpl/1om/QYE179FjWmnJv2XEtT3ehXSQ9ky1l8SSS5z3s2QlLTAkSq5NzJQ+MaybvR2lgj9LBYkwkZSbjQwEfxCkK5dx8Mv2rbz6wPh6BglQCLfrRV98KGJmg7hzULpmr+p3QNYEKkvsxJPguIjxczm/rO3K2ZYX+U79PcgjFZbRekXNg7ciRYkHVj0mFnPqhWXoMiafCxFIfzbUUOKkI61yNUavTl2Q6UWWCNkqKzN5BJiZF+SW7nh3TZI4ax5arAyK3AytofjubxK2rPgiYYv1+65VGSO/zIy/iw/kRLDnKEqUnJERgDdpY95rLwzbyEgzqvyWYTBFES3k4FdfbXRPwoJ4oPvtfrs+mEJv5iWoljQ+91x9zC7vaxo7lKuE9Hq1tYVSrxGd6chuIHy4lmpuWuUjKr0lyYImkwazaure5TY1ixzIeJSrs7npht/jzVz50e/utlq85ynMTPX17+0JVMlnxenOa6ySxyIrJY0nvvDMhhSONSgZiWrlZ5LZ7O0PkkJ0SMmVCIuWEYndlI0Fsnk88of8Nj0fdGp487S0YR4qaEah8UiJIA5ZBv0WqpPv34AKLK5laiqJYe/fpnCH8saTzxA7gvpy4891yKTRxBpl8jY6ilkmRXjamotCkU4VPUQwfdCUDpdC+mn7idwc9KSAqyUJYDIs8yXfB1QwuM25aTugDlpqrOxwbHVnqPJ5kn3A0TnW8DVPeb2ZlpiOSMLfRbVhFKgYDjRQnl106CT1zd2FRjrIxo3ibkWFy9K1+3TUUa05OUN4v7BUUqtQee2t2rhvf5Hx4VcDT1WXnm62bLapqDrmLivWaYQ1xt5vxc03qihJPLKn/zZXKl7ELPEiq73JmJAdyGwI3NXfI3bMc/9cXYRlxXL/4tvxynS1c5xibEgQNnjBBNYq4B7n89IBolNHqzwljudoTU5CPcJ9slIFE667GOVjkqIhCGtUjL34+QhiguGps9HCyqUfNOwy47Ro1AFDzLukZvjfOpKaaZB/Pe6/RzSh1J3ViHFqbSRWZazVQxhIV5Q5iSlD4BDtgHkpWqosC8tNlS5TA1cBqhPO8U3eBATubzFIVdg5kl84Zc5XYjUTSMBjD6dKvShaMjOO0o3XgidK7En+5KlN4YVe+W92jBAn3ly0MKUA7+GXdYlBe0d9+VcKPD5Ua46uta7tSY1PQrOM6nVam6iewfhSgQbHVM/gyAhMg42pRVEN8hCSssnW5x/KlHsvZIn4yw0npNrpq9NyjTNuzg96GBvoq0amVfHl1KXh1eLFcTYz7qikqYAAJmBcX2dYoqvO9UW2O8DaNbbA0s1FYFnuFVjeq49/ZRi3CW880hTwOa1fsMUguWHatdHMlEFCQIlZPf3WqMEtPXQFHAT66mshDZQ8s952QxNxo4EgG89CCNRiu2C+es6jaaC/g9zufNPNax5neAb/wMJs4ocBXYZBL8B3LxToCeJo1hXWEK45Jmnsd817HvtcxOeg+AV6+p+S+5ij4oMjPVMJ0uGZV9HrK60tLUH118Jmgux6u6OWH5TrZGrUMewughxsj+MEiScpXy4ZOYrAk24BNZL3u8jsKemx3mssfny7qabHzpMaulSiwZcQw9pacFDpHXIQOzgBJwDnrqFnw4SrnlkMK6hGlhei4Jcffd+WFJCdvySmfJOdwG7E7pVgnPSiv5e++shrr41p+rXlNWyf3WloBrWrUbkWY0Zy7fqeTbBxKjnaRdwSKYh2PYrxbu8P1bdZJO+gSLOByfbZzAK7PHpHjV/gg1zOErijamaaA7EZ60EbOTSVvMDSDvsC1WRfX+HOnJaLUWcNw0Vq19IOsokbUOxpO5wwpJXf9W6dI8sRPMwTXouL1yZ4bv1bJ20LVbHyTlzUKU1NIkGcmN6QwZKJF6RLkmmXivZ3Oe82dxSiuVjD8GXnDoWPDocMyYjiUw9ECxq1RoI74plf491474kqEafXTNjXvSqaeIlfXJ03hE80S/rO56m8oWsdVEwhgWyfue7CrrXq+pzdXrrjnd3RSo5w72JlIsyLRSWChNZv5eI6a7uSwsGWvXU0l9smOFICvryMKptZw/77umv79T7sQjg1xLzyenRk42Cbd/Q9qF95ce8GV0BPMoH6i7hqWLlKpg42YsALDuxaaN0gfbLMbBr2Lsvmbd1RvYqnbGdkjNzbO2PkRR5XjhKAk/R7Vqnjm4r16KK/rar0HiQoHsjnksFrUUwGJwm+1sHdzwxDqrlzwVsxy1KinMXnRXUwd+6ABxN43HcXld7boOTNHNu8YZmfasg+MDF2OuqRmS5ScvWumiUsUtUoSXeCaYu9GZUsVV6QV3yY/hg909opc5d474r3Rw1etXbM/zhsSee8cZCKKxbX3uKc+it9r+O/Y72BaV5b7iAKSEpAK3jWZaOTyRg0XV+8EY3kZ1mC97c8tAKQdtkTEDoCjSkO9KSM17zJGNb1lFXV+o5SWJqL0QG1rtgEnGxm8tX3vDVxRAYBPbd5TwjaOo4Spana4+j1Xvk91jK7kCLhS5cPnvK9qf//qVfigQv4TyhHcYKJq2XZ6ywZXSj9Bc2kHV+gg69lrYBF2TjmfGqiN313Yn2IvI+/7CmNHZsY7cKtNJrVK5I6LqZXANrpaE//bp+rbC6W/djd24tcX8J5pA+8WpRYlPLaTAgBvSkkA3sdGamUjtxka4aouKNTaggnHSxCFkXOusVVK8TVevh5PGXDXO7K1DiNfXVCerBe2uLiuXMOMp4DwrmX8gJR73BenUWLbi/PNRGHJbhGk5Gu6dgb/wWVz64dZ0UNfZ2Xo6Wte9O8fYqawd/wl2vnvr3airPRt7wb4iYaOMH5tbkm3oGu9CTIlyW++jvPNZB7F984czfWUnN/RgcMSz/voWPfWdS7tawelAhsTmIMELlVUmpYc6lkrlg+qcC92rzyu//Fpk8M3sd0HqZEne1SHZhQg6d/sCCjlAcbTSrf5cClQ7g9vRmxXMe0fvmZv/V9X4etX4p0/uio1Zn3/zizl/TuehFEf3nXaiTLX5rebPRm7yYp3k6XYbexgcst03jI9gmmg/oSyNmdzkMLqrQt3tkBFrXXbpVaRjKNNLDdt9o2M4eFpc5RAxoMTMqQnYwVbMVOwHROpr1RnFtMlioqP+nQCdx8/0QklYM9XyDmsMHrixC8FeA61ONdjBqVnDn1ETVSJVCJ6AmDife/9Zc93jz3AvqInd1nIZwDwOPEjcHFxRGVezviYunHHqEERoaFza+hoW0PT1tCyNbRtDW1/jYb+8d/Ibv34Ore9zmOv89zrvEmDzSABL/9ftF3/8xXdzQ8RwavOqYy6I4K1IwLcOHCH9HaKfVfNCb2PUbojguQHHaXPHRGsHRHs+aob7RwpkAnlo8tlBxGVI6k90AqNc+Vb/M6n/fzw6znmMOB4vfaJ1ff7xEraEUyO3ZKQLGwSHpv8ACq6/m74b/XaxQF450NkIUuMiyYNh7x/INxlhP4+uWWH/n2H/mUHcGsHcONr6L/WDmt6hDVl1zm+2/LpQXi5fvFTNFk33ihblvMDWy27Ertc0FCIu1qikn+MbaPalt28Ca/0jvAK9CX8GoQXyNB9CgIsj7kJr6iNbLv+YJo+e5dEMr0Wa2MCGvatxZ6XoOacPOSohnA4GkRwZDnlneLP1gVvuWll7wRLsfXSmLxvlqxpAftmydpmycZmyYJpY0NiZB6PrT/HtiyHuxT6E9Ga2bcRDFjdlHhZik19CE01eeBFJCKDV+jB/0DHwLQZ0xK5QzgAF0kcxbi8pH/yU/xKdZ6eNT1kLLoJj+pUtKcOOXPI6End9ZJpbEqmfKVkpimZEZTMxzA+h9J6KysrzYOwubltSqaF0uYcIUoPpb22hMCqxAaLZWGrXW4bA4kLn+lazO5FdHDoSfC5R8mENpMEuA0OK3sSNziN/VOQ3qZbpDkrjlCygaxl7yJqEVo7DVNiVkoEVV5c0yvHplfaplc2z22CYVhYvhJzbdMrfdMrdR/+kTe9EpSNxxHj8mL+8jpRqHxwNLX0bx1NeXjPUdvK6XL9TQBBkeNwfITUiMqZvqmU7fyB6hEmzggTKZyqbYPo/JTLUChNHtIuPeqz4LaKyy+dmLddYt2cu2QFjnATrpRwWeN2E7+6yNy5D9rZ9cTt6+lC7ePpEoTeJFzYLcB5I4KLHgGV7Pb7UWlCJnv6rscdtV45OEzYLhKz1XLs87Vi33/c9xH3rpyocSwG+ylYXi0ZtcdHWH99yNlcb+UhQbucmXZqhEdCbsxTWmH33r4WhwZYJo4426Y4qK1mY6llcYYX+aVMA8J35jgwprlU4oxtspnUPoVyI44bg25wmj22TgYSsvmhCIMq2HOGG2QHZVIzxZshnF6haD7OPFtRjYGdgQvwZubh313FgUrNQC2O5UGWMP9ssiixO901rVRblECmPhECPsAnQ8y4n2Q12cQ2vavPNbs+/4rC+zgmqMzNf3tjbEw1h1bYlrbgjdiPZtS8Y04n+OYu/7KHiY2pdprUQkPocEX9qFAecaCCN7sSc1NFUkNtfWyBN3CXYGGLNwiedR+tAsldOK4lBUcV2ZCouYq+1SiRa87CODPHxjTXdHlrLzUHamw6x/m2zxNzGuorU/6/LuVPUfedd6H+q/xjb+0481V5y/SciFO+ucb6NM9xm86pBEvXg6WrD3L6kzLoTZMpgPMDus8+/u6ITdk+ESI2zyJ1lUs8bYefXCZjXyGosOzu3nIE6VENll4D+tPPsPnaRfDanX5sP1NiQK5/I+fK3ibXsewIklNkYi+mT5Jx4NZNaL5OsynXsXk5MospDmfJV52FPUd75zkCErv6Cvqlz9iJi/2ifqOEnVVnAdl9PGB4xxHMrA+fCBfancXxVlwv7D4GZQ/N8/C/L+s35rs6hDauKJE4WCtpf5dbehRv54tTM1zzkV0Xa9oU0XUlIxQLY++xJTBzaFjb1Y1sNwPazBVHEaJyYFOoV9eQBITQNx7V5YGMk3KGtUsY/uwqYTj2NumonDj6izL1DsbocZ0PVh1izzWXVyVLDRBkQihyt2fU8SVT0ur5vTidGDtBipFrMhnvf2MYrKSx68tVNbM9HBrT49Iem+g/XUns8LfERgbXCE2XkLHjpznNQRld83eppfOuoRl14hCybG7wFnNmeJeI2WsWV9k8vGVB39UsPAhsk3pQo0CDAuUZZ6vEyUzUiFX7QccBpA9BJNQ4ENIOdmNO5w5872OxYj8cMgly4RQ/H5WFCaO6EbmQSY31+fNPydHrBJnLUiBP9jv0LsUyTTVAVYM+XhBnR6IArOMBDHIZ1FrmSPSk0xlZIiWY0a/Klr94CfI+BXILcn2ddxj0zXlsGse7g0iWogxgJvCltBnqaE0XR8Mdka+EPLLXJzJDl9jKPjCWwfumR98Kkh+4TIEL42Pzi4GRz+IDHuPczVCQOFfTZxc2FCQKTaw0+H6fRhH5UytIrj4/yGUKUPENPr2EEvpoxRSlNVYYLT4GpHiL85sLCdX9SWEdNoBsncddmzsWTJfP1GSoYzPL15x5gv/ymuCeP+y7Kq/i2+wiwgclZZjvGva95flsMvKxk6pKMmPzyq/BXr/7yz/4vR87zHaSAXFy5LXfeq338Gy8FpatbOQF8C3+AiSRz92c2FyvNEn84nuoBX7HtkznP/j7dBUl9xRXqm3Xlg0q1IkL5L18zVGv5jrpEdtru7dEN+8dhJE3rTGj4hyNriYcXYLvNogIBvV2sgzDy895Oa4I9z1JTgpnqe+BnwERuxqG2htQD2emUN9PolzDibNeI0L0oKunAN7rZtSpkJ9KODWB+5ULg3VwXQbg0smwKF9J4zlS/GlIJn22yODpIUWdcZqPN1sCFCjSpTy/uloXoD5wkORpqIjlsCRkn2sqz9g459R8cUrIEL/GZnwwHSWP1WvB/giHBrfY2ua8qXHLtOk+w6x2s4scEONj55gDJy45+bOde/dR5HEo1Xc+Z+y8zrjXso3g9I4NBw9Rspe9SyNw5NzlfmYifT9ybAYd3m6+POY9Bx82ws72YcfGLK9TD7IpSyetoC6lH5r/alJyLJ/jp8anKxkHVZPsXmnL+yV83y3sdy3JOThojH0TvEs1JPScy6y9v+E+ZKS86ZwKSdITvEPnfchwdVl159Cuvd3NZwJOcESLuWejHklTb9rnW82ohN0DriciAuO0phqHx/rAhOZSQVeTcpJVnOTjo/Budhpq3kdlDZdbDtePQ8f4rEYH5q4rj62apqHsC6l7QbHrM3snR/XuESov8cLN+XFvm3P9nretUb5irCJdZLtaidiPD1bCBpbdRKYrTk52cnCOjI9JkwdGB7nnEBF+nyl85vSxa9AwTX+LmHW61lWzbaSRrSIcgcCKWr/BhMcSVmMOreUT5SLlPpq3InhLhu58spXljPehQw8fnce2QxBgbOwN/urNFT9Y8WbtenMhMduXTpi26bMwCSGb4VXs7JmxsyeBZ72zh/1SJbAyZwRhVEyuh6R+2JY664cIebZLrCcPJ05iOk4Ka/0fVZdsvOaYyRp8e1/DoKROdk2Sl20PmRXikeFUL61oiU4S7Nh1jo5JT2IHrJntpXQDI0cKWLLB8TlxdrKlpnjLok2eK/RLcDcAquYicHaF94dBDUWbPioueOhqoqHsA1xqHBV3nVcxXTf5pAbTFNUMQrVxUMARsaQ3+a/qXI7PIaCscflsQK3nDFUjduVwRPK/R9hM8s+at+f08bMtnFAKJ0VOYvos8H1vYWNT+7BTG+xm5n5m/y745/f3eshA+0UWZvl0mTDecRYuwSOmHd3E0ttYm4X5ZLRTGO0SRrtF1jbaM9G8Yo3grIo5gBKHqcbmzb9lp/T8a7HAsbFA3VhgbCyQNhbwbBmb/Pr/AL3s6itpXwAA";
+async function unpackFaces(){
+  const bin = Uint8Array.from(atob(GZ), c => c.charCodeAt(0));
+  const ds = new DecompressionStream("gzip");
+  const buf = await new Response(new Blob([bin]).stream().pipeThrough(ds)).arrayBuffer();
+  loadFaces(JSON.parse(new TextDecoder().decode(buf)));
+}
+let ROSTER = {at:"", members:[], og:{}};
+
+const $ = s => document.querySelector(s);
+const US = {Alabama:"AL",Alaska:"AK",Arizona:"AZ",Arkansas:"AR",California:"CA",Colorado:"CO",
+ Connecticut:"CT",Delaware:"DE","District of Columbia":"DC",Florida:"FL",Georgia:"GA",Hawaii:"HI",
+ Idaho:"ID",Illinois:"IL",Indiana:"IN",Iowa:"IA",Kansas:"KS",Kentucky:"KY",Louisiana:"LA",Maine:"ME",
+ Maryland:"MD",Massachusetts:"MA",Michigan:"MI",Minnesota:"MN",Mississippi:"MS",Missouri:"MO",
+ Montana:"MT",Nebraska:"NE",Nevada:"NV","New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM",
+ "New York":"NY","North Carolina":"NC","North Dakota":"ND",Ohio:"OH",Oklahoma:"OK",Oregon:"OR",
+ Pennsylvania:"PA","Rhode Island":"RI","South Carolina":"SC","South Dakota":"SD",Tennessee:"TN",
+ Texas:"TX",Utah:"UT",Vermont:"VT",Virginia:"VA",Washington:"WA","West Virginia":"WV",
+ Wisconsin:"WI",Wyoming:"WY"};
+
+let sel = null, finish = "emboss", lastSvg = "";
+
+function tabFor(m){
+  const label = ROSTER.og[m.n];                 // only OG holders carry a tab
+  if(!label) return "";
+  return label.toUpperCase() + " OG";
+}
+function stateTabFor(m){                        // fallback for non-OG members
+  return ((US[m.q] || m.q) + " OG").toUpperCase();
+}
+
+function opts(){
+  const o = {callsign:$("#callsign").value.trim(), tab:$("#tab").value.trim(),
+             freq:$("#freq").value.trim(), top:$("#top").value.trim()};
+  if(finish === "flat") o.flat = true;
+  if(finish === "mono"){ o.mono = "#111111"; o.flat = true; }
+  return o;
+}
+
+function render(){
+  lastSvg = badge(opts());
+  $("#preview").innerHTML = lastSvg;
+  const svg = $("#preview svg");
+  if(svg){ svg.removeAttribute("width"); svg.removeAttribute("height"); }
+  $("#stage").classList.toggle("light", finish === "mono");
+  const c = $("#callsign").value.trim();
+  $("#stageNote").textContent = c ? c : "No callsign";
+}
+
+function slug(){
+  const c = $("#callsign").value.trim() || "bkg";
+  const t = $("#tab").value.trim().replace(/\s+/g,"-");
+  return ("bkg-" + c + (t ? "-" + t : "")).toLowerCase().replace(/[^a-z0-9._-]/g,"");
+}
+
+/* ---- roster list ---- */
+function search(q){
+  q = q.trim().toLowerCase();
+  let list = ROSTER.members;
+  if(q) list = list.filter(m =>
+    m.c.toLowerCase().includes(q) || m.nm.toLowerCase().includes(q) ||
+    m.q.toLowerCase().includes(q) || String(m.n) === q ||
+    (US[m.q]||"").toLowerCase() === q);
+  return list.slice(0, 120);
+}
+function drawList(){
+  const ul = $("#results"), list = search($("#search").value);
+  ul.innerHTML = "";
+  if(!list.length){
+    ul.innerHTML = '<li class="empty" role="presentation">No member matches that. Try a callsign, a name or a state.</li>';
+    return;
+  }
+  for(const m of list){
+    const og = tabFor(m);
+    const li = document.createElement("li");
+    li.setAttribute("role","option"); li.tabIndex = 0;
+    li.setAttribute("aria-selected", sel && sel.n === m.n ? "true" : "false");
+    const num = document.createElement("span"); num.className = "num"; num.textContent = "#" + m.n;
+    const mid = document.createElement("span");
+    const call = document.createElement("span"); call.className = "call"; call.textContent = m.c;
+    const who = document.createElement("span"); who.className = "who";
+    who.textContent = m.nm + " \u2014 " + m.q;
+    mid.append(call, who);
+    const right = document.createElement("span");
+    if(og){ right.className = "og"; right.textContent = og; }
+    else { right.className = "qth"; right.textContent = US[m.q] || ""; }
+    li.append(num, mid, right);
+    const pick = () => choose(m);
+    li.addEventListener("click", pick);
+    li.addEventListener("keydown", e => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); pick(); }});
+    ul.append(li);
+  }
+}
+function choose(m){
+  sel = m;
+  $("#callsign").value = m.c;
+  $("#tab").value = tabFor(m) || "";
+  drawList(); render();
+  if(!tabFor(m)) toast(m.c + " doesn't hold an OG seat \u2014 tab left empty");
+}
+
+/* ---- saving ---- */
+let downloads = null;
+
+async function save(filename, data){
+  if(downloads){
+    try { await downloads.save({filename, data}); return true; }
+    catch(e){ if(e && e.code === "cancelled") return false; }
+  }
+  const blob = data instanceof Blob ? data
+    : new Blob([data], {type: filename.endsWith(".svg") ? "image/svg+xml" : "application/octet-stream"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return true;
+}
+
+function svgToPng(svgText, px){
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(new Blob([svgText], {type:"image/svg+xml"}));
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas"); c.width = c.height = px;
+      const g = c.getContext("2d");
+      if(finish === "mono"){ g.fillStyle = "#fff"; g.fillRect(0,0,px,px); }
+      g.drawImage(img, 0, 0, px, px);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? res(b) : rej(new Error("Canvas export failed")), "image/png");
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("Could not rasterise the badge")); };
+    img.src = url;
+  });
+}
+
+/* ---- store-only zip, so a batch comes down as one file ---- */
+const CRC = (() => { const t = new Uint32Array(256);
+  for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; }
+  return b => { let c = 0xFFFFFFFF; for(let i=0;i<b.length;i++) c = t[(c^b[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; };
+})();
+function zip(files){
+  const enc = new TextEncoder(), chunks = [], central = [];
+  let off = 0;
+  const u16 = n => [n&255, (n>>8)&255];
+  const u32 = n => [n&255, (n>>8)&255, (n>>16)&255, (n>>>24)&255];
+  for(const [name, text] of files){
+    const nb = enc.encode(name), db = enc.encode(text), crc = CRC(db);
+    const head = [...u32(0x04034b50), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+                  ...u32(crc), ...u32(db.length), ...u32(db.length), ...u16(nb.length), ...u16(0)];
+    chunks.push(new Uint8Array(head), nb, db);
+    central.push([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+                  ...u32(crc), ...u32(db.length), ...u32(db.length), ...u16(nb.length),
+                  ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off), nb]);
+    off += head.length + nb.length + db.length;
+  }
+  let cl = 0;
+  for(const c of central){ const n = c.pop(); chunks.push(new Uint8Array(c), n); cl += c.length + n.length; }
+  chunks.push(new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0),
+    ...u16(files.length), ...u16(files.length), ...u32(cl), ...u32(off), ...u16(0)]));
+  return new Blob(chunks, {type:"application/zip"});
+}
+
+function toast(msg){
+  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("on"), 2600);
+}
+
+/* ---- wiring ---- */
+for(const id of ["callsign","tab","freq","top"]) $("#" + id).addEventListener("input", render);
+$("#search").addEventListener("input", drawList);
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  finish = b.dataset.style; render();
+}));
+
+$("#dlSvg").addEventListener("click", async () => {
+  if(await save(slug() + ".svg", lastSvg)) toast("Saved " + slug() + ".svg");
+});
+$("#dlPng").addEventListener("click", async () => {
+  try {
+    const blob = await svgToPng(lastSvg, 2048);
+    if(await save(slug() + ".png", blob)) toast("Saved " + slug() + ".png");
+  } catch(e){ toast(e.message); }
+});
+$("#copySvg").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(lastSvg); toast("SVG copied"); }
+  catch { toast("Clipboard blocked here \u2014 use Download SVG"); }
+});
+$("#dlZip").addEventListener("click", async () => {
+  const btn = $("#dlZip"); btn.disabled = true; btn.textContent = "Building\u2026";
+  try {
+    const base = opts(), files = [];
+    for(const m of ROSTER.members){
+      const t = tabFor(m);
+      if(!t) continue;
+      const svg = badge({...base, callsign: m.c, tab: t});
+      files.push([`bkg-${m.c.toLowerCase()}-${t.toLowerCase().replace(/\s+/g,"-")}.svg`, svg]);
+    }
+    if(await save("bkg-og-badges.zip", zip(files)))
+      toast(files.length + " OG badges saved");
+  } catch(e){ toast(e.message); }
+  btn.disabled = false; btn.textContent = "Download all OG badges";
+});
+
+function loadRoster(text){
+  let d;
+  try { d = JSON.parse(text); }
+  catch { toast("That isn't valid JSON"); return; }
+  if(!Array.isArray(d.members)){ toast("No members array in that file"); return; }
+  ROSTER = {
+    at: d.generated_at || "",
+    members: d.members.map(m => ({n:m.bkg_number, c:m.callsign, nm:m.name, q:m.qth})),
+    og: Object.fromEntries((d.og_assignments||[]).map(a => [a.bkg_number, a.region_label]))
+  };
+  sel = null; stamp(); drawList();
+  toast(ROSTER.members.length + " members loaded");
+}
+$("#applyJson").addEventListener("click", () => loadRoster($("#pasteJson").value));
+$("#pickFile").addEventListener("click", () => $("#fileInput").click());
+$("#fileInput").addEventListener("change", e => {
+  const f = e.target.files[0]; if(!f) return;
+  f.text().then(loadRoster); e.target.value = "";
+});
+
+function stamp(){
+  const n = ROSTER.members.length, og = Object.keys(ROSTER.og).length;
+  $("#rosterCount").textContent = n ? n + " members \u00b7 " + og + " OG seats" : "No roster loaded";
+  const when = ROSTER.at ? new Date(ROSTER.at).toLocaleDateString(undefined,
+    {year:"numeric",month:"short",day:"numeric"}) : "unknown date";
+  $("#stageNote").dataset.when = when;
+  $("#refreshNote").textContent = liveNote || ("Showing a snapshot taken " + when +
+    ". Reload to try the roster again, or paste the export JSON below.");
+}
+
+// The Worker sends Access-Control-Allow-Origin: *, so GitHub Pages can
+// fetch it directly; its own Cache-Control keeps this to one hit per 5 min.
+const ROSTER_URL = "https://bkg-public-roster.cool-cake-fac1.workers.dev/api/roster/export";
+let liveNote = "";
+async function pullLive(){
+  try {
+    const r = await fetch(ROSTER_URL);
+    if(!r.ok) throw new Error("roster endpoint returned " + r.status);
+    const d = await r.json();
+    if(!Array.isArray(d.members)) throw new Error("unexpected roster shape");
+    ROSTER = {
+      at: d.generated_at || "",
+      members: d.members.map(m => ({n:m.bkg_number, c:m.callsign, nm:m.name, q:m.qth})),
+      og: Object.fromEntries((d.og_assignments||[]).map(a => [a.bkg_number, a.region_label]))
+    };
+    liveNote = "Roster is live from the export endpoint, refreshed on every load.";
+  } catch(e){
+    liveNote = "Couldn't reach the roster endpoint: " + e.message;
+  }
+  stamp();
+  const founder = ROSTER.members.find(m => m.n === 1);
+  founder ? choose(founder) : render();
+  drawList();
+}
+
+$("#freq").value = "144.025 MHz";
+$("#top").value = "BRASS KNUCKLE GANG";
+$("#rosterCount").textContent = "Loading roster\u2026";
+
+unpackFaces()
+  .then(pullLive)
+  .catch(e => { $("#rosterCount").textContent = "This browser can't run the badge press."; throw e; });
+</script>
+</body>
+</html>

@@ -6,7 +6,7 @@ The optional [JSON input experiment](JSON-INPUT.md) builds outside the repositor
 
 ## Build contract
 
-`python3 scripts/build-roster.py` writes `dist/`. The explicit allowlist in `scripts/site_contract.py` preserves all seven public pages, `CNAME`, favicon/logo, shared CSS, the existing public mobile mockup, `members.txt`, and supported photo files. Repository scripts, QRZ cache, name/location override inputs, and photo-source metadata are excluded. Source page templates are unchanged; only their existing generated sections are replaced in the public copies.
+`python3 scripts/build-roster.py` writes `dist/`. The explicit allowlist in `scripts/site_contract.py` preserves all eight public pages, `CNAME`, favicon/logo, shared CSS, the existing public mobile mockup, `members.txt`, and supported photo files. Repository scripts, QRZ cache, name/location override inputs, and photo-source metadata are excluded. Source page templates are unchanged; only their existing generated sections are replaced in the public copies.
 
 The build job checks out the event's exact `github.sha`, runs fixtures, and fetches the existing Google Sheets input once. Existing QRZ callsign/location enrichment, local photo overrides, unchanged-photo download avoidance, failed-lookup/download photo reuse, and mugshot Actions caching are preserved. The build retains the `github-pages` environment so environment-scoped QRZ secrets remain available. Sponsor resolution still follows canonical QRZ callsign updates.
 

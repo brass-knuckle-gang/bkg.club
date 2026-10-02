@@ -10,7 +10,7 @@ from urllib.parse import unquote, urlsplit
 
 PUBLIC_FILES = (
     "index.html", "tree.html", "nearby.html", "outbreak.html",
-    "recruit.html", "clubs.html", "safety.html", "CNAME", "favicon.svg",
+    "recruit.html", "clubs.html", "safety.html", "badges.html", "CNAME", "favicon.svg",
     "logo.jpg", "assets/bkg.css", "docs/mockups/mobile-readability.html",
 )
 PHOTO_DIRS = ("images/mugshots", "images/mugshots-override")
