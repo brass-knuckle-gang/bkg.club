@@ -89,14 +89,6 @@
                         <input type="text" id="tab" autocomplete="off" spellcheck="false" placeholder="Leave empty for no tab">
                     </div>
                     <div class="form-row">
-                        <label for="freq">Frequency</label>
-                        <input type="text" id="freq" autocomplete="off">
-                    </div>
-                    <div class="form-row">
-                        <label for="top">Ring text</label>
-                        <input type="text" id="top" autocomplete="off">
-                    </div>
-                    <div class="form-row">
                         <label>Finish</label>
                         <div class="seg" role="group" aria-label="Finish">
                             <button data-style="emboss" aria-pressed="true">Embossed</button>
@@ -145,10 +137,15 @@ const FRQ_BASE = BAND_MID + FRQ_CAP / 2;
 const FLICK_W = 6.5, FLICK_A = [26.0, 43.0], FLICK_R = BAND_MID;
 const KNUCKLE_W = 432.0, KNUCKLE_CY = 372.0;
 const CALL_BASE = 582.0, CALL_CAP = 59.1, CALL_TRACK = 4.0;
+// Medallion spec: callsign ink never wider than 720/2048 of the canvas; longer
+// calls scale down uniformly (tracking untouched), short ones never stretch.
+const CALL_MAX_W = 360.0, CALL_MIN_CAP = CALL_CAP * 88 / 108;
 const RULE_Y = 550.0, RULE_W = 4.0, RULE_LEN = 68.0, RULE_GAP = 26.0;
 const BKG_BASE = 678.0, BKG_CAP = 72.0;
 const BKG_SOLO_BASE = 672.0, BKG_SOLO_CAP = 80.0, RULE_SOLO_Y = 566.0;
 const CLEAR = 9.0;
+// Shift the whole badge so the disc top and tab bottom both keep >= 4% clear space.
+const NUDGE_Y = 3.0;
 const TAB_AXIS = 452.6, TAB_T = 50.0, TAB_BLACK_T = 63.0, TAB_SW = 9.6;
 const TAB_BASE = 485.8, TAB_CAP = 56.7, TAB_TRACK = 8.0;
 
@@ -246,10 +243,13 @@ function tabPath(axisR, t, a0, a1, cutR) {
 }
 
 function badge(o) {
-  const top = o.top ?? "BRASS KNUCKLE GANG", freq = o.freq ?? "144.025 MHz";
+  const top = o.top ?? "BRASS KNUCKLE GANG", freq = o.freq ?? "144.025 MHZ";
   const callsign = o.callsign ?? "", tab = o.tab ?? "";
   const mono = o.mono || null, flat = !!o.flat;
   const steel = mono || "url(#steel)", field = mono ? "none" : "url(#disc)";
+  const emboss = !flat && !mono;
+  const mf = emboss ? ' filter="url(#metal)"' : "";
+  const pebble = d => emboss ? `<path d="${d}" fill="#000" filter="url(#pebble)"/>` : "";
   const out = [];
   let txt = "";
 
@@ -258,45 +258,58 @@ function badge(o) {
     const half = (SANS.inkWidth(tab, TAB_CAP, trk) / TAB_BASE) * 180 / Math.PI / 2;
     const a0 = 90 - half - 0.5, a1 = 90 + half + 0.5;
     txt = arced(SANS, tab, TAB_CAP, TAB_BASE, 90, trk, "in");
-    out.push(`<path d="${tabPath(TAB_AXIS, TAB_BLACK_T, a0, a1, R_DISC)}" fill="${field}"/>`);
-    out.push(`<path d="${tabPath(TAB_AXIS, TAB_T, a0, a1, R_DISC - TAB_SW)}" fill="none" stroke="${steel}" stroke-width="${TAB_SW.toFixed(2)}"/>`);
+    const black = tabPath(TAB_AXIS, TAB_BLACK_T, a0, a1, R_DISC);
+    out.push(`<path d="${black}" fill="${field}"/>` + pebble(black));
+    out.push(`<path d="${tabPath(TAB_AXIS, TAB_T, a0, a1, R_DISC - TAB_SW)}" fill="none" stroke="${steel}" stroke-width="${TAB_SW.toFixed(2)}"${mf}/>`);
   }
 
   out.push(`<circle cx="${CX}" cy="${CY}" r="${R_DISC}" fill="${field}"/>`);
-  if (tab) out.push(`<g fill="${steel}">${txt}</g>`);
+  out.push(pebble(`M${CX - R_DISC},${CY}a${R_DISC},${R_DISC} 0 1 0 ${2 * R_DISC},0a${R_DISC},${R_DISC} 0 1 0 ${-2 * R_DISC},0Z`));
+  if (tab) out.push(`<g fill="${steel}"${mf}>${txt}</g>`);
 
   for (const [r, sw] of [RING_OUTER, RING_THIN, RING_INNER])
-    out.push(`<circle cx="${CX}" cy="${CY}" r="${r}" fill="none" stroke="${steel}" stroke-width="${sw}"/>`);
+    out.push(`<circle cx="${CX}" cy="${CY}" r="${r}" fill="none" stroke="${steel}" stroke-width="${sw}"${mf}/>`);
 
-  if (top) out.push(`<g fill="${steel}">${arced(SANS, top, TOP_CAP, TOP_BASE, -90, fitTracking(SANS, top, TOP_CAP, TOP_BASE, TOP_SWEEP), "out")}</g>`);
-  if (freq) out.push(`<g fill="${steel}">${arced(SANS, freq, FRQ_CAP, FRQ_BASE, 90, fitTracking(SANS, freq, FRQ_CAP, FRQ_BASE, FRQ_SWEEP), "in")}</g>`);
+  if (top) out.push(`<g fill="${steel}"${mf}>${arced(SANS, top, TOP_CAP, TOP_BASE, -90, fitTracking(SANS, top, TOP_CAP, TOP_BASE, TOP_SWEEP), "out")}</g>`);
+  if (freq) out.push(`<g fill="${steel}"${mf}>${arced(SANS, freq, FRQ_CAP, FRQ_BASE, 90, fitTracking(SANS, freq, FRQ_CAP, FRQ_BASE, FRQ_SWEEP), "in")}</g>`);
 
   for (const [lo, hi] of [[FLICK_A[0], FLICK_A[1]], [180 - FLICK_A[1], 180 - FLICK_A[0]]]) {
     const [x0, y0] = polar(FLICK_R, lo), [x1, y1] = polar(FLICK_R, hi);
-    out.push(`<path d="M${f2(x0)},${f2(y0)} A${FLICK_R},${FLICK_R} 0 0 1 ${f2(x1)},${f2(y1)}" fill="none" stroke="${steel}" stroke-width="${FLICK_W}" stroke-linecap="round"/>`);
+    out.push(`<path d="M${f2(x0)},${f2(y0)} A${FLICK_R},${FLICK_R} 0 0 1 ${f2(x1)},${f2(y1)}" fill="none" stroke="${steel}" stroke-width="${FLICK_W}" stroke-linecap="round"${mf}/>`);
   }
 
   const k = KNUCKLE_W / 436.0;
-  out.push(`<g transform="translate(${CX} ${KNUCKLE_CY}) scale(${k.toFixed(5)} ${(k * (421.5 / 430.5)).toFixed(5)}) translate(-516 -417.5)"><path d="${KNUCKLE_D}" fill-rule="evenodd" fill="${steel}"/></g>`);
+  out.push(`<g transform="translate(${CX} ${KNUCKLE_CY}) scale(${k.toFixed(5)} ${(k * (421.5 / 430.5)).toFixed(5)}) translate(-516 -417.5)"><path d="${KNUCKLE_D}" fill-rule="evenodd" fill="${steel}"${mf}/></g>`);
 
   let gap, ruleY;
   if (callsign) {
-    const cc = fitCap(SANS, callsign, CALL_CAP, CALL_BASE, CALL_TRACK, RING_INNER[0], RING_INNER[1]);
+    let cc = fitCap(SANS, callsign, CALL_CAP, CALL_BASE, CALL_TRACK, RING_INNER[0], RING_INNER[1]);
+    while (SANS.inkWidth(callsign, cc, CALL_TRACK) > CALL_MAX_W && cc > CALL_MIN_CAP) cc *= 0.98;
     const [d, w] = straight(SANS, callsign, cc, CX, CALL_BASE, CALL_TRACK);
-    out.push(`<g fill="${steel}">${d}</g>`);
+    out.push(`<g fill="${steel}"${mf}>${d}</g>`);
     gap = w / 2 + RULE_GAP; ruleY = RULE_Y;
   } else { gap = 50.0; ruleY = RULE_SOLO_Y; }
   for (const sgn of [-1, 1]) {
     const x = sgn > 0 ? CX + gap : CX - gap - RULE_LEN;
-    out.push(`<rect x="${f2(x)}" y="${f2(ruleY - RULE_W / 2)}" width="${RULE_LEN}" height="${RULE_W}" rx="${RULE_W / 2}" fill="${steel}"/>`);
+    out.push(`<rect x="${f2(x)}" y="${f2(ruleY - RULE_W / 2)}" width="${RULE_LEN}" height="${RULE_W}" rx="${RULE_W / 2}" fill="${steel}"${mf}/>`);
   }
 
   let base = callsign ? BKG_BASE : BKG_SOLO_BASE, cap = callsign ? BKG_CAP : BKG_SOLO_CAP;
   cap = fitCap(SERIF, "BKG", cap, base, 0, RING_INNER[0], RING_INNER[1]);
-  out.push(`<g fill="${steel}">${straight(SERIF, "BKG", cap, CX, base, 0)[0]}</g>`);
+  out.push(`<g fill="${steel}"${mf}>${straight(SERIF, "BKG", cap, CX, base, 0)[0]}</g>`);
 
-  const defs = mono ? "" : `<defs><radialGradient id="disc" cx="50%" cy="40%" r="66%"><stop offset="0%" stop-color="#262626"/><stop offset="72%" stop-color="#151515"/><stop offset="100%" stop-color="#090909"/></radialGradient><linearGradient id="steel" gradientUnits="userSpaceOnUse" x1="512" y1="30" x2="512" y2="990"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="35%" stop-color="#EDEDEA"/><stop offset="70%" stop-color="#D8D8D4"/><stop offset="100%" stop-color="#BFBFBA"/></linearGradient><filter id="lift" x="-6%" y="-6%" width="112%" height="112%"><feDropShadow dx="0" dy="2" stdDeviation="1.6" flood-color="#000" flood-opacity="0.6"/></filter></defs>`;
-  const g = (flat || mono) ? "<g>" : '<g filter="url(#lift)">';
+  const defs = mono ? "" : `<defs>` +
+    // Field: base #0B0C0C, lifted #151616, recess #050606.
+    `<radialGradient id="disc" cx="50%" cy="40%" r="66%"><stop offset="0%" stop-color="#151616"/><stop offset="72%" stop-color="#0B0C0C"/><stop offset="100%" stop-color="#050606"/></radialGradient>` +
+    // Steel: highlight #D8D8D4, mid #B9BAB7, dark #858683 band; never #FFF.
+    `<linearGradient id="steel" gradientUnits="userSpaceOnUse" x1="512" y1="30" x2="512" y2="990"><stop offset="0%" stop-color="#D8D8D4"/><stop offset="42%" stop-color="#B9BAB7"/><stop offset="72%" stop-color="#858683"/><stop offset="100%" stop-color="#BFC0BD"/></linearGradient>` +
+    // Small bevel: dark lower/right extrusion, faint upper/left highlight (ceiling #E2E2DE).
+    `<filter id="metal" x="-5%" y="-5%" width="112%" height="112%"><feOffset in="SourceAlpha" dx="1.2" dy="1.6" result="lo"/><feFlood flood-color="#2E2F2E"/><feComposite in2="lo" operator="in" result="ext"/><feOffset in="SourceAlpha" dx="-0.6" dy="-0.6" result="up"/><feFlood flood-color="#E2E2DE" flood-opacity="0.5"/><feComposite in2="up" operator="in" result="hi"/><feMerge><feMergeNode in="ext"/><feMergeNode in="hi"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` +
+    // Pebbled leather on the black field, kept faint.
+    `<filter id="pebble" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="7" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0.9 0 -0.42" result="speck"/><feComposite in="speck" in2="SourceAlpha" operator="in"/></filter>` +
+    // Subtle contact shadow under the whole medallion.
+    `<filter id="lift" x="-6%" y="-6%" width="112%" height="112%"><feDropShadow dx="0" dy="2" stdDeviation="1.6" flood-color="#000" flood-opacity="0.45"/></filter></defs>`;
+  const g = `<g transform="translate(0 ${NUDGE_Y})"${emboss ? ' filter="url(#lift)"' : ""}>`;
   const label = [top, callsign, freq, tab].filter(Boolean).join(" \u2014 ");
   const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="${esc(label)}">\n<title>${esc(label)}</title>\n${defs}\n${g}${out.join("")}</g>\n</svg>\n`;
@@ -337,8 +350,7 @@ function stateTabFor(m){                        // fallback for non-OG members
 }
 
 function opts(){
-  const o = {callsign:$("#callsign").value.trim(), tab:$("#tab").value.trim(),
-             freq:$("#freq").value.trim(), top:$("#top").value.trim()};
+  const o = {callsign:$("#callsign").value.trim(), tab:$("#tab").value.trim()};
   if(finish === "flat") o.flat = true;
   if(finish === "mono"){ o.mono = "#111111"; o.flat = true; }
   return o;
@@ -473,7 +485,7 @@ function toast(msg){
 }
 
 /* ---- wiring ---- */
-for(const id of ["callsign","tab","freq","top"]) $("#" + id).addEventListener("input", render);
+for(const id of ["callsign","tab"]) $("#" + id).addEventListener("input", render);
 $("#search").addEventListener("input", drawList);
 document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
@@ -485,7 +497,7 @@ $("#dlSvg").addEventListener("click", async () => {
 });
 $("#dlPng").addEventListener("click", async () => {
   try {
-    const blob = await svgToPng(lastSvg, 2048);
+    const blob = await svgToPng(lastSvg, 4096);
     if(await save(slug() + ".png", blob)) toast("Saved " + slug() + ".png");
   } catch(e){ toast(e.message); }
 });
@@ -564,8 +576,6 @@ async function pullLive(){
   drawList();
 }
 
-$("#freq").value = "144.025 MHz";
-$("#top").value = "BRASS KNUCKLE GANG";
 $("#rosterCount").textContent = "Loading roster\u2026";
 
 unpackFaces()
