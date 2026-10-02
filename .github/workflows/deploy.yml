@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Record fixed build revision
         id: revision
@@ -42,26 +42,65 @@ jobs:
       - name: Check offline fixtures
         run: python3 -m unittest discover -s tests -v
 
-      # Mugshots are gitignored; keep them between builds.
-      # Unchanged photos skip download; failed lookups reuse them.
-      - name: Restore mugshots
-        uses: actions/cache@v4
-        with:
-          path: images/mugshots
-          key: mugshots-${{ github.run_id }}
-          restore-keys: |
-            mugshots-
+      - name: Fetch and validate one public roster snapshot
+        env:
+          ROSTER_EXPORT_URL: ${{ secrets.ROSTER_EXPORT_URL }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/bkg-build"
+          python3 scripts/fetch-roster.py --output "$RUNNER_TEMP/bkg-build/roster.json" > "$RUNNER_TEMP/bkg-build/roster-record.json"
+          cat "$RUNNER_TEMP/bkg-build/roster-record.json"
+          printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/bkg-build/source-sha.txt"
 
-      - name: Build roster
+      # Only sanitized, identity/QTH-bound data is reused. No Sheets or raw
+      # QRZ cache can become a membership fallback or enter the Pages output.
+      - name: Restore sanitized enrichment
+        id: enrichment-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/bkg-build/enrichment
+          key: bkg-enrichment-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            bkg-enrichment-v1-
+
+      - name: Refresh separate photo and geographic enrichment
         env:
           QRZ_USERNAME: ${{ secrets.QRZ_USERNAME }}
           QRZ_PASSWORD: ${{ secrets.QRZ_PASSWORD }}
-        run: python3 scripts/build-roster.py --output-dir dist
+        run: |
+          python3 scripts/refresh-qrz.py \
+            --roster-json "$RUNNER_TEMP/bkg-build/roster.json" \
+            --enrichment-dir "$RUNNER_TEMP/bkg-build/enrichment" \
+            --photo-overrides images/photo-overrides.json \
+            --require-usable
+
+      - name: Build roster from the saved snapshot
+        run: |
+          python3 scripts/build-roster.py --source json \
+            --roster-json "$RUNNER_TEMP/bkg-build/roster.json" \
+            --enrichment-dir "$RUNNER_TEMP/bkg-build/enrichment" \
+            --output-dir dist
 
       - name: Validate public build
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          python3 scripts/validate-site.py dist
+          python3 scripts/validate-site.py --source json dist
+          cmp "$RUNNER_TEMP/bkg-build/source-sha.txt" <(printf '%s\n' "$GITHUB_SHA")
+          python3 - <<'PY_CHECK'
+          import json, os
+          from pathlib import Path
+          snapshot = Path(os.environ["RUNNER_TEMP"]) / "bkg-build/roster.json"
+          assert json.loads(snapshot.read_text()) == json.loads(Path("dist/data/v1/roster.json").read_text())
+          PY_CHECK
+
+      # Pair the exact reviewed input and sanitized cache with the immutable
+      # Pages archive for inspection and future cache recovery (30 days).
+      - name: Retain reviewed snapshot and sanitized enrichment
+        uses: actions/upload-artifact@v4
+        with:
+          name: bkg-build-inputs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/bkg-build
+          retention-days: 30
+          if-no-files-found: error
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
@@ -70,28 +109,12 @@ jobs:
           path: dist
           retention-days: 30
 
-      # Persist QRZ lookups as the fallback for failed lookups.
-      # The artifact is already fixed. Rebase only a clean cache worktree;
-      # never pull/rebase the checkout that generated the public files.
-      # A persistence failure must not block the validated deployment.
-      # GITHUB_TOKEN pushes and [skip ci] prevent a deployment loop.
-      - name: Commit refreshed QRZ cache
+      - name: Save validated sanitized enrichment
+        uses: actions/cache/save@v4
         continue-on-error: true
-        run: |
-          if git diff --quiet -- qrz-cache.json; then
-            echo "QRZ cache unchanged"
-            exit 0
-          fi
-          cache_worktree="$RUNNER_TEMP/qrz-cache-persistence"
-          git worktree add --detach "$cache_worktree" "$GITHUB_SHA"
-          cp qrz-cache.json "$cache_worktree/qrz-cache.json"
-          git -C "$cache_worktree" config user.name "github-actions[bot]"
-          git -C "$cache_worktree" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C "$cache_worktree" add qrz-cache.json
-          git -C "$cache_worktree" commit -m "Refresh QRZ cache [skip ci]"
-          git -C "$cache_worktree" fetch origin main
-          git -C "$cache_worktree" rebase FETCH_HEAD
-          git -C "$cache_worktree" push origin HEAD:main
+        with:
+          path: ${{ runner.temp }}/bkg-build/enrichment
+          key: ${{ steps.enrichment-cache.outputs.cache-primary-key }}
 
   deploy:
     needs: build

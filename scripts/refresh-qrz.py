@@ -18,7 +18,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from roster_enrichment import MAX_PHOTO_BYTES, refresh_enrichment, validate_enrichment_dir
+from roster_enrichment import MAX_PHOTO_BYTES, read_photo_overrides, refresh_enrichment, validate_enrichment_dir
 from roster_input import parse_roster_json, read_roster_json
 
 
@@ -39,6 +39,28 @@ def _quiet(callback):
         with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
             return callback(*args, **kwargs)
     return invoke
+
+
+def reviewed_lookup(client, members):
+    """QRZ cannot move reviewed identities or bind old geography to a new QTH."""
+    locations = {m["callsign"]: client.qth_location(m["qth"]) for m in members}
+
+    def lookup(session, callsign):
+        info = client.qrz_fetch_callsign(session, callsign)
+        if not isinstance(info, dict):
+            return info
+        info = dict(info)
+        state, country = locations[callsign]
+        qrz_country = (info.get("country") or "").strip().casefold()
+        if qrz_country in {"usa", "united states of america"}:
+            qrz_country = "united states"
+        matches = (bool(state or country) and qrz_country == (country or "").casefold()
+                   and (not state or (info.get("state") or "").strip().upper() == state))
+        if not matches:
+            for key in ("grid", "lat", "lon"):
+                info.pop(key, None)
+        return info
+    return _quiet(lookup)
 
 
 class _PhotoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -81,21 +103,32 @@ def fetch_photo(url: str) -> bytes:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--roster-json", type=Path,
-                        help="validated roster export file (otherwise authenticated ROSTER_EXPORT_URL)")
+                        help="validated roster export file (otherwise anonymous ROSTER_EXPORT_URL)")
     parser.add_argument("--enrichment-dir", type=Path, required=True,
                         help="dedicated cache directory outside the source repository")
+    parser.add_argument("--photo-overrides", type=Path,
+                        help="explicit reviewed number/callsign manifest for custom photos")
+    parser.add_argument("--overrides-only", action="store_true",
+                        help="seed sanitized custom photos without QRZ (local preview only)")
+    parser.add_argument("--require-usable", action="store_true",
+                        help="fail bootstrap without both usable geography and photos")
     args = parser.parse_args(argv)
     try:
         directory = validate_enrichment_dir(args.enrichment_dir)
         if args.roster_json is not None and args.roster_json.resolve().is_relative_to(directory):
             raise ValueError("Roster input must be outside the enrichment cache directory")
         _envelope, members = parse_roster_json(read_roster_json(args.roster_json))
-        if not os.environ.get("QRZ_USERNAME") or not os.environ.get("QRZ_PASSWORD"):
+        overrides = read_photo_overrides(args.photo_overrides, members) if args.photo_overrides else {}
+        if args.overrides_only and not args.photo_overrides:
+            raise ValueError("Overrides-only refresh requires a photo manifest")
+        if not args.overrides_only and (not os.environ.get("QRZ_USERNAME") or not os.environ.get("QRZ_PASSWORD")):
             raise ValueError("QRZ_USERNAME and QRZ_PASSWORD are required for explicit refresh")
         client = load_qrz_client()
         result = refresh_enrichment(
-            members, directory, username=os.environ["QRZ_USERNAME"], password=os.environ["QRZ_PASSWORD"],
-            login=_quiet(client.qrz_login), lookup=_quiet(client.qrz_fetch_callsign), photo_fetch=fetch_photo,
+            members, directory, username="" if args.overrides_only else os.environ["QRZ_USERNAME"],
+            password="" if args.overrides_only else os.environ["QRZ_PASSWORD"],
+            login=_quiet(client.qrz_login), lookup=reviewed_lookup(client, members), photo_fetch=fetch_photo,
+            photo_overrides=overrides, require_usable=args.require_usable,
         )
     except Exception:
         # Do not expose tokens, credentials, endpoint query strings, or raw

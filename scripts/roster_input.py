@@ -1,4 +1,4 @@
-"""Strict, opt-in adapter for the authenticated public roster v1 contract.
+"""Strict adapter for the anonymous public roster v1 contract.
 
 The exporter contains reviewed membership data, not QRZ enrichment. Validation
 is deliberately completed before returning any members to the renderer. This
@@ -193,7 +193,7 @@ def _decode_roster(data: bytes) -> str:
 
 def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
                      environ=None) -> str:
-    """Read an explicitly selected file or authenticated HTTPS roster endpoint.
+    """Read an explicitly selected file or anonymous HTTPS roster endpoint.
 
     Call this only after selecting JSON input. With no file or explicit URL,
     ``ROSTER_EXPORT_URL`` is required. Network errors expose no URL, headers,
@@ -213,17 +213,22 @@ def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
     try:
         parsed = urllib.parse.urlsplit(endpoint)
         _require(parsed.scheme == "https" and bool(parsed.hostname) and parsed.port != 0 and
-                 parsed.username is None and parsed.password is None and not parsed.fragment and
+                 parsed.username is None and parsed.password is None and not parsed.fragment and not parsed.query and
                  not any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in endpoint),
-                 "Roster export URL must be HTTPS without user info or fragment")
+                 "Roster export URL must be HTTPS without user info, query, or fragment")
     except ValueError:
-        raise ValueError("Roster export URL must be HTTPS without user info or fragment") from None
+        raise ValueError("Roster export URL must be HTTPS without user info, query, or fragment") from None
     headers = {"Accept": "application/json", "User-Agent": "BKG-Roster-Builder/1.0"}
-    for key, header in (("CF_ACCESS_CLIENT_ID", "CF-Access-Client-Id"),
-                        ("CF_ACCESS_CLIENT_SECRET", "CF-Access-Client-Secret")):
+    auth_fields = (("CF_ACCESS_CLIENT_ID", "CF-Access-Client-Id"),
+                   ("CF_ACCESS_CLIENT_SECRET", "CF-Access-Client-Secret"))
+    # Public feeds need no authentication. Legacy Access endpoints may still
+    # use a complete pair; never silently send just half of a service token.
+    authenticated = any(environment.get(key) is not None for key, _ in auth_fields)
+    for key, header in auth_fields if authenticated else ():
         credential = environment.get(key)
-        _require(type(credential) is str and bool(credential) and
-                 all(32 <= ord(char) <= 126 for char in credential), f"{key} is required and must be valid")
+        _require(type(credential) is str and bool(credential.strip()) and
+                 all(32 <= ord(char) <= 126 for char in credential),
+                 "Access authentication requires a complete valid credential pair")
         headers[header] = credential
     request = urllib.request.Request(endpoint, headers=headers)
     try:

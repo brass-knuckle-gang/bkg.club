@@ -238,6 +238,16 @@ class RosterReadTests(unittest.TestCase):
         self.assertEqual(build_opener.return_value.open.call_args.kwargs["timeout"], 30)
         self.assertEqual(response.read_limit, roster_input.MAX_ROSTER_BYTES + 1)
 
+    def test_anonymous_https_request_has_no_access_headers(self):
+        environment = {"ROSTER_EXPORT_URL": self.environment["ROSTER_EXPORT_URL"]}
+        with patch.object(roster_input.urllib.request, "build_opener") as opener:
+            opener.return_value.open.return_value = FakeResponse(self.body)
+            self.assertEqual(roster_input.read_roster_json(environ=environment), self.body.decode())
+            self.assertEqual(opener.return_value.open.call_count, 1)
+            request = opener.return_value.open.call_args.args[0]
+            self.assertEqual(request.get_method(), "GET")
+            self.assertFalse(any("access" in key.lower() for key in request.headers))
+
     def test_http_auth_redirect_and_network_failures_are_sanitized(self):
         endpoint = self.environment["ROSTER_EXPORT_URL"]
         secret = self.environment["CF_ACCESS_CLIENT_SECRET"]
@@ -256,7 +266,7 @@ class RosterReadTests(unittest.TestCase):
 
     def test_missing_or_malformed_auth_fails_before_request(self):
         for key in self.environment:
-            for value in (None, "", "unsafe\r\nheader"):
+            for value in (None, "", " ", "unsafe\r\nheader"):
                 with self.subTest(key=key, value=value):
                     environment = dict(self.environment)
                     if value is None:
@@ -271,7 +281,8 @@ class RosterReadTests(unittest.TestCase):
     def test_https_and_one_explicit_source_required(self):
         urls = ["http://roster.fixture.invalid/export", "file:///roster.json", "https://user:secret@roster.fixture.invalid/export",
                 "https://roster.fixture.invalid/export#fragment", "https://roster.fixture.invalid:0/export",
-                "https://roster.fixture.invalid:bad/export", "https://roster.fixture.invalid/ex port", "https:///export"]
+                "https://roster.fixture.invalid:bad/export", "https://roster.fixture.invalid/ex port", "https:///export",
+                "https://roster.fixture.invalid/export?token=never-send"]
         for url in urls:
             with self.subTest(url=url):
                 with patch.object(roster_input.urllib.request, "build_opener") as opener:
