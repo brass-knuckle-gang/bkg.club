@@ -538,6 +538,10 @@ def qrz_fetch_callsign(session_key: str, callsign: str, *, debug: bool = False) 
     return {
         "current_call": current_call, "image": image,
         "grid": grid, "lat": lat, "lon": lon,
+        # Only the separate JSON enrichment command uses these to reject
+        # geography that disagrees with the reviewed current location.
+        "state": call.findtext("q:state", default="", namespaces=QRZ_NS),
+        "country": call.findtext("q:country", default="", namespaces=QRZ_NS),
     }
 
 
@@ -1428,7 +1432,7 @@ def main(argv: list[str] | None = None) -> int:
         help="public build directory (default: dist/)",
     )
     parser.add_argument("--source", choices=("sheets", "json"), default="sheets",
-                        help="membership source (default: sheets; JSON is experimental)")
+                        help="membership source (default: sheets; production workflow selects json)")
     parser.add_argument("--roster-json", type=Path,
                         help="explicit local JSON export; otherwise JSON uses ROSTER_EXPORT_URL")
     parser.add_argument("--enrichment-dir", type=Path,
@@ -1443,8 +1447,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.source == "sheets" and (args.roster_json or args.enrichment_dir):
             raise ValueError("JSON options require explicit --source json")
         if args.source == "json":
-            if output_dir.is_relative_to(source_root):
-                raise ValueError("Experimental JSON output must be outside the source repository, never production dist/")
             if args.enrichment_dir:
                 cache = args.enrichment_dir.resolve()
                 if (cache.is_relative_to(source_root) or source_root.is_relative_to(cache)

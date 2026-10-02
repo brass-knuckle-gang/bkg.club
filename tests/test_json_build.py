@@ -310,28 +310,42 @@ class JsonBuildTests(unittest.TestCase):
                 self.assertNotEqual(self.build_json(), 0)
                 self.assertEqual({path.relative_to(self.dist): path.read_bytes() for path in self.dist.rglob("*") if path.is_file()}, previous)
 
-    def test_json_output_cannot_enter_production_artifact_or_replace_source(self):
-        for output in (self.source / "dist", self.source / "experimental", self.source, self.source.parent):
+    def test_json_can_build_production_dist_but_cannot_replace_source(self):
+        production = self.source / "dist"
+        self.assertEqual(self.build_json(output=production), 0)
+        deployment.site_contract.validate_dist(production, source="json")
+        for output in (self.source / "experimental", self.source, self.source.parent):
             with self.subTest(output=output):
                 self.assertNotEqual(self.build_json(output=output), 0)
-        self.assertFalse((self.source / "dist").exists())
+        self.assertTrue((production / "data/v1/roster.json").is_file())
         self.assertFalse((self.source / "experimental").exists())
         self.assertTrue(self.roster.is_file())
+        previous = {p.relative_to(production): p.read_bytes() for p in production.rglob("*") if p.is_file()}
+        self.roster.write_text((FIXTURES / "empty-v1.json").read_text())
+        self.assertNotEqual(self.build_json(output=production), 0)
+        self.assertEqual({p.relative_to(production): p.read_bytes() for p in production.rglob("*") if p.is_file()}, previous)
 
-    def test_production_defaults_and_workflow_remain_sheets_and_pages(self):
+    def test_explicit_legacy_build_and_production_json_pages_workflow(self):
         sheets = self.workspace / "default-dist"
         with patch.dict(os.environ, {"ROSTER_EXPORT_URL": "https://fixture.invalid/api/roster/export"}):
             self.assertEqual(self.build_matched_sheets(sheets), 0)
         self.assertFalse((sheets / "data/v1/roster.json").exists())
         workflow = (ROOT / ".github/workflows/deploy.yml").read_text()
-        self.assertIn("python3 scripts/build-roster.py --output-dir dist", workflow)
-        self.assertIn("python3 scripts/validate-site.py dist", workflow)
+        self.assertIn("python3 scripts/build-roster.py --source json", workflow)
+        self.assertIn("python3 scripts/validate-site.py --source json dist", workflow)
         self.assertIn("path: dist", workflow)
         self.assertIn("cron: '0 */6 * * *'", workflow)
         self.assertIn("actions/upload-pages-artifact@v3", workflow)
         self.assertIn("actions/deploy-pages@v4", workflow)
-        self.assertNotIn("--source json", workflow)
-        self.assertNotIn("ROSTER_EXPORT", workflow)
+        self.assertIn("ROSTER_EXPORT_URL: ${{ secrets.ROSTER_EXPORT_URL }}", workflow)
+        self.assertEqual(workflow.count("python3 scripts/fetch-roster.py"), 1)
+        self.assertEqual(workflow.count('--roster-json "$RUNNER_TEMP/bkg-build/roster.json"'), 2)
+        self.assertIn('ref: ${{ github.sha }}', workflow)
+        self.assertIn('retention-days: 30', workflow)
+        self.assertIn('--require-usable', workflow)
+        self.assertNotIn('Commit refreshed QRZ cache', workflow)
+        self.assertNotIn('CF_ACCESS_CLIENT', workflow)
+        self.assertNotIn('images/mugshots\n', workflow)
         self.assertEqual((sheets / "CNAME").read_text().strip(), "www.bkg.club")
 
 

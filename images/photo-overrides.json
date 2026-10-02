@@ -1,0 +1,45 @@
+{
+  "members": {
+    "1": {
+      "callsign": "KI7QCF",
+      "photo": "KI7QCF.jpg"
+    },
+    "21": {
+      "callsign": "KE9BHN",
+      "photo": "KE9BHN.jpg"
+    },
+    "23": {
+      "callsign": "W6EFI",
+      "photo": "W6EFI.jpg"
+    },
+    "357": {
+      "callsign": "K4DH",
+      "photo": "K4DH.jpg"
+    },
+    "45": {
+      "callsign": "W1WC",
+      "photo": "W1WC.jpg"
+    },
+    "46": {
+      "callsign": "KM4QNA",
+      "photo": "KM4QNA.jpg"
+    },
+    "47": {
+      "callsign": "KD8PZU",
+      "photo": "KD8PZU.jpg"
+    },
+    "68": {
+      "callsign": "KB4ACP",
+      "photo": "KB4ACP.jpg"
+    },
+    "69": {
+      "callsign": "N2YBS",
+      "photo": "N2YBS.jpg"
+    },
+    "91": {
+      "callsign": "N4VE",
+      "photo": "N4VE.png"
+    }
+  },
+  "version": 1
+}

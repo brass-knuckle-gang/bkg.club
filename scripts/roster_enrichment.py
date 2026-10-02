@@ -1,4 +1,4 @@
-"""Optional, sanitized QRZ data for the JSON roster experiment.
+"""Optional, sanitized QRZ data for the reviewed JSON roster.
 
 Rendering only reads this cache. Refreshing it is a separate, explicit command.
 Membership and identity always come from the reviewed roster export, never QRZ.
@@ -218,8 +218,36 @@ def _merge_location(record: dict, info: dict) -> None:
         record["lat"], record["lon"] = coordinates
 
 
+def read_photo_overrides(manifest: Path, members: list[dict], *, repo_root: Path = REPO_ROOT) -> dict[str, tuple[str, bytes]]:
+    """Select custom photos by reviewed number AND callsign; sanitize pixels."""
+    identities = _identities(members)
+    raw = json.loads(Path(manifest).read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or raw.get("version") != 1 or not isinstance(raw.get("members"), dict):
+        raise ValueError("Invalid photo override manifest")
+    photo_root = Path(repo_root) / "images/mugshots-override"
+    if photo_root.is_symlink() or not photo_root.resolve().is_relative_to(Path(repo_root).resolve()):
+        raise ValueError("Photo overrides must be inside the source repository")
+    selected = {}
+    for number, callsign in identities.items():
+        value = raw["members"].get(number)
+        if not isinstance(value, dict) or value.get("callsign") != callsign:
+            continue
+        filename = value.get("photo")
+        if (not isinstance(filename, str) or Path(filename).name != filename
+                or Path(filename).suffix.lower() not in PHOTO_EXTENSIONS | {".jpeg"}):
+            raise ValueError("Invalid photo override path")
+        source = photo_root / filename
+        if (source.is_symlink() or not source.resolve().is_relative_to(photo_root.resolve())
+                or source.stat().st_size > MAX_PHOTO_BYTES):
+            raise ValueError("Invalid photo override file")
+        pixels, extension = sanitize_photo(source.read_bytes())
+        selected[number] = (photo_filename(int(number), callsign, extension), pixels)
+    return selected
+
+
 def refresh_enrichment(members: list[dict], directory: Path, *, username: str,
                        password: str, login, lookup, photo_fetch,
+                       photo_overrides: dict | None = None, require_usable: bool = False,
                        repo_root: Path = REPO_ROOT) -> dict[str, int]:
     """Explicit refresh with atomic cache replacement and per-field LKG fallback.
 
@@ -242,8 +270,10 @@ def refresh_enrichment(members: list[dict], directory: Path, *, username: str,
             photo = _read_photo(directory, number, identities[number], record["photo"])
             if photo:
                 photos[photo[0]] = photo[1]
+    photo_overrides = photo_overrides or {}
     summary = {"active_members": len(identities), "lookups_updated": 0,
-               "lookups_failed": 0, "photos_updated": 0, "photos_retained": 0}
+               "lookups_failed": 0, "photos_updated": 0, "photos_retained": 0,
+               "photos_overridden": 0}
     qths = {str(member["number"]): location_binding(member.get("qth") or "") for member in members}
     try:
         session = login(username, password) if username and password else None
@@ -264,7 +294,7 @@ def refresh_enrichment(members: list[dict], directory: Path, *, username: str,
             record["qth_hash"] = qths[number]
         summary["lookups_updated"] += 1
         image = info.get("image")
-        if isinstance(image, str):
+        if isinstance(image, str) and number not in photo_overrides:
             # Reject local files, credentials, non-HTTP schemes, and absurd URLs.
             from urllib.parse import urlsplit
             try:
@@ -279,8 +309,20 @@ def refresh_enrichment(members: list[dict], directory: Path, *, username: str,
                     summary["photos_updated"] += 1
             except Exception:
                 pass
+    for number, (filename, pixels) in photo_overrides.items():
+        if number not in identities or filename != photo_filename(int(number), identities[number], ".png"):
+            raise ValueError("Photo override must match an active reviewed identity")
+        clean, extension = sanitize_photo(pixels)
+        if extension != ".png" or clean != pixels:
+            raise ValueError("Photo override must be sanitized")
+        records.setdefault(number, {"callsign": identities[number]})["photo"] = filename
+        photos[filename] = pixels
+        summary["photos_overridden"] += 1
     keep_photos = {record["photo"] for record in records.values() if record.get("photo")}
-    summary["photos_retained"] = len(keep_photos) - summary["photos_updated"]
+    summary["photos_retained"] = len(keep_photos) - summary["photos_updated"] - summary["photos_overridden"]
+    summary["located_members"] = sum(bool(record.get("grid") or _coordinates(record)) for record in records.values())
+    if require_usable and (not keep_photos or not summary["located_members"]):
+        raise ValueError("Enrichment bootstrap requires usable geography and photos")
     payload = {"version": CACHE_VERSION, "members": records}
     directory.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=f".{directory.name}-refresh-", dir=directory.parent) as temporary:

@@ -297,6 +297,40 @@ class EnrichmentTests(unittest.TestCase):
             self.refresh()
         self.assertEqual((self.cache / enrichment.CACHE_NAME).read_bytes(), before)
 
+    def test_custom_photos_require_both_number_and_callsign_and_are_sanitized(self):
+        photos = self.root / "images/mugshots-override"
+        photos.mkdir(parents=True)
+        (photos / "K1TST.png").write_bytes(png(metadata=True))
+        manifest = self.root / "photo-overrides.json"
+        manifest.write_text(json.dumps({"version": 1, "members": {
+            "1": {"callsign": "K1TST", "photo": "K1TST.png"},
+            "99": {"callsign": "K9OLD", "photo": "missing-inactive.png"},
+        }}))
+        selected = enrichment.read_photo_overrides(manifest, self.members, repo_root=self.root)
+        self.assertEqual(selected, {"1": (enrichment.photo_filename(1, "K1TST", ".png"), png())})
+        reused_call = [self.member(40, "K1TST"), self.member(1, "K1NEW")]
+        self.assertEqual(enrichment.read_photo_overrides(manifest, reused_call, repo_root=self.root), {})
+        self.login.return_value = None
+        enrichment.refresh_enrichment(self.members, self.cache, username="x", password="y",
+                                      login=self.login, lookup=self.lookup, photo_fetch=self.photo_fetch,
+                                      photo_overrides=selected, repo_root=self.root)
+        self.assertEqual((self.cache / "photos" / selected["1"][0]).read_bytes(), png())
+
+    def test_empty_bootstrap_fails_before_cache_replacement_but_usable_outage_passes(self):
+        self.seed_cache()
+        before = (self.cache / enrichment.CACHE_NAME).read_bytes()
+        self.login.return_value = None
+        with self.assertRaisesRegex(ValueError, "bootstrap"):
+            enrichment.refresh_enrichment([self.member(3, "K3NEW")], self.cache, username="x", password="y",
+                                          login=self.login, lookup=self.lookup, photo_fetch=self.photo_fetch,
+                                          require_usable=True, repo_root=self.root)
+        self.assertEqual((self.cache / enrichment.CACHE_NAME).read_bytes(), before)
+        result = enrichment.refresh_enrichment(self.members, self.cache, username="x", password="y",
+                                              login=self.login, lookup=self.lookup, photo_fetch=self.photo_fetch,
+                                              require_usable=True, repo_root=self.root)
+        self.assertEqual(result["located_members"], 2)
+        self.assertEqual(result["photos_retained"], 1)
+
 
 class RefreshCommandTests(unittest.TestCase):
     def setUp(self):
@@ -343,6 +377,20 @@ class RefreshCommandTests(unittest.TestCase):
             read.assert_not_called()
             load.assert_not_called()
             self.assertEqual(roster.read_text(), "keep-input")
+
+    def test_refresh_rejects_qrz_geography_that_disagrees_with_reviewed_location(self):
+        client = Mock()
+        client.qth_location.return_value = ("NY", "United States")
+        info = {"current_call": "K1TST", "state": "VT", "country": "United States",
+                "grid": "FN31", "lat": 43, "lon": -72, "image": "https://fixture.invalid/photo.png"}
+        client.qrz_fetch_callsign.return_value = info
+        lookup = self.command.reviewed_lookup(client, [{"callsign": "K1TST", "qth": "New York"}])
+        stale = lookup("session", "K1TST")
+        self.assertFalse({"grid", "lat", "lon"} & stale.keys())
+        self.assertEqual(stale["image"], info["image"])
+        self.assertIn("grid", info)  # Does not mutate the QRZ client's result.
+        info.update(state="NY", country="United States of America")
+        self.assertEqual(lookup("session", "K1TST")["grid"], "FN31")
 
 
 if __name__ == "__main__":
