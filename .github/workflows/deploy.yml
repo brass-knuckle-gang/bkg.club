@@ -19,13 +19,13 @@ permissions:
 jobs:
   build:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Keep environment-scoped QRZ secrets available, as in the original job.
     environment: github-pages
     outputs:
       artifact_name: ${{ steps.revision.outputs.artifact_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
@@ -55,7 +55,7 @@ jobs:
       # QRZ cache can become a membership fallback or enter the Pages output.
       - name: Restore sanitized enrichment
         id: enrichment-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: ${{ runner.temp }}/bkg-build/enrichment
           key: bkg-enrichment-v1-${{ github.run_id }}-${{ github.run_attempt }}
@@ -95,22 +95,22 @@ jobs:
       # Pair the exact reviewed input and sanitized cache with the immutable
       # Pages archive for inspection and future cache recovery (30 days).
       - name: Retain reviewed snapshot and sanitized enrichment
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bkg-build-inputs-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/bkg-build
           retention-days: 30
           if-no-files-found: error
 
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           name: ${{ steps.revision.outputs.artifact_name }}
           path: dist
           retention-days: 30
 
       - name: Save validated sanitized enrichment
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/bkg-build/enrichment
@@ -118,7 +118,7 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -130,6 +130,6 @@ jobs:
 
       - name: Deploy to GitHub Pages
         id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
         with:
           artifact_name: ${{ needs.build.outputs.artifact_name }}
