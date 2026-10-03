@@ -358,6 +358,29 @@ class EnrichmentTests(unittest.TestCase):
             if run >= 24:
                 self.assertTrue(all(run * hour - checked[m["callsign"]] <= 24 * hour for m in members))
 
+    def test_dropped_scheduled_runs_are_caught_up_on_the_next_run(self):
+        members = [self.member(n, f"K{n}TST") for n in range(1, 101)]
+        self.lookup.side_effect = lambda _session, call: {"current_call": call, "grid": "EN61"}
+        hour = 3600
+        checked = {}
+        dropped = {30, 31, 32, 33, 50, 51, 52, 53, 54, 55, 56, 57}  # GitHub skipped these.
+        for run in range(0, 24 * 4):
+            if run in dropped:
+                continue
+            self.lookup.reset_mock()
+            self.scheduled(members, now=run * hour)
+            for (_session, call), _ in self.lookup.call_args_list:
+                checked[call] = run * hour
+            # After each run nobody is older than one interval short of a day,
+            # so with hourly runs no member ever exceeds 24 hours.
+            self.assertTrue(all(run * hour - checked[m["callsign"]] < 23 * hour for m in members), run)
+
+    def test_never_checked_cache_entries_are_phased_in_not_bunched(self):
+        members = [self.member(n, f"K{n}TST") for n in range(1, 101)]
+        self.write_cache({str(n): {"callsign": f"K{n}TST"} for n in range(1, 101)})
+        self.scheduled(members, now=10 * 24 * 3600)
+        self.assertLessEqual(self.lookup.call_count, 5)
+
     def test_new_and_moved_members_are_looked_up_immediately(self):
         self.lookup.side_effect = lambda _session, call: {"current_call": call, "grid": "EN61"}
         self.scheduled(self.members, now=0)

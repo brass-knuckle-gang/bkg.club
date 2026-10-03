@@ -359,6 +359,7 @@ class JsonBuildTests(unittest.TestCase):
         self.assertIn("--max-age-hours 24 --interval-hours 1", workflow)
         self.assertIn("python3 scripts/site-fingerprint.py dist", workflow)
         self.assertIn("if: needs.build.outputs.changed == 'true'", workflow)
+        self.assertIn('[ "$SKIP_UNCHANGED" = true ]', workflow)
         self.assertIn("actions/upload-pages-artifact@v5", workflow)
         self.assertIn("actions/deploy-pages@v5", workflow)
         self.assertIn("ROSTER_EXPORT_URL: ${{ secrets.ROSTER_EXPORT_URL }}", workflow)
