@@ -103,7 +103,7 @@ class JsonBuildTests(unittest.TestCase):
         from roster_enrichment import sanitize_photo
 
         sanitized, extension = sanitize_photo(GIF)
-        self.assertEqual(extension, ".png")
+        self.assertEqual(extension, ".webp")
         filename = f"bkg-{number}-{hashlib.sha256(callsign.encode()).hexdigest()[:12]}{extension}"
         photos = self.enrichment / "photos"
         photos.mkdir(exist_ok=True)
@@ -184,8 +184,8 @@ class JsonBuildTests(unittest.TestCase):
         self.assertEqual([entry["num"] for entry in self.data("nearby.html", "GEO_DATA")], [1, 7, 21])
         self.assertEqual((self.data("nearby.html", "GEO_DATA")[1]["lat"], self.data("nearby.html", "GEO_DATA")[1]["lon"]), (41.88, -87.63))
         self.assertEqual([entry["num"] for entry in self.data("tree.html", "DOWNLINE_DATA")], [1, 7, 12, 21, 40, 88])
-        photos = [path.relative_to(self.dist).as_posix() for path in self.dist.rglob("*") if path.is_file() and path.suffix == ".png"]
-        self.assertEqual(photos, ["images/mugshots/bkg-1.png"])
+        photos = [path.relative_to(self.dist).as_posix() for path in self.dist.rglob("*") if path.is_file() and path.suffix == ".webp"]
+        self.assertEqual(photos, ["images/mugshots/bkg-1.webp"])
         for path in self.dist.rglob("*"):
             if path.is_file() and path.suffix in {".html", ".txt", ".json"}:
                 self.assertNotIn("N0INACTIVE", path.read_text())
@@ -244,7 +244,7 @@ class JsonBuildTests(unittest.TestCase):
         outbreak = self.data("outbreak.html", "OUTBREAK_DATA")[-1]
         self.assertEqual(outbreak["state"], "NY")
         self.assertNotIn("lat", outbreak)
-        self.assertTrue((self.dist / "images/mugshots/bkg-88.png").is_file())
+        self.assertTrue((self.dist / "images/mugshots/bkg-88.webp").is_file())
         self.assertIn("K2SYN88 🤜 Synthetic Moved BKG #88 (VT OG)", self.notes())
 
     def test_reviewed_html_and_script_text_round_trips_without_execution(self):
@@ -283,10 +283,31 @@ class JsonBuildTests(unittest.TestCase):
                 self.assertEqual(self.data("nearby.html", "GEO_DATA"), [])
                 self.assertEqual(len(self.notes()), 6)
 
+    def test_fingerprint_ignores_build_times_but_not_visible_changes(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("site_fingerprint", ROOT / "scripts/site-fingerprint.py")
+        fingerprint = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fingerprint)
+        later = self.workspace / "later"
+        self.assertEqual(self.build_json(), 0)
+        self.envelope["generated_at"] = "2026-12-31T23:59:59Z"
+        self.write_roster()
+        with patch.object(self.builder, "datetime", wraps=self.builder.datetime) as clock:
+            clock.now.return_value = self.builder.datetime(2030, 1, 2, 3, 4, 5, tzinfo=self.builder.timezone.utc)
+            self.assertEqual(self.build_json(output=later), 0)
+        self.assertNotEqual((self.dist / "index.html").read_bytes(), (later / "index.html").read_bytes())
+        self.assertNotEqual((self.dist / "members.txt").read_bytes(), (later / "members.txt").read_bytes())
+        self.assertEqual(fingerprint.fingerprint(self.dist), fingerprint.fingerprint(later))
+        self.envelope["members"][0]["name"] = "Renamed Member"
+        rehash(self.envelope)
+        self.write_roster()
+        self.assertEqual(self.build_json(output=later), 0)
+        self.assertNotEqual(fingerprint.fingerprint(self.dist), fingerprint.fingerprint(later))
+
     def test_json_validator_rejects_unreferenced_inactive_photos(self):
         self.assertEqual(self.build_json(), 0)
         filename = self.cache_photo(99, "N0INACTIVE")
-        photo = self.dist / "images/mugshots/bkg-99.png"
+        photo = self.dist / "images/mugshots/bkg-99.webp"
         photo.parent.mkdir(parents=True, exist_ok=True)
         photo.write_bytes((self.enrichment / "photos" / filename).read_bytes())
         with self.assertRaises(ValueError):
@@ -334,7 +355,10 @@ class JsonBuildTests(unittest.TestCase):
         self.assertIn("python3 scripts/build-roster.py --source json", workflow)
         self.assertIn("python3 scripts/validate-site.py --source json dist", workflow)
         self.assertIn("path: dist", workflow)
-        self.assertIn("cron: '0 */6 * * *'", workflow)
+        self.assertIn("cron: '23 * * * *'", workflow)
+        self.assertIn("--max-age-hours 24 --interval-hours 1", workflow)
+        self.assertIn("python3 scripts/site-fingerprint.py dist", workflow)
+        self.assertIn("if: needs.build.outputs.changed == 'true'", workflow)
         self.assertIn("actions/upload-pages-artifact@v5", workflow)
         self.assertIn("actions/deploy-pages@v5", workflow)
         self.assertIn("ROSTER_EXPORT_URL: ${{ secrets.ROSTER_EXPORT_URL }}", workflow)

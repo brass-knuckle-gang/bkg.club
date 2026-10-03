@@ -42,7 +42,11 @@ def _quiet(callback):
 
 
 def reviewed_lookup(client, members):
-    """QRZ cannot move reviewed identities or bind old geography to a new QTH."""
+    """QRZ cannot move reviewed identities or bind old geography to a new QTH.
+
+    Lookups run on worker threads, so this does not swap sys.stderr itself;
+    main() silences the whole refresh instead.
+    """
     locations = {m["callsign"]: client.qth_location(m["qth"]) for m in members}
 
     def lookup(session, callsign):
@@ -60,7 +64,7 @@ def reviewed_lookup(client, members):
             for key in ("grid", "lat", "lon"):
                 info.pop(key, None)
         return info
-    return _quiet(lookup)
+    return lookup
 
 
 class _PhotoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -112,6 +116,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="seed sanitized custom photos without QRZ (local preview only)")
     parser.add_argument("--require-usable", action="store_true",
                         help="fail bootstrap without both usable geography and photos")
+    parser.add_argument("--max-age-hours", type=int,
+                        help="look up only due members so each is rechecked within this many hours")
+    parser.add_argument("--interval-hours", type=int, default=1,
+                        help="how often this refresh runs; sizes each run's share (default: 1)")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="concurrent QRZ lookups and photo downloads (default: 1)")
     args = parser.parse_args(argv)
     try:
         directory = validate_enrichment_dir(args.enrichment_dir)
@@ -123,12 +133,16 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("Overrides-only refresh requires a photo manifest")
         if not args.overrides_only and (not os.environ.get("QRZ_USERNAME") or not os.environ.get("QRZ_PASSWORD")):
             raise ValueError("QRZ_USERNAME and QRZ_PASSWORD are required for explicit refresh")
+        if args.workers < 1 or (args.max_age_hours is not None and not 0 < args.interval_hours < args.max_age_hours):
+            raise ValueError("Invalid refresh schedule")
         client = load_qrz_client()
-        result = refresh_enrichment(
+        result = _quiet(refresh_enrichment)(
             members, directory, username="" if args.overrides_only else os.environ["QRZ_USERNAME"],
             password="" if args.overrides_only else os.environ["QRZ_PASSWORD"],
-            login=_quiet(client.qrz_login), lookup=reviewed_lookup(client, members), photo_fetch=fetch_photo,
+            login=client.qrz_login, lookup=reviewed_lookup(client, members), photo_fetch=fetch_photo,
             photo_overrides=overrides, require_usable=args.require_usable,
+            max_age_seconds=None if args.max_age_hours is None else args.max_age_hours * 3600,
+            interval_seconds=args.interval_hours * 3600, workers=args.workers,
         )
     except Exception:
         # Do not expose tokens, credentials, endpoint query strings, or raw

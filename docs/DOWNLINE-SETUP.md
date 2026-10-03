@@ -10,7 +10,7 @@ This adds two pages to bkg.club:
   info. Submissions land in a Google Sheet for officers to review.
 
 Both reuse the existing build pipeline: `scripts/build-roster.py` reads the
-roster Google Sheet and regenerates the site on every push + every 6 hours.
+roster Google Sheet and regenerates the site on every push + hourly when something changed.
 
 ---
 

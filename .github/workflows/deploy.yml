@@ -3,8 +3,10 @@ name: Deploy
 on:
   push:
     branches: [main]
+  # Hourly: each run looks up only the members due for a QRZ recheck (every
+  # member within 24 h) and skips the upload when the site would not change.
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '23 * * * *'
   workflow_dispatch:
 
 concurrency:
@@ -24,6 +26,8 @@ jobs:
     environment: github-pages
     outputs:
       artifact_name: ${{ steps.revision.outputs.artifact_name }}
+      changed: ${{ steps.decide.outputs.changed }}
+      fingerprint: ${{ steps.fingerprint.outputs.value }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -71,6 +75,7 @@ jobs:
             --roster-json "$RUNNER_TEMP/bkg-build/roster.json" \
             --enrichment-dir "$RUNNER_TEMP/bkg-build/enrichment" \
             --photo-overrides images/photo-overrides.json \
+            --max-age-hours 24 --interval-hours 1 --workers 4 \
             --require-usable
 
       - name: Build roster from the saved snapshot
@@ -92,9 +97,38 @@ jobs:
           assert json.loads(snapshot.read_text()) == json.loads(Path("dist/data/v1/roster.json").read_text())
           PY_CHECK
 
+      - name: Fingerprint the public build
+        id: fingerprint
+        run: echo "value=$(python3 scripts/site-fingerprint.py dist)" >> "$GITHUB_OUTPUT"
+
+      # The newest saved fingerprint is the live site's, since one is saved
+      # only after a successful deploy.
+      - name: Restore the last deployed fingerprint
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/deployed-fingerprint
+          key: bkg-deployed-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            bkg-deployed-v1-
+
+      - name: Skip scheduled deploys that would not change the site
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          CURRENT: ${{ steps.fingerprint.outputs.value }}
+        run: |
+          previous="$(cat "$RUNNER_TEMP/deployed-fingerprint/fingerprint.txt" 2>/dev/null || true)"
+          if [ "$EVENT" = schedule ] && [ "$previous" = "$CURRENT" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Site unchanged since the last deploy; skipping upload and deploy."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # Pair the exact reviewed input and sanitized cache with the immutable
       # Pages archive for inspection and future cache recovery (30 days).
       - name: Retain reviewed snapshot and sanitized enrichment
+        if: steps.decide.outputs.changed == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: bkg-build-inputs-${{ github.run_id }}-${{ github.run_attempt }}
@@ -103,7 +137,9 @@ jobs:
           if-no-files-found: error
 
       - uses: actions/configure-pages@v6
+        if: steps.decide.outputs.changed == 'true'
       - uses: actions/upload-pages-artifact@v5
+        if: steps.decide.outputs.changed == 'true'
         with:
           name: ${{ steps.revision.outputs.artifact_name }}
           path: dist
@@ -118,6 +154,7 @@ jobs:
 
   deploy:
     needs: build
+    if: needs.build.outputs.changed == 'true'
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
@@ -133,3 +170,18 @@ jobs:
         uses: actions/deploy-pages@v5
         with:
           artifact_name: ${{ needs.build.outputs.artifact_name }}
+
+      - name: Record the deployed fingerprint
+        env:
+          FINGERPRINT: ${{ needs.build.outputs.fingerprint }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/deployed-fingerprint"
+          printf '%s\n' "$FINGERPRINT" > "$RUNNER_TEMP/deployed-fingerprint/fingerprint.txt"
+
+      # Losing this only costs one redundant deploy on the next scheduled run.
+      - name: Save the deployed fingerprint
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/deployed-fingerprint
+          key: bkg-deployed-v1-${{ github.run_id }}-${{ github.run_attempt }}
