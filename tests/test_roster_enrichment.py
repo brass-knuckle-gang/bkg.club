@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import shutil
 import socket
 import struct
 import sys
@@ -39,6 +40,8 @@ def png(*, metadata=False):
 
 
 GIF = bytes.fromhex("47494638396101000100800000000000ffffff2c00000000010001000002024401003b")
+# The canonical cached form of png(): a sanitized, metadata-free WebP.
+PHOTO = enrichment.sanitize_photo(png())[0]
 
 
 class EnrichmentTests(unittest.TestCase):
@@ -72,7 +75,7 @@ class EnrichmentTests(unittest.TestCase):
         (self.cache / enrichment.CACHE_NAME).write_text(json.dumps({"version": 1, "members": records}))
 
     def seed_cache(self):
-        filename = enrichment.photo_filename(1, "K1TST", ".png")
+        filename = enrichment.photo_filename(1, "K1TST", ".webp")
         self.write_cache({
             "1": {"callsign": "K1TST", "grid": "FN31", "photo": filename,
                   "qth_hash": enrichment.location_binding("Reviewed QTH")},
@@ -80,7 +83,7 @@ class EnrichmentTests(unittest.TestCase):
                   "qth_hash": enrichment.location_binding("Reviewed QTH")},
             "99": {"callsign": "K9OLD", "grid": "EM12", "photo": "inactive.png"},
         })
-        (self.cache / "photos" / filename).write_bytes(png())
+        (self.cache / "photos" / filename).write_bytes(PHOTO)
         (self.cache / "photos" / "inactive.png").write_bytes(png())
         return filename
 
@@ -99,7 +102,7 @@ class EnrichmentTests(unittest.TestCase):
         original = copy.deepcopy(self.members)
         before = (self.cache / enrichment.CACHE_NAME).read_bytes()
         photos = enrichment.annotate_json_enrichment(self.members, self.cache, repo_root=self.root)
-        self.assertEqual(photos, {"images/mugshots/bkg-1.png": (self.cache / "photos" / filename).resolve()})
+        self.assertEqual(photos, {"images/mugshots/bkg-1.webp": (self.cache / "photos" / filename).resolve()})
         self.assertEqual(self.members[0]["grid"], "FN31")
         self.assertEqual((self.members[1]["lat"], self.members[1]["lon"]), (40.12, -110.65))
         for old, member in zip(original, self.members):
@@ -155,7 +158,7 @@ class EnrichmentTests(unittest.TestCase):
                 self.login.return_value = failure
                 self.refresh()
                 self.assertEqual(self.read(), expected)
-                self.assertEqual((self.cache / "photos" / filename).read_bytes(), png())
+                self.assertEqual((self.cache / "photos" / filename).read_bytes(), PHOTO)
         self.login.side_effect = None
         self.login.return_value = "private-session"
         for info in (None, RuntimeError("raw XML private-address"), {},
@@ -196,12 +199,12 @@ class EnrichmentTests(unittest.TestCase):
         raw = json.loads((self.cache / enrichment.CACHE_NAME).read_text())
         self.assertEqual(set(raw), {"version", "members"})
         self.assertEqual(set(raw["members"]), {"1", "2"})
-        self.assertEqual(set(raw["members"]["1"]), {"callsign", "grid", "photo", "qth_hash"})
+        self.assertEqual(set(raw["members"]["1"]), {"callsign", "grid", "photo", "qth_hash", "checked_at", "image_ref"})
         self.assertEqual(raw["members"]["1"]["grid"], "EN61")
         self.assertEqual((raw["members"]["2"]["lat"], raw["members"]["2"]["lon"]), (43.65, -79.39))
         self.assertEqual(result["photos_updated"], 2)
         for photo in (self.cache / "photos").iterdir():
-            self.assertEqual(photo.read_bytes(), png())
+            self.assertEqual(photo.read_bytes(), PHOTO)
             self.assertNotIn(b"private", photo.read_bytes())
         self.assertEqual(self.members, before)
         self.assertNotIn("private", (self.cache / enrichment.CACHE_NAME).read_text())
@@ -250,7 +253,7 @@ class EnrichmentTests(unittest.TestCase):
         self.login.assert_not_called()
 
     def test_cache_private_fields_and_unsafe_photos_never_annotate(self):
-        filename = enrichment.photo_filename(1, "K1TST", ".png")
+        filename = enrichment.photo_filename(1, "K1TST", ".webp")
         self.write_cache({"1": {"callsign": "K1TST", "grid": "EN61AB", "lat": 12.34567, "lon": 23.45678,
                                 "qth_hash": enrichment.location_binding("Reviewed QTH"),
                                 "photo": filename, "address": "private-home", "session": "private-session"},
@@ -262,13 +265,13 @@ class EnrichmentTests(unittest.TestCase):
                                       "2": {"callsign": "K2TST"}})
 
     def test_photo_formats_strip_metadata_and_reject_html_truncation_and_corruption(self):
-        self.assertEqual(enrichment.sanitize_photo(png(metadata=True)), (png(), ".png"))
-        gif_png = enrichment.sanitize_photo(GIF)
-        self.assertEqual(gif_png[1], ".png")
-        self.assertEqual(enrichment.sanitize_photo(gif_png[0]), gif_png)
+        self.assertEqual(enrichment.sanitize_photo(png(metadata=True)), (PHOTO, ".webp"))
+        gif_webp = enrichment.sanitize_photo(GIF)
+        self.assertEqual(gif_webp[1], ".webp")
+        enrichment.verify_photo(gif_webp[0])
         gif_with_comment = GIF[:-1] + b"\x21\xfe\x07private\x00;"
-        self.assertEqual(enrichment.sanitize_photo(gif_with_comment), gif_png)
-        self.assertEqual(enrichment.sanitize_photo(png() + b"private-address"), (png(), ".png"))
+        self.assertEqual(enrichment.sanitize_photo(gif_with_comment), gif_webp)
+        self.assertEqual(enrichment.sanitize_photo(png() + b"private-address"), (PHOTO, ".webp"))
         for data in (b"<html>not photo</html>", GIF[:25], png()[:45], png()[:40] + b"bad" + png()[43:],
                      b"\xff\xd8\xff\xe1\x00\x02\xff\xd9", b"RIFF\x00\x00\x00\x00WEBP",
                      png()[:33] + png_chunk(b"IDAT", b"not-zlib-data") + png_chunk(b"IEND", b""),
@@ -281,7 +284,7 @@ class EnrichmentTests(unittest.TestCase):
         private = b"SYNTHETIC-GPS-PRIVATE-METADATA"
         app14 = b"\xff\xee" + (len(private) + 2).to_bytes(2, "big") + private
         clean, extension = enrichment.sanitize_photo(original[:2] + app14 + original[2:])
-        self.assertEqual(extension, ".png")
+        self.assertEqual(extension, ".webp")
         self.assertNotIn(private, clean)
         self.assertEqual(clean, enrichment.sanitize_photo(original)[0])
 
@@ -307,14 +310,14 @@ class EnrichmentTests(unittest.TestCase):
             "99": {"callsign": "K9OLD", "photo": "missing-inactive.png"},
         }}))
         selected = enrichment.read_photo_overrides(manifest, self.members, repo_root=self.root)
-        self.assertEqual(selected, {"1": (enrichment.photo_filename(1, "K1TST", ".png"), png())})
+        self.assertEqual(selected, {"1": (enrichment.photo_filename(1, "K1TST", ".webp"), PHOTO)})
         reused_call = [self.member(40, "K1TST"), self.member(1, "K1NEW")]
         self.assertEqual(enrichment.read_photo_overrides(manifest, reused_call, repo_root=self.root), {})
         self.login.return_value = None
         enrichment.refresh_enrichment(self.members, self.cache, username="x", password="y",
                                       login=self.login, lookup=self.lookup, photo_fetch=self.photo_fetch,
                                       photo_overrides=selected, repo_root=self.root)
-        self.assertEqual((self.cache / "photos" / selected["1"][0]).read_bytes(), png())
+        self.assertEqual((self.cache / "photos" / selected["1"][0]).read_bytes(), PHOTO)
 
     def test_empty_bootstrap_fails_before_cache_replacement_but_usable_outage_passes(self):
         self.seed_cache()
@@ -330,6 +333,93 @@ class EnrichmentTests(unittest.TestCase):
                                               require_usable=True, repo_root=self.root)
         self.assertEqual(result["located_members"], 2)
         self.assertEqual(result["photos_retained"], 1)
+
+
+    def scheduled(self, members, now, **kwargs):
+        return enrichment.refresh_enrichment(
+            members, self.cache, username="x", password="y", login=self.login, lookup=self.lookup,
+            photo_fetch=self.photo_fetch, max_age_seconds=24 * 3600, interval_seconds=3600,
+            now=now, repo_root=self.root, **kwargs)
+
+    def test_hourly_scheduled_refresh_keeps_every_member_within_a_day(self):
+        members = [self.member(n, f"K{n}TST") for n in range(1, 101)]
+        self.lookup.side_effect = lambda _session, call: {"current_call": call, "grid": "EN61"}
+        hour = 3600
+        first = self.scheduled(members, now=0)
+        self.assertEqual(first["lookups_updated"], 100)  # Everyone is new.
+        checked = {}
+        for run in range(1, 24 * 4):
+            self.lookup.reset_mock()
+            result = self.scheduled(members, now=run * hour)
+            # A steady share per run, not the whole roster.
+            self.assertLessEqual(result["lookups_updated"], 5)
+            for (_session, call), _ in self.lookup.call_args_list:
+                checked[call] = run * hour
+            if run >= 24:
+                self.assertTrue(all(run * hour - checked[m["callsign"]] <= 24 * hour for m in members))
+
+    def test_new_and_moved_members_are_looked_up_immediately(self):
+        self.lookup.side_effect = lambda _session, call: {"current_call": call, "grid": "EN61"}
+        self.scheduled(self.members, now=0)
+        members = copy.deepcopy(self.members) + [self.member(3, "K3NEW")]
+        members[0]["qth"] = "Reviewed new QTH"
+        self.lookup.reset_mock()
+        self.scheduled(members, now=60)
+        self.assertEqual(sorted(call for (_s, call), _ in self.lookup.call_args_list), ["K1TST", "K3NEW"])
+
+    def test_unchanged_qrz_image_is_not_downloaded_again(self):
+        image = {"url": "https://fixture.invalid/a.png"}
+        self.lookup.side_effect = lambda _session, call: {"current_call": call, "image": image["url"]}
+        self.refresh()
+        self.assertEqual(self.photo_fetch.call_count, 2)
+        self.refresh()
+        self.assertEqual(self.photo_fetch.call_count, 2)
+        image["url"] = "https://fixture.invalid/b.png"
+        self.refresh()
+        self.assertEqual(self.photo_fetch.call_count, 4)
+
+    def test_version_one_png_cache_is_resanitized_without_qrz(self):
+        legacy = enrichment.photo_filename(1, "K1TST", ".png")
+        self.write_cache({"1": {"callsign": "K1TST", "grid": "FN31", "photo": legacy,
+                                "qth_hash": enrichment.location_binding("Reviewed QTH")}})
+        (self.cache / "photos" / legacy).write_bytes(png(metadata=True))
+        self.assertEqual(self.read(), {"1": {"callsign": "K1TST", "grid": "FN31",
+                                             "qth_hash": enrichment.location_binding("Reviewed QTH")}})
+        self.login.return_value = None
+        self.refresh()
+        upgraded = enrichment.photo_filename(1, "K1TST", ".webp")
+        self.assertEqual(self.read()["1"]["photo"], upgraded)
+        self.assertEqual([p.name for p in (self.cache / "photos").iterdir()], [upgraded])
+        self.assertEqual((self.cache / "photos" / upgraded).read_bytes(), PHOTO)
+
+    def test_stored_webp_with_metadata_trailing_data_or_large_size_is_rejected(self):
+        enrichment.verify_photo(PHOTO)
+        riff = lambda body: b"RIFF" + (len(body) + 4).to_bytes(4, "little") + b"WEBP" + body
+        chunk = lambda kind, data: kind + len(data).to_bytes(4, "little") + data + b"\x00" * (len(data) & 1)
+        vp8 = PHOTO[12:]
+        exif_flag = chunk(b"VP8X", bytes([0x08]) + b"\x00" * 3 + b"\x00\x00\x00" + b"\x00\x00\x00")
+        from PIL import Image
+        big = io.BytesIO()
+        Image.new("RGB", (enrichment.PHOTO_MAX_SIDE + 1, 10)).save(big, format="WEBP")
+        for data in (PHOTO + b"private", riff(vp8 + chunk(b"EXIF", b"private-gps")),
+                     riff(exif_flag + vp8), riff(chunk(b"XMP ", b"private") + vp8), big.getvalue(), png(),
+                     riff(chunk(b"VP8X", b"") + vp8), riff(vp8[:20]), b""):
+            with self.subTest(data=data[:24]), self.assertRaises(ValueError):
+                enrichment.verify_photo(data)
+
+    def test_concurrent_refresh_matches_serial_refresh(self):
+        members = [self.member(n, f"K{n}TST") for n in range(1, 21)]
+        self.lookup.side_effect = lambda _session, call: {
+            "current_call": call, "grid": "EN61", "image": f"https://fixture.invalid/{call}.png"}
+        self.refresh(members)
+        serial = (self.cache / enrichment.CACHE_NAME).read_bytes()
+        shutil.rmtree(self.cache)
+        enrichment.refresh_enrichment(
+            members, self.cache, username="x", password="y", login=self.login, lookup=self.lookup,
+            photo_fetch=self.photo_fetch, workers=8, repo_root=self.root)
+        strip = lambda raw: {n: {k: v for k, v in r.items() if k != "checked_at"}
+                             for n, r in json.loads(raw)["members"].items()}
+        self.assertEqual(strip((self.cache / enrichment.CACHE_NAME).read_bytes()), strip(serial))
 
 
 class RefreshCommandTests(unittest.TestCase):
