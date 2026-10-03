@@ -5,9 +5,16 @@ on:
     branches: [main]
   # Hourly: each run looks up only the members due for a QRZ recheck (every
   # member within 24 h) and skips the upload when the site would not change.
+  # GitHub drops scheduled runs under load, so blackpearl also dispatches
+  # hourly with skip_unchanged; the cron is the backup.
   schedule:
     - cron: '23 * * * *'
   workflow_dispatch:
+    inputs:
+      skip_unchanged:
+        description: Skip the deploy when the built site matches the live one
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy
@@ -111,14 +118,15 @@ jobs:
           restore-keys: |
             bkg-deployed-v1-
 
-      - name: Skip scheduled deploys that would not change the site
+      - name: Skip routine deploys that would not change the site
         id: decide
         env:
           EVENT: ${{ github.event_name }}
+          SKIP_UNCHANGED: ${{ inputs.skip_unchanged }}
           CURRENT: ${{ steps.fingerprint.outputs.value }}
         run: |
           previous="$(cat "$RUNNER_TEMP/deployed-fingerprint/fingerprint.txt" 2>/dev/null || true)"
-          if [ "$EVENT" = schedule ] && [ "$previous" = "$CURRENT" ]; then
+          if { [ "$EVENT" = schedule ] || [ "$SKIP_UNCHANGED" = true ]; } && [ "$previous" = "$CURRENT" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "Site unchanged since the last deploy; skipping upload and deploy."
           else

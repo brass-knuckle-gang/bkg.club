@@ -360,8 +360,11 @@ def refresh_enrichment(members: list[dict], directory: Path, *, username: str,
     Without ``max_age_seconds`` every member is looked up. With it, only due
     members are: anyone new or whose reviewed QTH moved, plus the
     least-recently-checked slice sized so that runs every ``interval_seconds``
-    revisit the whole roster within ``max_age_seconds``. Per-run work then
-    tracks roster growth divided by the number of runs per cycle, and a photo
+    revisit the whole roster within ``max_age_seconds``. Scheduled runs can be
+    dropped, so anyone checked more than ``max_age_seconds - interval_seconds``
+    ago is also due: the next run catches up and the bound holds as long as
+    runs keep coming. Per-run work otherwise tracks roster growth divided by
+    the number of runs per cycle, and a photo
     is only downloaded again when QRZ's image URL changes. ``lookup`` and
     ``photo_fetch`` may run on ``workers`` threads; all merging stays here.
     """
@@ -391,8 +394,14 @@ def refresh_enrichment(members: list[dict], directory: Path, *, username: str,
         # Finish a full pass one run early so a single missed run stays in bounds.
         runs_per_cycle = max(1, max_age_seconds // interval_seconds - 1)
         budget = -(-len(identities) // runs_per_cycle)
-        due = urgent + [n for n in rest[:budget]
-                        if now - records[n].get("checked_at", 0) >= interval_seconds]
+        # Members never checked (version 1 caches) are phased in by the slice
+        # rather than treated as overdue, so they do not all land on one run
+        # and stay bunched together every day after.
+        overdue = {n for n in rest if "checked_at" in records[n]
+                   and now - records[n]["checked_at"] >= max_age_seconds - interval_seconds}
+        sliced = {n for n in rest[:budget]
+                  if now - records[n].get("checked_at", 0) >= interval_seconds}
+        due = urgent + [n for n in rest if n in overdue or n in sliced]
         summary["lookups_skipped"] = len(identities) - len(due)
 
     try:
