@@ -26,7 +26,7 @@ Tests block live networking and exercise anonymous/optional-auth fetches, snapsh
 
 Each successful build retains `bkg-build-inputs-<run-id>-<build-attempt>` for **30 days**, separate from `github-pages-<run-id>-<build-attempt>`. It contains the exact reviewed snapshot, aggregate hash/timestamp record, `source-sha.txt`, and sanitized `enrichment/` cache/photos. No URL, credentials, source photo URLs, or raw QRZ responses are stored. The Actions cache key `bkg-enrichment-v1-<run-id>-<attempt>` restores the newest successfully validated cache available on the branch. GitHub may evict caches; the immutable archive provides independent recovery.
 
-For cache recovery, download a matching known-good input artifact with `gh run download RUN_ID --repo jsvana/bkg.club --name INPUT_ARTIFACT_NAME --dir saved-inputs`, verify its hash/source record, and retain `enrichment/` together with its canonical photos. A local rebuild can use that external directory with the newly saved roster; stale/inactive fields are filtered again. Recovery to the Actions cache needs an operator-reviewed cache seed/repair in the normal build environment, or a successful QRZ refresh; it must not upload an unvalidated public artifact or use the retained snapshot as an automatic membership fallback. For longer retention, download both known-good artifacts before expiry.
+For cache recovery, download a matching known-good input artifact with `gh run download RUN_ID --repo brass-knuckle-gang/bkg.club --name INPUT_ARTIFACT_NAME --dir saved-inputs`, verify its hash/source record, and retain `enrichment/` together with its canonical photos. A local rebuild can use that external directory with the newly saved roster; stale/inactive fields are filtered again. Recovery to the Actions cache needs an operator-reviewed cache seed/repair in the normal build environment, or a successful QRZ refresh; it must not upload an unvalidated public artifact or use the retained snapshot as an automatic membership fallback. For longer retention, download both known-good artifacts before expiry.
 
 ## Roll back the exact published files
 
@@ -37,20 +37,20 @@ The procedure below is for an operator deliberately restoring production. It doe
 1. Find a previously verified successful production run. Wait for any active deployment to finish and account for pending runs before restoring:
 
    ```sh
-   gh run list --repo jsvana/bkg.club --workflow deploy.yml --branch main --status success --limit 20
-   gh run view RUN_ID --repo jsvana/bkg.club --json headSha,jobs --jq '{source: .headSha, jobs: [.jobs[] | {name, databaseId, conclusion}]}'
-   gh api repos/jsvana/bkg.club/actions/runs/RUN_ID/artifacts --jq '.artifacts[] | {name, expired, expires_at}'
+   gh run list --repo brass-knuckle-gang/bkg.club --workflow deploy.yml --branch main --status success --limit 20
+   gh run view RUN_ID --repo brass-knuckle-gang/bkg.club --json headSha,jobs --jq '{source: .headSha, jobs: [.jobs[] | {name, databaseId, conclusion}]}'
+   gh api repos/brass-knuckle-gang/bkg.club/actions/runs/RUN_ID/artifacts --jq '.artifacts[] | {name, expired, expires_at}'
    ```
 
 2. Confirm the selected run's latest completed build produced the verified known-good artifact, its corresponding `deploy` job succeeded, and the artifact is unexpired. A full workflow rerun changes that run's upstream build output: deploy-only reruns cannot select an older build attempt's artifact. Choose another verified run if its latest build is unsuitable. Use the deploy job's numeric **databaseId**, not the number embedded in the browser URL. Rerun **only that deploy job**:
 
    ```sh
-   gh run rerun RUN_ID --repo jsvana/bkg.club --job DEPLOY_JOB_DATABASE_ID
-   gh run watch RUN_ID --repo jsvana/bkg.club --exit-status
+   gh run rerun RUN_ID --repo brass-knuckle-gang/bkg.club --job DEPLOY_JOB_DATABASE_ID
+   gh run watch RUN_ID --repo brass-knuckle-gang/bkg.club --exit-status
    ```
 
    GitHub retains the completed upstream build's outputs on a downstream job rerun, so `needs.build.outputs.artifact_name` still names its original archive. Do not rerun the build or all jobs for rollback: those would fetch current roster/QRZ data. See [GitHub job reruns](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs) and [the CLI job-ID requirement](https://cli.github.com/manual/gh_run_rerun).
 
 3. Verify the homepage, roster/count, `members.txt`, nearby/downline/outbreak pages, and photos at `https://www.bkg.club/`. Record the restored run/artifact and resolve the cause of the bad release; the unchanged push/manual/six-hour triggers can publish another build afterward.
 
-For longer offline retention, download a verified artifact before expiry with `gh run download RUN_ID --repo jsvana/bkg.club --name ARTIFACT_NAME --dir saved-pages`. Save its `artifact.tar`, run/source SHA, build attempt, and successful deploy record together. An expired artifact cannot be restored by a job rerun; rebuilding an old source revision does not reproduce the old mutable roster/QRZ input.
+For longer offline retention, download a verified artifact before expiry with `gh run download RUN_ID --repo brass-knuckle-gang/bkg.club --name ARTIFACT_NAME --dir saved-pages`. Save its `artifact.tar`, run/source SHA, build attempt, and successful deploy record together. An expired artifact cannot be restored by a job rerun; rebuilding an old source revision does not reproduce the old mutable roster/QRZ input.

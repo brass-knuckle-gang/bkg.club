@@ -6,7 +6,7 @@ This draft implements the website source switch. The public backend is already d
 
 1. Review the [live comparison](PUBLIC-ROSTER-REVIEW.md), especially reviewed names/callsigns, stored OG labels, and the 317 historical sponsor edges now left unresolved. Inspect a live-feed preview and the offline checks on this draft. Missing historical sponsor edges require reviewed upstream data correction if warranted; the website must not infer them from callsigns or Sheets.
 
-2. In **jsvana/bkg.club → Settings → Secrets and variables → Actions → New repository secret**, create an **Actions secret** named exactly **`ROSTER_EXPORT_URL`**, with this exact value and **no query parameters**:
+2. In **brass-knuckle-gang/bkg.club → Settings → Secrets and variables → Actions → New repository secret**, create an **Actions secret** named exactly **`ROSTER_EXPORT_URL`**, with this exact value and **no query parameters**:
 
    ```text
    https://bkg-public-roster.cool-cake-fac1.workers.dev/api/roster/export
