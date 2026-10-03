@@ -1,6 +1,6 @@
 # Reviewed public JSON roster
 
-Production uses the public feed from merged [bkg-automation PR #10](https://github.com/brass-knuckle-gang/bkg-automation/pull/10). The v1 schema and fixtures remain byte-for-byte identical to the copies introduced in [#36](https://github.com/jsvana/bkg.club/pull/36). They were rechecked against backend merge revision `060a8334f13a5995065bf942fd83f94340268b76` at `docs/public-roster/schema-v1.json`, `docs/public-roster/fixtures/roster-v1.json`, and `docs/public-roster/fixtures/empty-v1.json`.
+Production uses the public feed from merged [bkg-automation PR #10](https://github.com/brass-knuckle-gang/bkg-automation/pull/10). The v1 schema and fixtures remain byte-for-byte identical to the copies introduced in [#36](https://github.com/brass-knuckle-gang/bkg.club/pull/36). They were rechecked against backend merge revision `060a8334f13a5995065bf942fd83f94340268b76` at `docs/public-roster/schema-v1.json`, `docs/public-roster/fixtures/roster-v1.json`, and `docs/public-roster/fixtures/empty-v1.json`.
 
 The production workflow explicitly selects `--source json` for both builder and site validator. The URL comes from the **Actions secret** `ROSTER_EXPORT_URL`, not an Actions variable. See [exact cutover instructions](PUBLIC-ROSTER-CUTOVER.md) and [live comparison results](PUBLIC-ROSTER-REVIEW.md). The command-line default remains Sheets for compatibility with explicitly requested legacy/offline comparisons; production never invokes it or falls back to it.
 
