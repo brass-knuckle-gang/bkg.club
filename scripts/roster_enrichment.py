@@ -349,7 +349,7 @@ def refresh_enrichment(members: list[dict], directory: Path, *, username: str,
                        password: str, login, lookup, photo_fetch,
                        photo_overrides: dict | None = None, require_usable: bool = False,
                        max_age_seconds: int | None = None, interval_seconds: int | None = None,
-                       workers: int = 1, now: int | None = None,
+                       workers: int = 1, now: int | None = None, recheck: frozenset[str] = frozenset(),
                        repo_root: Path = REPO_ROOT) -> dict[str, int]:
     """Explicit refresh with atomic cache replacement and per-field LKG fallback.
 
@@ -362,8 +362,9 @@ def refresh_enrichment(members: list[dict], directory: Path, *, username: str,
     least-recently-checked slice sized so that runs every ``interval_seconds``
     revisit the whole roster within ``max_age_seconds``. Per-run work then
     tracks roster growth divided by the number of runs per cycle, and a photo
-    is only downloaded again when QRZ's image URL changes. ``lookup`` and
-    ``photo_fetch`` may run on ``workers`` threads; all merging stays here.
+    is only downloaded again when QRZ's image URL changes. Reviewed callsigns
+    in ``recheck`` are looked up this run regardless of that schedule. ``lookup``
+    and ``photo_fetch`` may run on ``workers`` threads; all merging stays here.
     """
     directory = validate_enrichment_dir(directory, repo_root=repo_root)
     identities = _identities(members)  # Validate before login, mkdir, or pruning.
@@ -385,7 +386,8 @@ def refresh_enrichment(members: list[dict], directory: Path, *, username: str,
 
     due = list(identities)
     if max_age_seconds is not None:
-        urgent = [n for n in identities if n not in records or n in moved]
+        forced = {callsign.strip().upper() for callsign in recheck}
+        urgent = [n for n in identities if n not in records or n in moved or identities[n].upper() in forced]
         rest = sorted((n for n in identities if n not in urgent),
                       key=lambda n: (records[n].get("checked_at", 0), int(n)))
         # Finish a full pass one run early so a single missed run stays in bounds.

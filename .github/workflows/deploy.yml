@@ -8,6 +8,17 @@ on:
   schedule:
     - cron: '23 * * * *'
   workflow_dispatch:
+    inputs:
+      recheck:
+        description: >-
+          Comma-separated reviewed callsigns to look up on QRZ this run,
+          regardless of the hourly schedule (e.g. after a QRZ profile update).
+        required: false
+        default: ''
+      skip_unchanged:
+        description: Skip the upload when the site would not change, as scheduled runs do.
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy
@@ -70,13 +81,14 @@ jobs:
         env:
           QRZ_USERNAME: ${{ secrets.QRZ_USERNAME }}
           QRZ_PASSWORD: ${{ secrets.QRZ_PASSWORD }}
+          RECHECK: ${{ inputs.recheck }}
         run: |
           python3 scripts/refresh-qrz.py \
             --roster-json "$RUNNER_TEMP/bkg-build/roster.json" \
             --enrichment-dir "$RUNNER_TEMP/bkg-build/enrichment" \
             --photo-overrides images/photo-overrides.json \
             --max-age-hours 24 --interval-hours 1 --workers 4 \
-            --require-usable
+            --require-usable ${RECHECK:+--recheck "$RECHECK"}
 
       - name: Build roster from the saved snapshot
         run: |
@@ -115,10 +127,11 @@ jobs:
         id: decide
         env:
           EVENT: ${{ github.event_name }}
+          SKIP_UNCHANGED: ${{ inputs.skip_unchanged }}
           CURRENT: ${{ steps.fingerprint.outputs.value }}
         run: |
           previous="$(cat "$RUNNER_TEMP/deployed-fingerprint/fingerprint.txt" 2>/dev/null || true)"
-          if [ "$EVENT" = schedule ] && [ "$previous" = "$CURRENT" ]; then
+          if { [ "$EVENT" = schedule ] || [ "$SKIP_UNCHANGED" = true ]; } && [ "$previous" = "$CURRENT" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "Site unchanged since the last deploy; skipping upload and deploy."
           else

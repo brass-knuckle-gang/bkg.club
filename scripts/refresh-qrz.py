@@ -130,12 +130,20 @@ def main(argv: list[str] | None = None) -> int:
                         help="how often this refresh runs; sizes each run's share (default: 1)")
     parser.add_argument("--workers", type=int, default=1,
                         help="concurrent QRZ lookups and photo downloads (default: 1)")
+    parser.add_argument("--recheck", action="append", default=[], metavar="CALLSIGNS",
+                        help="comma-separated reviewed callsigns to look up this run regardless of schedule")
     args = parser.parse_args(argv)
+    recheck = frozenset(part.strip().upper() for value in args.recheck for part in value.split(",") if part.strip())
     try:
         directory = validate_enrichment_dir(args.enrichment_dir)
         if args.roster_json is not None and args.roster_json.resolve().is_relative_to(directory):
             raise ValueError("Roster input must be outside the enrichment cache directory")
         _envelope, members = parse_roster_json(read_roster_json(args.roster_json))
+        unknown = sorted(recheck - {member["callsign"].upper() for member in members})
+        if unknown:
+            # Reviewed callsigns are public, so naming the typo is safe.
+            print(f"ERROR: --recheck callsigns not in the roster: {', '.join(unknown)}", file=sys.stderr)
+            return 1
         overrides = read_photo_overrides(args.photo_overrides, members) if args.photo_overrides else {}
         if args.overrides_only and not args.photo_overrides:
             raise ValueError("Overrides-only refresh requires a photo manifest")
@@ -150,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
             login=client.qrz_login, lookup=reviewed_lookup(client, members), photo_fetch=fetch_photo,
             photo_overrides=overrides, require_usable=args.require_usable,
             max_age_seconds=None if args.max_age_hours is None else args.max_age_hours * 3600,
-            interval_seconds=args.interval_hours * 3600, workers=args.workers,
+            interval_seconds=args.interval_hours * 3600, workers=args.workers, recheck=recheck,
         )
     except Exception:
         # Do not expose tokens, credentials, endpoint query strings, or raw
