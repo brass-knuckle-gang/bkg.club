@@ -19,7 +19,7 @@ def normalized(relative: str, data: bytes) -> bytes:
         return re.sub(rb"(<!-- BUILD_TIME:START -->).*?(<!-- BUILD_TIME:END -->)", rb"\1\2", data)
     if relative == "members.txt":
         return re.sub(rb"(?m)^# Generated: .*\n", b"", data, count=1)
-    if relative == "data/v1/roster.json":
+    if relative in {"data/v1/roster.json", "data/v2/roster.json"}:
         # The export stamps every response; content_hash covers the members.
         envelope = json.loads(data)
         envelope.pop("generated_at", None)
