@@ -95,7 +95,7 @@ def _coordinates(value: dict) -> tuple[float, float] | None:
 
 def _grid(value) -> str | None:
     if isinstance(value, str) and GRID_RE.fullmatch(value.upper()):
-        return value.upper()[:4]
+        return value.upper()[:6]
     return None
 
 

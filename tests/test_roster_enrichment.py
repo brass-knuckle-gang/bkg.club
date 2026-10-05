@@ -127,7 +127,7 @@ class EnrichmentTests(unittest.TestCase):
         self.assertNotIn("1", self.read(members))
         self.lookup.side_effect = lambda _session, call: {"current_call": call.upper(), "grid": "EN61AB"}
         self.refresh(members)
-        self.assertEqual(self.read(members)["1"], {"callsign": "n0Changed/P", "grid": "EN61",
+        self.assertEqual(self.read(members)["1"], {"callsign": "n0Changed/P", "grid": "EN61AB",
                                                 "qth_hash": enrichment.location_binding("Reviewed QTH")})
         self.assertEqual(members[0]["callsign"], "n0Changed/P")
         self.assertNotIn("photo", self.read(members)["1"])
@@ -217,7 +217,7 @@ class EnrichmentTests(unittest.TestCase):
         self.assertEqual(set(raw), {"version", "members"})
         self.assertEqual(set(raw["members"]), {"1", "2"})
         self.assertEqual(set(raw["members"]["1"]), {"callsign", "grid", "photo", "qth_hash", "checked_at", "image_ref"})
-        self.assertEqual(raw["members"]["1"]["grid"], "EN61")
+        self.assertEqual(raw["members"]["1"]["grid"], "EN61AB")
         self.assertEqual((raw["members"]["2"]["lat"], raw["members"]["2"]["lon"]), (43.65, -79.39))
         self.assertEqual(result["photos_updated"], 2)
         for photo in (self.cache / "photos").iterdir():
@@ -277,7 +277,7 @@ class EnrichmentTests(unittest.TestCase):
                           "2": {"callsign": "K2TST", "grid": "invalid", "lat": True, "lon": -100,
                                 "photo": "../../source/private.png"}})
         (self.cache / "photos" / filename).write_bytes(png(metadata=True))
-        self.assertEqual(self.read(), {"1": {"callsign": "K1TST", "grid": "EN61",
+        self.assertEqual(self.read(), {"1": {"callsign": "K1TST", "grid": "EN61AB",
                                             "qth_hash": enrichment.location_binding("Reviewed QTH")},
                                       "2": {"callsign": "K2TST"}})
 
