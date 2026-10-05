@@ -482,6 +482,28 @@ class RefreshCommandTests(unittest.TestCase):
         info.update(state="NY", country="United States of America")
         self.assertEqual(lookup("session", "K1TST")["grid"], "FN31")
 
+    def test_refresh_accepts_canadian_province_geography_when_qrz_country_agrees(self):
+        client = Mock()
+        client.qth_location.return_value = ("AB", "Canada")
+        info = {"current_call": "VE6TST", "state": "AB", "country": "Canada",
+                "grid": "DO21", "lat": 51.05, "lon": -114.07}
+        client.qrz_fetch_callsign.return_value = info
+        lookup = self.command.reviewed_lookup(client, [{"callsign": "VE6TST", "qth": "Alberta"}])
+        self.assertEqual(lookup("session", "VE6TST")["grid"], "DO21")
+        # QRZ documents <state> as US-only; a blank province still agrees with Canada.
+        info.update(state="")
+        self.assertEqual(lookup("session", "VE6TST")["grid"], "DO21")
+        # A different province or country is stale geography.
+        info.update(state="ON")
+        self.assertFalse({"grid", "lat", "lon"} & lookup("session", "VE6TST").keys())
+        info.update(state="AB", country="United States")
+        self.assertFalse({"grid", "lat", "lon"} & lookup("session", "VE6TST").keys())
+        # A blank QRZ state never satisfies a reviewed US state.
+        client.qth_location.return_value = ("NY", "United States")
+        info.update(state="", country="United States")
+        lookup = self.command.reviewed_lookup(client, [{"callsign": "VE6TST", "qth": "New York"}])
+        self.assertFalse({"grid", "lat", "lon"} & lookup("session", "VE6TST").keys())
+
 
 if __name__ == "__main__":
     unittest.main()

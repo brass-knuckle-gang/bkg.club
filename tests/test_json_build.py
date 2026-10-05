@@ -247,6 +247,27 @@ class JsonBuildTests(unittest.TestCase):
         self.assertTrue((self.dist / "images/mugshots/bkg-88.webp").is_file())
         self.assertIn("K2SYN88 🤜 Synthetic Moved BKG #88 (VT OG)", self.notes())
 
+    def test_canadian_province_qth_files_under_canada_and_keeps_matched_geography(self):
+        for member in self.envelope["members"]:
+            if member["bkg_number"] == 21:
+                member["qth"] = "Alberta"
+        rehash(self.envelope)
+        self.write_roster()
+        self.write_enrichment({"21": {"callsign": "VE3SYN", "qth_hash": qth_hash("Alberta"), "grid": "DO21"}})
+        self.assertEqual(self.build_json(), 0)
+        deployment.site_contract.validate_dist(self.dist, source="json")
+        territory = self.data("index.html", "MAP_DATA")
+        self.assertEqual(list(territory["dx"]), ["Canada"])
+        self.assertEqual(territory["dx"]["Canada"]["flag"], "🇨🇦")
+        self.assertEqual([entry["num"] for entry in territory["dx"]["Canada"]["members"]], [21])
+        self.assertEqual([entry["num"] for entry in self.data("nearby.html", "GEO_DATA")], [21])
+        outbreak = next(entry for entry in self.data("outbreak.html", "OUTBREAK_DATA") if entry["num"] == 21)
+        self.assertEqual((outbreak["state"], outbreak["dx"]), (None, "Canada"))
+        self.assertEqual(self.builder.qth_location("Alberta"), ("AB", "Canada"))
+        self.assertEqual(self.builder.qth_location("Canada"), (None, "Canada"))
+        # Stored OG labels are published as reviewed, never re-derived from the QTH.
+        self.assertIn("VE3SYN 🤜 Synthetic Canada BKG #21 (Canada OG)", self.notes())
+
     def test_reviewed_html_and_script_text_round_trips_without_execution(self):
         payload = '</script><script>alert("synthetic")</script>&'
         qth = payload + '\u2028\u2029Synthetic territory'
