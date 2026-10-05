@@ -612,7 +612,14 @@ def previous_mugshot(callsign: str) -> str | None:
 
 
 def qth_location(qth: str) -> tuple[str | None, str | None]:
-    """Sheet QTH -> (state code, country)."""
+    """Reviewed QTH -> (subdivision code, country).
+
+    US states give ("UT", "United States"). Canadian provinces are reviewed
+    as bare names ("Alberta"), so they give ("AB", "Canada") rather than
+    treating the province as a country: the territory map then files them
+    under Canada, and the enrichment refresh can compare them with the
+    province QRZ reports in its <state> field. Anything else is a country.
+    """
     text = qth.strip()
     if not text:
         return None, None
@@ -621,6 +628,9 @@ def qth_location(qth: str) -> tuple[str | None, str | None]:
         code = text.upper()
     if code:
         return code, "United States"
+    province = PROVINCE_CODES_BY_NAME.get(text.lower())
+    if province:
+        return province, "Canada"
     return None, text
 
 
@@ -1245,6 +1255,19 @@ US_STATE_NAMES = {
 }
 STATE_CODES_BY_NAME = {name.lower(): code for code, name in US_STATE_NAMES.items()}
 STATE_CODES_BY_NAME.update({"washington dc": "DC", "washington, dc": "DC", "washington d.c.": "DC", "washington, d.c.": "DC"})
+
+# Canadian provinces and territories, by the code QRZ reports in <state>.
+CANADIAN_PROVINCE_NAMES = {
+    "AB": "Alberta", "BC": "British Columbia", "MB": "Manitoba", "NB": "New Brunswick",
+    "NL": "Newfoundland and Labrador", "NS": "Nova Scotia", "NT": "Northwest Territories",
+    "NU": "Nunavut", "ON": "Ontario", "PE": "Prince Edward Island", "QC": "Quebec",
+    "SK": "Saskatchewan", "YT": "Yukon",
+}
+PROVINCE_CODES_BY_NAME = {name.lower(): code for code, name in CANADIAN_PROVINCE_NAMES.items()}
+PROVINCE_CODES_BY_NAME.update({
+    "newfoundland": "NL", "newfoundland & labrador": "NL", "québec": "QC",
+    "pei": "PE", "yukon territory": "YT",
+})
 
 
 def embedded_json(data) -> str:

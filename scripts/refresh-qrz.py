@@ -44,6 +44,12 @@ def _quiet(callback):
 def reviewed_lookup(client, members):
     """QRZ cannot move reviewed identities or bind old geography to a new QTH.
 
+    Geography is kept only when QRZ's country matches the reviewed one and,
+    where both sides name a subdivision, the subdivision matches too. QRZ
+    documents <state> as US-only even though it usually carries Canadian
+    province codes, so a reviewed province is enforced only when QRZ reports
+    one; a US state is always required.
+
     Lookups run on worker threads, so this does not swap sys.stderr itself;
     main() silences the whole refresh instead.
     """
@@ -58,8 +64,10 @@ def reviewed_lookup(client, members):
         qrz_country = (info.get("country") or "").strip().casefold()
         if qrz_country in {"usa", "united states of america"}:
             qrz_country = "united states"
+        qrz_state = (info.get("state") or "").strip().upper()
+        subdivision_optional = qrz_country != "united states" and not qrz_state
         matches = (bool(state or country) and qrz_country == (country or "").casefold()
-                   and (not state or (info.get("state") or "").strip().upper() == state))
+                   and (not state or subdivision_optional or qrz_state == state))
         if not matches:
             for key in ("grid", "lat", "lon"):
                 info.pop(key, None)
