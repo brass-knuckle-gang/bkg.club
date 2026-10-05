@@ -104,7 +104,11 @@ def validate_dist(output_dir, *, source="sheets"):
     output_dir = Path(output_dir)
     required = set(PUBLIC_FILES) | {"members.txt"}
     if source == "json":
-        required.add("data/v1/roster.json")
+        snapshot_versions = [version for version in ("1", "2")
+                             if (output_dir / f"data/v{version}/roster.json").is_file()]
+        require(len(snapshot_versions) == 1, "JSON build requires exactly one versioned roster snapshot")
+        snapshot_version = snapshot_versions[0]
+        required.add(f"data/v{snapshot_version}/roster.json")
     actual = set()
     for path in output_dir.rglob("*"):
         require(not path.is_symlink(), f"Symlink in public output: {path}")
@@ -150,13 +154,21 @@ def validate_dist(output_dir, *, source="sheets"):
     if source == "json":
         from roster_input import parse_roster_json
 
-        _, reviewed = parse_roster_json((output_dir / "data/v1/roster.json").read_text(encoding="utf-8"))
+        _, reviewed = parse_roster_json(
+            (output_dir / f"data/v{snapshot_version}/roster.json").read_text(encoding="utf-8"),
+            expected_version=snapshot_version,
+        )
         require(identities == [(m["callsign"], m["name"], m["number"]) for m in reviewed],
                 "Public JSON identities differ from pages")
         sponsors = {m["number"]: m["callsign"] for m in reviewed}
         require([entry["sponsor"] for entry in downline] == [
             sponsors.get(m["sponsor_bkg_number"]) for m in reviewed
         ], "Public JSON sponsors differ from pages")
+        if snapshot_version == "2":
+            expected_nearby = [dict(call=m["callsign"], name=m["name"], num=m["number"],
+                                    **m["map_location"])
+                               for m in reviewed if m["map_location"] is not None]
+            require(nearby == expected_nearby, "Nearby differs from administration map locations")
     by_call = {entry["call"]: entry for entry in downline}
     for entry, ob in zip(downline, outbreak):
         sponsor = entry.get("sponsor")
@@ -219,6 +231,16 @@ def validate_dist(output_dir, *, source="sheets"):
     if source == "json":
         photos = {relative for relative in actual if Path(relative).parent.as_posix() in PHOTO_DIRS}
         require(photos <= set(roster.links), "JSON build contains photos outside the active roster")
+        if snapshot_version == "2":
+            from roster_assets import verify_asset
+
+            expected_photos = {f"images/mugshots/{m['photo']['sha256']}.webp"
+                               for m in reviewed if m["photo"] is not None}
+            require(photos == expected_photos, "v2 photos differ from the administration snapshot")
+            for member in reviewed:
+                if member["photo"] is not None:
+                    photo = member["photo"]
+                    verify_asset((output_dir / f"images/mugshots/{photo['sha256']}.webp").read_bytes(), photo)
     card_numbers = [int(n) for n in re.findall(r'class="member-number">BKG #(\d+)</div>', block(index, ROSTER_START, "<!-- ROSTER:END -->"))]
     require(card_numbers == numbers + [max(numbers) + 1], "Roster member numbers differ from generated data")
     notes = (output_dir / "members.txt").read_text()

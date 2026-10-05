@@ -1,4 +1,4 @@
-"""Strict adapter for the anonymous public roster v1 contract.
+"""Strict adapter for the anonymous public roster v1/v2 contracts.
 
 The exporter contains reviewed membership data, not QRZ enrichment. Validation
 is deliberately completed before returning any members to the renderer. This
@@ -8,10 +8,12 @@ module never consults Sheets, caches, examples, or another roster on failure.
 import hashlib
 import http.client
 import json
+import math
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 import re
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -22,6 +24,10 @@ MAX_BKG_NUMBER = 9007199254740991
 EXPORT_TIMEOUT_SECONDS = 30
 ENVELOPE_KEYS = {"schema_version", "generated_at", "content_hash", "members", "og_assignments"}
 MEMBER_KEYS = {"bkg_number", "callsign", "name", "qth", "qso_date", "sponsor_bkg_number"}
+V2_MEMBER_KEYS = MEMBER_KEYS | {"map_location", "photo"}
+GRID_PATTERN = re.compile(r"[A-R]{2}[0-9]{2}(?:[A-X]{2})?\Z")
+PHOTO_KEYS = {"url", "sha256", "content_type", "byte_length"}
+MAX_PUBLIC_PHOTO_BYTES = 1024 * 1024
 OG_KEYS = {"region_key", "region_label", "bkg_number"}
 CALLSIGN_PATTERN = re.compile(r"[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\Z")
 UTC_TIMESTAMP_PATTERN = re.compile(
@@ -70,8 +76,43 @@ def _invalid_constant(_value):
     raise ValueError("Non-finite numbers are not valid roster JSON")
 
 
-def parse_roster_json(text: str) -> tuple[dict, list[dict]]:
-    """Validate the entire v1 envelope, then adapt reviewed active members.
+def _map_location(value) -> None:
+    if value is None:
+        return
+    _object(value, {"grid", "lat", "lon"}, "Member map_location")
+    grid = value["grid"]
+    _require(type(grid) is str and bool(GRID_PATTERN.fullmatch(grid)), "Invalid map_location grid")
+    for key, limit in (("lat", 90), ("lon", 180)):
+        coordinate = value[key]
+        _require(type(coordinate) in (int, float) and math.isfinite(coordinate) and abs(coordinate) <= limit,
+                 f"Invalid map_location {key}")
+
+
+def _photo(value) -> None:
+    if value is None:
+        return
+    _object(value, PHOTO_KEYS, "Member photo")
+    digest = value["sha256"]
+    _require(type(digest) is str and bool(re.fullmatch(r"[0-9a-f]{64}", digest)), "Invalid photo sha256")
+    _require(value["content_type"] == "image/webp", "Invalid photo content_type")
+    _require(type(value["byte_length"]) is int and 1 <= value["byte_length"] <= MAX_PUBLIC_PHOTO_BYTES,
+             "Invalid photo byte_length")
+    url = value["url"]
+    _require(type(url) is str and len(url) <= 2048 and
+             not any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in url),
+             "Invalid photo URL")
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        _require(parsed.scheme == "https" and bool(parsed.hostname) and parsed.port != 0
+                 and parsed.username is None and parsed.password is None
+                 and not parsed.query and not parsed.fragment
+                 and parsed.path == f"/api/roster/photos/{digest}.webp", "Invalid photo URL")
+    except ValueError:
+        raise ValueError("Invalid photo URL") from None
+
+
+def parse_roster_json(text: str, *, expected_version: str = "1") -> tuple[dict, list[dict]]:
+    """Validate the explicitly selected contract, then adapt reviewed members.
 
     The original envelope is returned without normalizing its strings or array
     order. Member ``join_date`` is the stored QSO date; sponsor relationships
@@ -85,7 +126,8 @@ def parse_roster_json(text: str) -> tuple[dict, list[dict]]:
     except (json.JSONDecodeError, RecursionError, UnicodeEncodeError):
         raise ValueError("Malformed roster JSON") from None
     _object(envelope, ENVELOPE_KEYS, "Roster envelope")
-    _require(envelope["schema_version"] == "1", "Unsupported roster schema_version")
+    _require(expected_version in {"1", "2"} and envelope["schema_version"] == expected_version,
+             "Unsupported roster schema_version")
     generated_at = envelope["generated_at"]
     _require(type(generated_at) is str and bool(UTC_TIMESTAMP_PATTERN.fullmatch(generated_at)),
              "generated_at must be an ISO UTC timestamp")
@@ -109,7 +151,7 @@ def parse_roster_json(text: str) -> tuple[dict, list[dict]]:
     callsigns = set()
     previous_number = 0
     for row in rows:
-        _object(row, MEMBER_KEYS, "Member")
+        _object(row, V2_MEMBER_KEYS if expected_version == "2" else MEMBER_KEYS, "Member")
         number = row["bkg_number"]
         _number(number, "member bkg_number")
         _require(number > previous_number, "Members must have unique ascending bkg_number values")
@@ -133,6 +175,14 @@ def parse_roster_json(text: str) -> tuple[dict, list[dict]]:
             "sponsor_member": None,
             "og_regions": [],
         }
+        if expected_version == "2":
+            _map_location(row["map_location"])
+            _photo(row["photo"])
+            member.update(map_location=row["map_location"], photo=row["photo"],
+                          grid=row["map_location"]["grid"] if row["map_location"] else None,
+                          lat=row["map_location"]["lat"] if row["map_location"] else None,
+                          lon=row["map_location"]["lon"] if row["map_location"] else None,
+                          mugshot_path=None)
         members.append(member)
         by_number[number] = member
 
@@ -192,7 +242,7 @@ def _decode_roster(data: bytes) -> str:
 
 
 def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
-                     environ=None) -> str:
+                     environ=None, expected_version: str = "1", cache_dir=None) -> str:
     """Read an explicitly selected file or anonymous HTTPS roster endpoint.
 
     Call this only after selecting JSON input. With no file or explicit URL,
@@ -200,7 +250,9 @@ def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
     credentials, response body, or automatic redirect/fallback in their message.
     """
     _require(not (path is not None and url is not None), "Select one roster JSON file or URL")
+    _require(expected_version in {"1", "2"}, "Unsupported roster schema_version")
     if path is not None:
+        _require(cache_dir is None, "Snapshot caching requires a URL source")
         try:
             with Path(path).open("rb") as source:
                 return _decode_roster(source.read(MAX_ROSTER_BYTES + 1))
@@ -231,12 +283,61 @@ def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
                  "Access authentication requires a complete valid credential pair")
         headers[header] = credential
     request = urllib.request.Request(endpoint, headers=headers)
+    # Never trust a restored cache without checking its version, full contract,
+    # hash and endpoint binding. A bad cache causes an unconditional fetch;
+    # transport failures never serve a stale snapshot.
+    cached_text = None
+    cached_etag = None
+    endpoint_hash = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()
+    cache_file = Path(cache_dir) / f"v{expected_version}.json" if cache_dir is not None else None
+    if cache_file is not None:
+        try:
+            _require(not cache_file.is_symlink(), "Unsafe roster cache")
+            with cache_file.open("rb") as source:
+                data = source.read(MAX_ROSTER_BYTES * 2 + 4097)
+            _require(len(data) <= MAX_ROSTER_BYTES * 2 + 4096, "Roster cache exceeds size limit")
+            cached = json.loads(data.decode("utf-8"))
+            _object(cached, {"endpoint_sha256", "etag", "snapshot"}, "Roster cache")
+            _require(cached["endpoint_sha256"] == endpoint_hash, "Roster cache endpoint changed")
+            cached_envelope, _ = parse_roster_json(cached["snapshot"], expected_version=expected_version)
+            _require(cached["etag"] == f'W/"{cached_envelope["content_hash"]}"', "Roster cache ETag mismatch")
+            cached_text, cached_etag = cached["snapshot"], cached["etag"]
+            request.add_header("If-None-Match", cached_etag)
+        except (OSError, ValueError, TypeError, KeyError):
+            pass
+
+    def not_modified(response):
+        _require(cached_text is not None and response.headers.get("ETag") == cached_etag,
+                 "Roster 304 requires a matching validated cache and ETag")
+        # Revalidate on every use, including responses with no JSON body.
+        parse_roster_json(cached_text, expected_version=expected_version)
+        return cached_text
+
     try:
         with urllib.request.build_opener(_NoRedirects()).open(request, timeout=EXPORT_TIMEOUT_SECONDS) as response:
+            if response.getcode() == 304:
+                return not_modified(response)
             _require(response.getcode() == 200, "Roster export did not return HTTP 200")
-            return _decode_roster(response.read(MAX_ROSTER_BYTES + 1))
+            text = _decode_roster(response.read(MAX_ROSTER_BYTES + 1))
+            if cache_file is not None:
+                envelope, _ = parse_roster_json(text, expected_version=expected_version)
+                etag = response.headers.get("ETag")
+                expected_etag = f'W/"{envelope["content_hash"]}"'
+                _require(etag is None or etag == expected_etag, "Roster response ETag mismatch")
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
+                with tempfile.TemporaryDirectory(prefix=".snapshot-", dir=cache_file.parent) as temporary:
+                    staged = Path(temporary) / "cache.json"
+                    staged.write_text(json.dumps({"endpoint_sha256": endpoint_hash,
+                                                 "etag": etag, "snapshot": text}, ensure_ascii=False),
+                                      encoding="utf-8")
+                    staged.replace(cache_file)
+            return text
     except urllib.error.HTTPError as error:
-        error.close()
+        try:
+            if error.code == 304:
+                return not_modified(error)
+        finally:
+            error.close()
         raise OSError(f"Unable to fetch roster JSON (HTTP {error.code})") from None
     except (urllib.error.URLError, OSError, http.client.HTTPException, UnicodeError):
         raise OSError("Unable to fetch roster JSON") from None
