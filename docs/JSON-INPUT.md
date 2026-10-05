@@ -1,5 +1,11 @@
 # Reviewed public JSON roster
 
+The administration-owned **v2 publisher is implemented but opt-in**. Production
+continues to use v1 until `ROSTER_EXPORT_VERSION=2` is deliberately configured
+after backend deployment and comparison. See [the data ownership audit](PUBLISHER-DATA-INVENTORY.md)
+and [the v2 cutover procedure](PUBLIC-ROSTER-V2-CUTOVER.md). The following v1
+instructions describe the current production compatibility path.
+
 Production uses the public feed from merged [bkg-automation PR #10](https://github.com/brass-knuckle-gang/bkg-automation/pull/10). The v1 schema and fixtures remain byte-for-byte identical to the copies introduced in [#36](https://github.com/brass-knuckle-gang/bkg.club/pull/36). They were rechecked against backend merge revision `060a8334f13a5995065bf942fd83f94340268b76` at `docs/public-roster/schema-v1.json`, `docs/public-roster/fixtures/roster-v1.json`, and `docs/public-roster/fixtures/empty-v1.json`.
 
 The production workflow explicitly selects `--source json` for both builder and site validator. The URL comes from the **Actions secret** `ROSTER_EXPORT_URL`, not an Actions variable. See [exact cutover instructions](PUBLIC-ROSTER-CUTOVER.md) and [live comparison results](PUBLIC-ROSTER-REVIEW.md). The command-line default remains Sheets for compatibility with explicitly requested legacy/offline comparisons; production never invokes it or falls back to it.
@@ -77,3 +83,52 @@ Run `python3 -m unittest discover -s tests -v` without production credentials. T
 The intentional OG differences are explicit: Sheets infers IL for #1 and NY for moved holder #88, while JSON renders stored IL for #7 and VT for #88. Both retain Canada for #21; JSON does not add the hardcoded founder/number OG note. Additional tests remove inactive #7 and its IL assignment, leave IL member #1 without an OG, and reuse #7's callsign on #40 while #21's suppressed sponsor stays null. Tests also exercise reviewed callsign changes, moved QTH suppressing stale coordinates while keeping a photo/stored OG, missing/corrupt enrichment, filtered inactive cache/photos, escaped HTML/script text, and malformed/empty exports preserving the previous output. Separate enrichment tests cover failed refresh retaining sanitized geography and photos.
 
 These are synthetic comparisons. The additional [live review](PUBLIC-ROSTER-REVIEW.md) records actual production differences and local enrichment limitations; the source switch requires the operator steps in [the cutover runbook](PUBLIC-ROSTER-CUTOVER.md).
+
+## Administration-owned v2 publishing
+
+The v2 export retains every reviewed membership/OG rule and adds mandatory
+nullable `map_location` and `photo` fields to each member. A location contains
+the accepted four- or six-character public grid and its center coordinates.
+Null suppresses the member's geographic dot; the website never fills it from
+QRZ, a previous cache, a location override, or a demo. Both Nearby and outbreak
+use the exact exported coordinates. Reviewed QTH still supplies territory labels.
+
+A photo contains an anonymous HTTPS administration asset URL, its SHA-256,
+`image/webp` content type, and byte length (at most 1 MiB). Assets must be on the
+same HTTPS origin as the saved export's configured source and at the exact
+`/api/roster/photos/<sha256>.webp` path. Redirects are rejected. The publisher
+checks response type, size, hash, bounded WebP structure, and absence of metadata,
+then copies those accepted bytes without resizing or re-encoding. Null means
+the photo placeholder. The website does not apply its own photo manifest in v2.
+
+Contributed photo overrides remain checked-in, reviewable files in the
+[administration repository](https://github.com/brass-knuckle-gang/bkg-automation/tree/main/public/member-overrides/photos).
+Submit future photo changes there by PR. Administration resolves explicit
+hidden/manual choices, contributed overrides, and QRZ into one accepted public
+photo. The existing website manifest and source photos remain solely for v1
+compatibility until its retirement.
+
+Snapshot validation is strict and version-specific. v1 remains the command-line
+default. `--schema-version 2` is required to accept v2, and v2 rejects
+`--enrichment-dir`. Photo downloads are a separate publication command; the
+renderer is entirely offline. The output includes only selected active photos
+and the exact envelope at `data/v2/roster.json`. The content hash covers accepted
+locations and photo metadata along with the existing membership/OG fields.
+
+```sh
+# Set ROSTER_EXPORT_URL to the administration v2 URL securely in the environment.
+python3 scripts/fetch-roster.py --schema-version 2 --output "$preview_dir/roster.json"
+python3 scripts/fetch-public-assets.py \
+  --roster-json "$preview_dir/roster.json" --asset-dir "$preview_dir/public-assets"
+python3 scripts/build-roster.py --source json --schema-version 2 \
+  --roster-json "$preview_dir/roster.json" --asset-dir "$preview_dir/public-assets" \
+  --output-dir "$preview_dir/site"
+python3 scripts/validate-site.py --source json "$preview_dir/site"
+```
+
+The asset directory must be outside the repository and separate from snapshot
+and output. Its immutable cache may be reused only when bytes still match the
+current snapshot. Missing/invalid assets fail the build and retain the last
+published site; an old photo is never substituted for a new hash. Removing or
+hiding a member/photo prunes the next artifact. Both snapshot fetching and asset
+cache replacement are atomic.

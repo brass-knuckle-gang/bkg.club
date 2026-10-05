@@ -8,6 +8,7 @@ module never consults Sheets, caches, examples, or another roster on failure.
 import hashlib
 import http.client
 import json
+import math
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,10 @@ MAX_BKG_NUMBER = 9007199254740991
 EXPORT_TIMEOUT_SECONDS = 30
 ENVELOPE_KEYS = {"schema_version", "generated_at", "content_hash", "members", "og_assignments"}
 MEMBER_KEYS = {"bkg_number", "callsign", "name", "qth", "qso_date", "sponsor_bkg_number"}
+V2_MEMBER_KEYS = MEMBER_KEYS | {"map_location", "photo"}
+GRID_PATTERN = re.compile(r"[A-R]{2}[0-9]{2}(?:[A-X]{2})?\Z")
+PHOTO_KEYS = {"url", "sha256", "content_type", "byte_length"}
+MAX_PUBLIC_PHOTO_BYTES = 1024 * 1024
 OG_KEYS = {"region_key", "region_label", "bkg_number"}
 CALLSIGN_PATTERN = re.compile(r"[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\Z")
 UTC_TIMESTAMP_PATTERN = re.compile(
@@ -70,8 +75,43 @@ def _invalid_constant(_value):
     raise ValueError("Non-finite numbers are not valid roster JSON")
 
 
-def parse_roster_json(text: str) -> tuple[dict, list[dict]]:
-    """Validate the entire v1 envelope, then adapt reviewed active members.
+def _map_location(value) -> None:
+    if value is None:
+        return
+    _object(value, {"grid", "lat", "lon"}, "Member map_location")
+    grid = value["grid"]
+    _require(type(grid) is str and bool(GRID_PATTERN.fullmatch(grid)), "Invalid map_location grid")
+    for key, limit in (("lat", 90), ("lon", 180)):
+        coordinate = value[key]
+        _require(type(coordinate) in (int, float) and math.isfinite(coordinate) and abs(coordinate) <= limit,
+                 f"Invalid map_location {key}")
+
+
+def _photo(value) -> None:
+    if value is None:
+        return
+    _object(value, PHOTO_KEYS, "Member photo")
+    digest = value["sha256"]
+    _require(type(digest) is str and bool(re.fullmatch(r"[0-9a-f]{64}", digest)), "Invalid photo sha256")
+    _require(value["content_type"] == "image/webp", "Invalid photo content_type")
+    _require(type(value["byte_length"]) is int and 1 <= value["byte_length"] <= MAX_PUBLIC_PHOTO_BYTES,
+             "Invalid photo byte_length")
+    url = value["url"]
+    _require(type(url) is str and len(url) <= 2048 and
+             not any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in url),
+             "Invalid photo URL")
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        _require(parsed.scheme == "https" and bool(parsed.hostname) and parsed.port != 0
+                 and parsed.username is None and parsed.password is None
+                 and not parsed.query and not parsed.fragment
+                 and parsed.path == f"/api/roster/photos/{digest}.webp", "Invalid photo URL")
+    except ValueError:
+        raise ValueError("Invalid photo URL") from None
+
+
+def parse_roster_json(text: str, *, expected_version: str = "1") -> tuple[dict, list[dict]]:
+    """Validate the explicitly selected contract, then adapt reviewed members.
 
     The original envelope is returned without normalizing its strings or array
     order. Member ``join_date`` is the stored QSO date; sponsor relationships
@@ -85,7 +125,8 @@ def parse_roster_json(text: str) -> tuple[dict, list[dict]]:
     except (json.JSONDecodeError, RecursionError, UnicodeEncodeError):
         raise ValueError("Malformed roster JSON") from None
     _object(envelope, ENVELOPE_KEYS, "Roster envelope")
-    _require(envelope["schema_version"] == "1", "Unsupported roster schema_version")
+    _require(expected_version in {"1", "2"} and envelope["schema_version"] == expected_version,
+             "Unsupported roster schema_version")
     generated_at = envelope["generated_at"]
     _require(type(generated_at) is str and bool(UTC_TIMESTAMP_PATTERN.fullmatch(generated_at)),
              "generated_at must be an ISO UTC timestamp")
@@ -109,7 +150,7 @@ def parse_roster_json(text: str) -> tuple[dict, list[dict]]:
     callsigns = set()
     previous_number = 0
     for row in rows:
-        _object(row, MEMBER_KEYS, "Member")
+        _object(row, V2_MEMBER_KEYS if expected_version == "2" else MEMBER_KEYS, "Member")
         number = row["bkg_number"]
         _number(number, "member bkg_number")
         _require(number > previous_number, "Members must have unique ascending bkg_number values")
@@ -133,6 +174,14 @@ def parse_roster_json(text: str) -> tuple[dict, list[dict]]:
             "sponsor_member": None,
             "og_regions": [],
         }
+        if expected_version == "2":
+            _map_location(row["map_location"])
+            _photo(row["photo"])
+            member.update(map_location=row["map_location"], photo=row["photo"],
+                          grid=row["map_location"]["grid"] if row["map_location"] else None,
+                          lat=row["map_location"]["lat"] if row["map_location"] else None,
+                          lon=row["map_location"]["lon"] if row["map_location"] else None,
+                          mugshot_path=None)
         members.append(member)
         by_number[number] = member
 

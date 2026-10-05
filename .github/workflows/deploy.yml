@@ -3,8 +3,8 @@ name: Deploy
 on:
   push:
     branches: [main]
-  # Hourly: each run looks up only the members due for a QRZ recheck (every
-  # member within 24 h) and skips the upload when the site would not change.
+  # Hourly publication. v1 keeps its legacy QRZ refresh until explicit cutover;
+  # v2 copies only administration-owned public data and immutable assets.
   schedule:
     - cron: '23 * * * *'
   workflow_dispatch:
@@ -29,11 +29,15 @@ permissions:
   pages: write
   id-token: write
 
+env:
+  # Change only after the administration v2 deployment/backfill is verified.
+  ROSTER_EXPORT_VERSION: ${{ vars.ROSTER_EXPORT_VERSION || '1' }}
+
 jobs:
   build:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    # Keep environment-scoped QRZ secrets available, as in the original job.
+    # v1 QRZ secrets remain environment-scoped during the coordinated rollout.
     environment: github-pages
     outputs:
       artifact_name: ${{ steps.revision.outputs.artifact_name }}
@@ -60,15 +64,26 @@ jobs:
       - name: Fetch and validate one public roster snapshot
         env:
           ROSTER_EXPORT_URL: ${{ secrets.ROSTER_EXPORT_URL }}
+          ROSTER_EXPORT_V2_URL: ${{ secrets.ROSTER_EXPORT_V2_URL }}
+          RECHECK: ${{ inputs.recheck }}
         run: |
+          case "$ROSTER_EXPORT_VERSION" in
+            1) ;;
+            2)
+              export ROSTER_EXPORT_URL="$ROSTER_EXPORT_V2_URL"
+              test -z "$RECHECK" || { echo 'v2 enrichment rechecks belong in administration.' >&2; exit 1; }
+              ;;
+            *) echo 'Unsupported roster export version.' >&2; exit 1 ;;
+          esac
           mkdir -p "$RUNNER_TEMP/bkg-build"
-          python3 scripts/fetch-roster.py --output "$RUNNER_TEMP/bkg-build/roster.json" > "$RUNNER_TEMP/bkg-build/roster-record.json"
+          python3 scripts/fetch-roster.py --schema-version "$ROSTER_EXPORT_VERSION" --output "$RUNNER_TEMP/bkg-build/roster.json" > "$RUNNER_TEMP/bkg-build/roster-record.json"
           cat "$RUNNER_TEMP/bkg-build/roster-record.json"
           printf '%s\n' "$GITHUB_SHA" > "$RUNNER_TEMP/bkg-build/source-sha.txt"
 
       # Only sanitized, identity/QTH-bound data is reused. No Sheets or raw
       # QRZ cache can become a membership fallback or enter the Pages output.
       - name: Restore sanitized enrichment
+        if: env.ROSTER_EXPORT_VERSION == '1'
         id: enrichment-cache
         uses: actions/cache/restore@v6
         with:
@@ -78,6 +93,7 @@ jobs:
             bkg-enrichment-v1-
 
       - name: Refresh separate photo and geographic enrichment
+        if: env.ROSTER_EXPORT_VERSION == '1'
         env:
           QRZ_USERNAME: ${{ secrets.QRZ_USERNAME }}
           QRZ_PASSWORD: ${{ secrets.QRZ_PASSWORD }}
@@ -90,11 +106,36 @@ jobs:
             --max-age-hours 24 --interval-hours 1 --workers 4 \
             --require-usable ${RECHECK:+--recheck "$RECHECK"}
 
+      - name: Restore immutable administration photos
+        if: env.ROSTER_EXPORT_VERSION == '2'
+        id: public-assets-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/bkg-build/public-assets
+          key: bkg-public-assets-v2-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            bkg-public-assets-v2-
+
+      - name: Fetch and verify administration photos from the saved snapshot
+        if: env.ROSTER_EXPORT_VERSION == '2'
+        env:
+          ROSTER_EXPORT_URL: ${{ secrets.ROSTER_EXPORT_V2_URL }}
+        run: |
+          python3 scripts/fetch-public-assets.py \
+            --roster-json "$RUNNER_TEMP/bkg-build/roster.json" \
+            --asset-dir "$RUNNER_TEMP/bkg-build/public-assets"
+
       - name: Build roster from the saved snapshot
         run: |
+          if [ "$ROSTER_EXPORT_VERSION" = 2 ]; then
+            public_options=(--asset-dir "$RUNNER_TEMP/bkg-build/public-assets")
+          else
+            public_options=(--enrichment-dir "$RUNNER_TEMP/bkg-build/enrichment")
+          fi
           python3 scripts/build-roster.py --source json \
+            --schema-version "$ROSTER_EXPORT_VERSION" \
             --roster-json "$RUNNER_TEMP/bkg-build/roster.json" \
-            --enrichment-dir "$RUNNER_TEMP/bkg-build/enrichment" \
+            "${public_options[@]}" \
             --output-dir dist
 
       - name: Validate public build
@@ -106,7 +147,8 @@ jobs:
           import json, os
           from pathlib import Path
           snapshot = Path(os.environ["RUNNER_TEMP"]) / "bkg-build/roster.json"
-          assert json.loads(snapshot.read_text()) == json.loads(Path("dist/data/v1/roster.json").read_text())
+          version = os.environ["ROSTER_EXPORT_VERSION"]
+          assert json.loads(snapshot.read_text()) == json.loads(Path(f"dist/data/v{version}/roster.json").read_text())
           PY_CHECK
 
       - name: Fingerprint the public build
@@ -140,7 +182,7 @@ jobs:
 
       # Pair the exact reviewed input and sanitized cache with the immutable
       # Pages archive for inspection and future cache recovery (30 days).
-      - name: Retain reviewed snapshot and sanitized enrichment
+      - name: Retain reviewed snapshot and validated public inputs
         if: steps.decide.outputs.changed == 'true'
         uses: actions/upload-artifact@v7
         with:
@@ -159,11 +201,20 @@ jobs:
           retention-days: 30
 
       - name: Save validated sanitized enrichment
+        if: env.ROSTER_EXPORT_VERSION == '1'
         uses: actions/cache/save@v6
         continue-on-error: true
         with:
           path: ${{ runner.temp }}/bkg-build/enrichment
           key: ${{ steps.enrichment-cache.outputs.cache-primary-key }}
+
+      - name: Save validated immutable administration photos
+        if: env.ROSTER_EXPORT_VERSION == '2'
+        uses: actions/cache/save@v6
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/bkg-build/public-assets
+          key: ${{ steps.public-assets-cache.outputs.cache-primary-key }}
 
   deploy:
     needs: build
