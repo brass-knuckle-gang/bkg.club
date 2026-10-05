@@ -1,5 +1,13 @@
 # GitHub Pages deployment and rollback
 
+The following describes the current **v1** publication path. The administration
+v2 publisher is opt-in through `ROSTER_EXPORT_VERSION` (default `1`) and the
+separate `ROSTER_EXPORT_V2_URL` secret. In v2, all QRZ refresh/enrichment and
+website photo overrides are skipped; the workflow copies verified immutable
+administration assets and publishes the saved v2 snapshot. Follow the
+[v2 cutover procedure](PUBLIC-ROSTER-V2-CUTOVER.md) after backend deployment and
+comparison. Both paths preserve fixed-revision validation and artifact rollback.
+
 Production builds reviewed JSON from the public roster feed. GitHub Pages, `www.bkg.club`, and CNAME/DNS remain unchanged. Production triggers are pushes to `main`, manual dispatch on `main`, and `23 * * * *` (hourly). A scheduled run that would publish the same site as the last deploy stops after validation; pushes and manual dispatches always deploy, unless a dispatch sets `skip_unchanged`. A dispatch may also name `recheck` callsigns (comma-separated) that the QRZ refresh looks up that run regardless of the hourly schedule, for example after a member fixes their QRZ profile: `gh workflow run deploy.yml -f recheck=VE6TD,VA6DM`. The `deploy` concurrency group serializes runs without cancelling active deployment. Pull requests run only offline fixture checks with read-only permissions and no production environment/secrets. Creating or updating a draft PR cannot deploy this site.
 
 See [cutover instructions](PUBLIC-ROSTER-CUTOVER.md) for operator configuration, and [JSON input rules](JSON-INPUT.md) for the reviewed contract and sanitized enrichment.

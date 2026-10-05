@@ -384,7 +384,7 @@ class JsonBuildTests(unittest.TestCase):
         self.assertIn("actions/deploy-pages@v5", workflow)
         self.assertIn("ROSTER_EXPORT_URL: ${{ secrets.ROSTER_EXPORT_URL }}", workflow)
         self.assertEqual(workflow.count("python3 scripts/fetch-roster.py"), 1)
-        self.assertEqual(workflow.count('--roster-json "$RUNNER_TEMP/bkg-build/roster.json"'), 2)
+        self.assertEqual(workflow.count('--roster-json "$RUNNER_TEMP/bkg-build/roster.json"'), 3)
         self.assertIn('ref: ${{ github.sha }}', workflow)
         self.assertIn('retention-days: 30', workflow)
         self.assertIn('--require-usable', workflow)
