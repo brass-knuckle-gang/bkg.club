@@ -379,8 +379,8 @@ def refresh_enrichment(members: list[dict], directory: Path, *, username: str,
     records, photos, moved = _load(directory, members, repo_root=repo_root, upgrade=True)
     photo_overrides = photo_overrides or {}
     summary = {"active_members": len(identities), "lookups_updated": 0,
-               "lookups_failed": 0, "lookups_skipped": 0, "photos_updated": 0,
-               "photos_retained": 0, "photos_overridden": 0}
+               "lookups_aliased": 0, "lookups_failed": 0, "lookups_skipped": 0,
+               "photos_updated": 0, "photos_retained": 0, "photos_overridden": 0}
     qths = {str(member["number"]): location_binding(member.get("qth") or "") for member in members}
 
     due = list(identities)
@@ -436,10 +436,17 @@ def refresh_enrichment(members: list[dict], directory: Path, *, username: str,
         # Count an attempt as a check either way, so a member QRZ cannot
         # answer does not hold the oldest slot and starve everyone else.
         record["checked_at"] = now
+        # QRZ answers a retired or vanity-replaced call with the operator's
+        # current record (<call> differs from the reviewed callsign). Use that
+        # record's geography and photo, exactly as the Sheets build did, but
+        # keep the reviewed callsign: QRZ never renames a member here, and the
+        # current call is not persisted. A missing <call> is "not found".
         current_call = info.get("current_call") if isinstance(info, dict) else None
-        if not isinstance(current_call, str) or current_call.upper() != callsign.upper():
+        if not isinstance(current_call, str) or not current_call.strip():
             summary["lookups_failed"] += 1
             continue
+        if current_call.strip().upper() != callsign.upper():
+            summary["lookups_aliased"] += 1
         _merge_location(record, info)
         if record.get("grid") is not None or _coordinates(record) is not None:
             record["qth_hash"] = qths[number]

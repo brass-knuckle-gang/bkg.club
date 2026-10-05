@@ -131,6 +131,23 @@ class EnrichmentTests(unittest.TestCase):
         self.assertEqual(members[0]["callsign"], "n0Changed/P")
         self.assertNotIn("photo", self.read(members)["1"])
 
+    def test_qrz_current_call_for_old_callsign_enriches_without_renaming(self):
+        """A vanity or retired call resolves to the operator's current record on QRZ."""
+        self.lookup.side_effect = lambda _session, call: {
+            "current_call": "NB0NEW" if call == "K1TST" else call, "grid": "EM12",
+            "image": "https://fixture.invalid/current.png" if call == "K1TST" else None,
+        }
+        summary = self.refresh()
+        self.assertEqual((summary["lookups_updated"], summary["lookups_aliased"], summary["lookups_failed"]), (2, 1, 0))
+        record = self.read()["1"]
+        self.assertEqual(record["callsign"], "K1TST")
+        self.assertEqual(record["grid"], "EM12")
+        self.assertEqual(record["photo"], enrichment.photo_filename(1, "K1TST", ".webp"))
+        self.assertEqual(self.members[0]["callsign"], "K1TST")
+        raw = (self.cache / enrichment.CACHE_NAME).read_text()
+        self.assertNotIn("NB0NEW", raw)  # The QRZ identity is used, never stored.
+        self.assertEqual(self.photo_fetch.call_args[0][0], "https://fixture.invalid/current.png")
+
     def test_reviewed_qth_move_suppresses_stale_coordinates_but_retains_photo(self):
         filename = self.seed_cache()
         members = copy.deepcopy(self.members)
@@ -161,8 +178,7 @@ class EnrichmentTests(unittest.TestCase):
                 self.assertEqual((self.cache / "photos" / filename).read_bytes(), PHOTO)
         self.login.side_effect = None
         self.login.return_value = "private-session"
-        for info in (None, RuntimeError("raw XML private-address"), {},
-                     {"current_call": "K9RECYCLED", "grid": "EM12"},
+        for info in (None, RuntimeError("raw XML private-address"), {}, {"current_call": None, "grid": "EM12"},
                      {"current_call": "K1TST", "grid": None, "lat": None, "lon": None, "image": None}):
             with self.subTest(lookup=info):
                 self.lookup.side_effect = info if isinstance(info, Exception) else None
