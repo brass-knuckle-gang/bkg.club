@@ -5,6 +5,7 @@ import copy
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import socket
@@ -383,6 +384,15 @@ class EnrichmentTests(unittest.TestCase):
         self.scheduled(members, now=60)
         self.assertEqual(sorted(call for (_s, call), _ in self.lookup.call_args_list), ["K1TST", "K3NEW"])
 
+    def test_recheck_callsigns_are_looked_up_regardless_of_schedule(self):
+        self.lookup.side_effect = lambda _session, call: {"current_call": call, "grid": "EN61"}
+        self.scheduled(self.members, now=0)
+        self.lookup.reset_mock()
+        self.assertEqual(self.scheduled(self.members, now=60)["lookups_updated"], 0)
+        result = self.scheduled(self.members, now=120, recheck=frozenset({"k2tst", "K9ABSENT"}))
+        self.assertEqual([call for (_s, call), _ in self.lookup.call_args_list], ["K2TST"])
+        self.assertEqual((result["lookups_updated"], result["lookups_skipped"]), (1, 1))
+
     def test_unchanged_qrz_image_is_not_downloaded_again(self):
         image = {"url": "https://fixture.invalid/a.png"}
         self.lookup.side_effect = lambda _session, call: {"current_call": call, "image": image["url"]}
@@ -458,6 +468,27 @@ class RefreshCommandTests(unittest.TestCase):
             load.assert_not_called()
             self.assertEqual(marker.read_text(), "last-good")
             self.assertNotIn("malformed", errors.getvalue())
+
+    def test_recheck_flag_is_parsed_validated_and_forwarded(self):
+        members = [{"number": 1, "callsign": "K1TST", "name": "A", "qth": "Utah", "join_date": "", "sponsor_bkg_number": None, "og_regions": []},
+                   {"number": 2, "callsign": "K2TST", "name": "B", "qth": "Utah", "join_date": "", "sponsor_bkg_number": None, "og_regions": []}]
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary) / "cache"
+            common = ["--roster-json", str(Path(temporary) / "roster.json"), "--enrichment-dir", str(cache)]
+            with patch.object(self.command, "read_roster_json", return_value="{}"), \
+                    patch.object(self.command, "parse_roster_json", return_value=({}, members)), \
+                    patch.object(self.command, "load_qrz_client") as load, \
+                    patch.object(self.command, "refresh_enrichment", return_value={"ok": 1}) as refresh, \
+                    patch.dict(os.environ, {"QRZ_USERNAME": "u", "QRZ_PASSWORD": "p"}), \
+                    contextlib.redirect_stderr(io.StringIO()) as errors, contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(self.command.main([*common, "--recheck", "k1tst, K2TST", "--recheck", "K9TYPO"]), 1)
+                refresh.assert_not_called()
+                load.assert_not_called()
+                self.assertIn("K9TYPO", errors.getvalue())
+                self.assertEqual(self.command.main([*common, "--recheck", "k1tst,", "--recheck", "K2TST"]), 0)
+                self.assertEqual(refresh.call_args.kwargs["recheck"], frozenset({"K1TST", "K2TST"}))
+                self.assertEqual(self.command.main(common), 0)
+                self.assertEqual(refresh.call_args.kwargs["recheck"], frozenset())
 
     def test_transport_diagnostics_are_suppressed(self):
         def unsafe():
