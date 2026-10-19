@@ -90,6 +90,10 @@
                         <input type="text" id="tab" autocomplete="off" spellcheck="false" placeholder="Leave empty for no tab">
                     </div>
                     <div class="form-row">
+                        <label for="frequency">Frequency (MHz)</label>
+                        <input type="text" id="frequency" value="144.025" inputmode="decimal" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="form-row">
                         <label>Finish</label>
                         <div class="seg" role="group" aria-label="Finish">
                             <button data-style="emboss" aria-pressed="true">Embossed</button>
@@ -352,7 +356,8 @@ function stateTabFor(m){                        // fallback for non-OG members
 }
 
 function opts(){
-  const o = {callsign:$("#callsign").value.trim(), tab:$("#tab").value.trim()};
+  const frequency = $("#frequency").value.trim().replace(",", ".") || "144.025";
+  const o = {callsign:$("#callsign").value.trim(), tab:$("#tab").value.trim(), freq:frequency + " MHZ"};
   if(finish === "flat") o.flat = true;
   if(finish === "mono"){ o.mono = "#111111"; o.flat = true; }
   return o;
@@ -487,7 +492,7 @@ function toast(msg){
 }
 
 /* ---- wiring ---- */
-for(const id of ["callsign","tab"]) $("#" + id).addEventListener("input", render);
+for(const id of ["callsign","tab","frequency"]) $("#" + id).addEventListener("input", render);
 $("#search").addEventListener("input", drawList);
 document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
