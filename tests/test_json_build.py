@@ -388,6 +388,7 @@ class JsonBuildTests(unittest.TestCase):
         self.assertIn('ref: ${{ github.sha }}', workflow)
         self.assertIn('retention-days: 30', workflow)
         self.assertIn('--require-usable', workflow)
+        self.assertIn('BKG_ROSTER_STYLE: ${{ vars.ROSTER_STYLE }}', workflow)
         self.assertNotIn('Commit refreshed QRZ cache', workflow)
         self.assertNotIn('CF_ACCESS_CLIENT', workflow)
         self.assertNotIn('images/mugshots\n', workflow)
