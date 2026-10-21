@@ -1,12 +1,24 @@
 # GitHub Pages deployment and rollback
 
+The workflow supports V1 and the administration-owned V2 publisher through
+`ROSTER_EXPORT_VERSION` (default `1`) and the
+separate `ROSTER_EXPORT_V2_URL` secret. In v2, all QRZ refresh/enrichment and
+website photo overrides are skipped; the workflow copies verified immutable
+administration assets and publishes the saved v2 snapshot. Follow the
+[v2 cutover procedure](PUBLIC-ROSTER-V2-CUTOVER.md) after backend deployment and
+comparison. Both paths preserve fixed-revision validation and artifact rollback.
+The backend is deployed, and the [live V2 review](PUBLIC-ROSTER-V2-REVIEW.md)
+records the resolved population/photo-refresh blockers and current comparison. Activation uses the
+`github-pages` environment secret `ROSTER_EXPORT_V2_URL` and repository Actions
+variable `ROSTER_EXPORT_VERSION=2` after those blockers are resolved.
+
 Production builds reviewed JSON from the public roster feed. GitHub Pages, `www.bkg.club`, and CNAME/DNS remain unchanged. Production triggers are pushes to `main`, manual dispatch on `main`, and `23 * * * *` (hourly). A scheduled run that would publish the same site as the last deploy stops after validation; pushes and manual dispatches always deploy, unless a dispatch sets `skip_unchanged`. A dispatch may also name `recheck` callsigns (comma-separated) that the QRZ refresh looks up that run regardless of the hourly schedule, for example after a member fixes their QRZ profile: `gh workflow run deploy.yml -f recheck=VE6TD,VA6DM`. The `deploy` concurrency group serializes runs without cancelling active deployment. Pull requests run only offline fixture checks with read-only permissions and no production environment/secrets. Creating or updating a draft PR cannot deploy this site.
 
 See [cutover instructions](PUBLIC-ROSTER-CUTOVER.md) for operator configuration, and [JSON input rules](JSON-INPUT.md) for the reviewed contract and sanitized enrichment.
 
-## Build contract
+## V1 build contract and shared deployment checks
 
-The build checks out the event's exact `github.sha`, verifies HEAD, installs the pinned image dependency, and runs offline tests. It fetches/validates one anonymous roster response using the Actions secret `ROSTER_EXPORT_URL`, saving it under `$RUNNER_TEMP/bkg-build`, outside `dist/` and the checkout. Missing/invalid input fails before upload. Refresh and build consume this same file; neither selects Sheets or fixtures on failure.
+The build checks out the event's exact `github.sha`, verifies HEAD, installs the pinned image dependency, and runs offline tests. It fetches/validates one anonymous roster response using the selected Actions secret, saving it under `$RUNNER_TEMP/bkg-build`, outside `dist/` and the checkout. Separate `bkg-roster-v1-*` / `bkg-roster-v2-*` caches support conditional GET: only a schema/hash/endpoint-validated snapshot with a matching ETag can be reused after `304`. Missing/invalid input or transport errors fail before upload. Refresh and build consume this same file; neither selects Sheets, stale membership, or fixtures on failure.
 
 A separate QRZ refresh restores only sanitized, identity/QTH-bound enrichment into `$RUNNER_TEMP/bkg-build/enrichment`. It filters to active exported identities, validates location matches, sanitizes photos, and applies reviewed custom-photo bindings. Each run looks up only members that are due: new members, members whose reviewed QTH moved, and the least recently checked share of the roster sized so every member is rechecked within 24 hours of hourly runs (`--max-age-hours 24 --interval-hours 1`), using four concurrent lookups. A photo is downloaded again only when QRZ's image URL changes; the cache stores a SHA-256 of that URL, never the URL. Photos are downscaled to 480 px and re-encoded as metadata-free WebP; cached photos are verified structurally (single still image, no EXIF/XMP/ICC/animation/unknown chunks, full decode) on every read. Version 1 caches with full-size PNG photos are re-sanitized on the first refresh. The existing environment-scoped QRZ secrets remain available. A fresh cache must contain accepted geography and photos before the workflow can build; subsequent QRZ outages can reuse matching last-known-good enrichment. No authenticated roster credentials are needed. No raw QRZ data or cache-persistence commits enter this workflow.
 

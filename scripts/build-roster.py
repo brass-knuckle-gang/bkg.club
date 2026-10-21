@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Build the public site from Google Sheets (default) or an explicit JSON export.
 
-JSON experiments require --source json and an output directory outside this
-repository. They render reviewed membership values with optional sanitized
-enrichment, without refreshing QRZ. See docs/JSON-INPUT.md.
+Production selects --source json and an explicit V1/V2 contract. JSON builds
+use dist/ or an external preview directory. V1 may use separate sanitized
+enrichment; V2 uses only exported map locations and verified public photos.
+Rendering never refreshes QRZ. See docs/JSON-INPUT.md.
 
 The roster section of index.html is rebuilt between <!-- ROSTER:START --> and
 <!-- ROSTER:END --> markers. The members count is updated between
@@ -13,8 +14,8 @@ Ham2K PoLo callsign notes file (auto-generated, not manually edited).
 tree.html, nearby.html and outbreak.html each get a JSON payload injected
 between their own START/END markers (downline, geo, and outbreak data).
 
-QRZ lookups are cached in qrz-cache.json (see QRZ_CACHE_* below); the deploy
-workflow commits the refreshed cache back to main after each build.
+The optional legacy Sheets path uses qrz-cache.json (see QRZ_CACHE_* below).
+Production does not read that cache or commit enrichment back to main.
 """
 
 import argparse
@@ -54,7 +55,7 @@ MUGSHOT_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 # Callsign -> QRZ image URL of each file
 MUGSHOT_SOURCES_PATH = MUGSHOT_DIR / ".sources.json"
 
-# QRZ lookup cache (qrz-cache.json, committed back by the deploy workflow).
+# QRZ lookup cache for the explicit legacy Sheets path.
 # A full roster is one QRZ request per member; almost all of them repeat the
 # Every build looks up every member live. The
 # cache holds only changed callsigns, as the
@@ -884,7 +885,7 @@ def mugshot_inner_html(member: dict) -> str:
         callsign = html_escape(member["callsign"])
         src = html_escape(path)
         return (
-            f'<img class="mugshot-photo" src="{src}" alt="{callsign} QRZ profile photo" loading="lazy">'
+            f'<img class="mugshot-photo" src="{src}" alt="{callsign} profile photo" loading="lazy">'
         )
     return (
         '<div class="mugshot-placeholder">\n'
@@ -1273,6 +1274,9 @@ def member_latlon(member: dict) -> tuple[float, float] | None:
     QRZ lat/lon rounded to 2 decimals (~1 km). Members with a location
     override have had their QRZ coords cleared, so they come back None.
     """
+    if "map_location" in member:
+        location = member["map_location"]
+        return (location["lat"], location["lon"]) if location is not None else None
     grid = member.get("grid")
     latlon = grid_to_latlon(grid) if grid else None
     if latlon is None and member.get("lat") is not None and member.get("lon") is not None:
@@ -1579,15 +1583,21 @@ def stage_public_files(output_dir: Path, *, include_photos: bool = True) -> None
 
 
 def build(output_dir: Path, *, source: str = "sheets", roster_json: Path | None = None,
-          enrichment_dir: Path | None = None) -> None:
+          enrichment_dir: Path | None = None, schema_version: str = "1",
+          asset_dir: Path | None = None, asset_origin: str | None = None) -> None:
     if source == "json":
         from roster_input import parse_roster_json, read_roster_json
-        from roster_enrichment import annotate_json_enrichment
-
-        envelope, members = parse_roster_json(read_roster_json(roster_json))
+        envelope, members = parse_roster_json(read_roster_json(roster_json), expected_version=schema_version)
         for member in members:
             member["state"], member["country"] = qth_location(member["qth"])
-        photos = annotate_json_enrichment(members, enrichment_dir, repo_root=REPO_ROOT)
+        if schema_version == "2":
+            if enrichment_dir is not None:
+                raise ValueError("v2 uses only administration-owned member data and public assets")
+            from roster_assets import annotate_public_assets
+            photos = annotate_public_assets(members, asset_dir, source_url=asset_origin, repo_root=REPO_ROOT)
+        else:
+            from roster_enrichment import annotate_json_enrichment
+            photos = annotate_json_enrichment(members, enrichment_dir, repo_root=REPO_ROOT)
         stage_public_files(output_dir, include_photos=False)
         for relative, photo in photos.items():
             destination = output_dir / relative
@@ -1595,7 +1605,7 @@ def build(output_dir: Path, *, source: str = "sheets", roster_json: Path | None 
             shutil.copyfile(photo, destination)
         # The public snapshot contains the reviewed contract alone. Enrichment
         # cannot restore inactive identities or overwrite membership fields.
-        snapshot = output_dir / "data/v1/roster.json"
+        snapshot = output_dir / f"data/v{schema_version}/roster.json"
         snapshot.parent.mkdir(parents=True, exist_ok=True)
         snapshot.write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"Validated JSON roster: {len(members)} members ({envelope['content_hash']})")
@@ -1644,6 +1654,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="explicit local JSON export; otherwise JSON uses ROSTER_EXPORT_URL")
     parser.add_argument("--enrichment-dir", type=Path,
                         help="optional sanitized JSON enrichment cache; never refreshed during rendering")
+    parser.add_argument("--schema-version", choices=("1", "2"), default="1",
+                        help="explicit JSON contract version (default: 1 until coordinated cutover)")
+    parser.add_argument("--asset-dir", type=Path,
+                        help="immutable administration photo bytes for a v2 snapshot, outside the source tree")
+    parser.add_argument("--asset-origin", default=os.environ.get("ROSTER_EXPORT_URL"),
+                        help="trusted HTTPS roster URL for v2 photo origin verification (or ROSTER_EXPORT_URL)")
     args = parser.parse_args(argv)
     output_dir = args.output_dir.resolve()
     try:
@@ -1651,9 +1667,18 @@ def main(argv: list[str] | None = None) -> int:
         if (output_dir == source_root or output_dir in source_root.parents
                 or (output_dir.is_relative_to(source_root) and output_dir != source_root / "dist")):
             raise ValueError("Output must be dist/ or a directory outside the source repository")
-        if args.source == "sheets" and (args.roster_json or args.enrichment_dir):
+        if args.source == "sheets" and (args.roster_json or args.enrichment_dir or args.asset_dir or args.schema_version != "1"):
             raise ValueError("JSON options require explicit --source json")
         if args.source == "json":
+            if args.schema_version == "2" and args.enrichment_dir is not None:
+                raise ValueError("v2 cannot use QRZ enrichment")
+            if args.schema_version == "1" and args.asset_dir is not None:
+                raise ValueError("Public asset options require explicit v2 selection")
+            if args.asset_dir:
+                assets = args.asset_dir.resolve()
+                if (assets.is_relative_to(source_root) or source_root.is_relative_to(assets)
+                        or assets.is_relative_to(output_dir) or output_dir.is_relative_to(assets)):
+                    raise ValueError("Public assets must be outside the repository and separate from output")
             if args.enrichment_dir:
                 cache = args.enrichment_dir.resolve()
                 if (cache.is_relative_to(source_root) or source_root.is_relative_to(cache)
@@ -1671,7 +1696,8 @@ def main(argv: list[str] | None = None) -> int:
             staged = Path(temporary) / "public"
             staged.mkdir()
             build(staged, source=args.source, roster_json=args.roster_json,
-                  enrichment_dir=args.enrichment_dir)
+                  enrichment_dir=args.enrichment_dir, schema_version=args.schema_version,
+                  asset_dir=args.asset_dir, asset_origin=args.asset_origin)
             validate_dist(staged, source=args.source)
             previous = Path(temporary) / "previous"
             if output_dir.exists():
