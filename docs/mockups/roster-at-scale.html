@@ -1,0 +1,494 @@
+<title>BKG Roster Rework</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<!-- Roster-at-scale prototype for review. Not linked from the site; open directly.
+     Every member after the founder is synthetic sample data, generated in the script below. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet">
+<style>
+  /* Layout: one phone-width column; sticky search/filter bar; hall-of-fame strip,
+     then the roster as numbered blocks of 100 (list or mugshot wall); tap opens a rap sheet. */
+  :root {
+    --ink: #0b0906;          /* page */
+    --slab: #16120c;         /* rows, sheets */
+    --slab-2: #221b10;       /* raised */
+    --rule: #3a2f1b;
+    --brass: #d4af37;
+    --brass-hi: #ffd700;
+    --blood: #8b0000;
+    --blood-hi: #c1121f;
+    --lime: #39ff14;
+    --paper: #efe6cf;        /* primary text */
+    --dim: #b3a88d;          /* secondary text (≥ 7:1 on --ink) */
+    --display: 'Bangers', 'Impact', 'Arial Narrow', sans-serif;
+    --body: 'Comic Neue', 'Comic Sans MS', 'Chalkboard SE', 'Trebuchet MS', sans-serif;
+    --type: 'Special Elite', 'Courier New', ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 140px; }
+  body {
+    margin: 0; background: var(--ink); color: var(--paper);
+    font-family: var(--body); font-weight: 700; font-size: 16px; line-height: 1.4;
+  }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--ink); }
+  .gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  a { color: var(--brass-hi); }
+  :focus-visible { outline: 3px solid var(--lime); outline-offset: 2px; }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- masthead ---------- */
+  .mast { padding-block: 22px 14px; border-bottom: 3px double var(--brass); background: linear-gradient(180deg, #2a1d05 0%, var(--ink) 100%); }
+  .mast .eyebrow { font-family: var(--type); color: var(--dim); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; }
+  .mast h1 { font-family: var(--display); font-weight: 400; color: var(--brass); font-size: clamp(2.4rem, 9vw, 3.6rem); line-height: 1; margin: 4px 0 0; letter-spacing: 0.02em; text-shadow: 3px 3px 0 var(--blood); text-wrap: balance; }
+  .stats { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 12px; font-family: var(--type); font-size: 0.9rem; color: var(--dim); }
+  .stats b { font-family: var(--display); font-weight: 400; color: var(--paper); font-size: 1.35rem; letter-spacing: 0.03em; margin-right: 4px; font-variant-numeric: tabular-nums; }
+
+  /* ---------- sticky toolbar ---------- */
+  .bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--ink) 94%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--rule); padding-block: 10px; }
+  .bar .wrap { display: grid; gap: 8px; }
+  .search { display: flex; gap: 8px; }
+  .search input {
+    flex: 1; min-width: 0; height: 46px; padding: 0 14px; border-radius: 4px;
+    background: var(--slab); color: var(--paper); border: 2px solid var(--rule);
+    font-family: var(--type); font-size: 1rem;
+  }
+  .search input::placeholder { color: var(--dim); opacity: 1; }
+  .search input:focus { border-color: var(--brass); outline: none; }
+  .views { display: flex; border: 2px solid var(--rule); border-radius: 4px; overflow: hidden; flex: none; }
+  .views button { background: var(--slab); border: 0; width: 46px; height: 42px; display: grid; place-items: center; cursor: pointer; }
+  .views button[aria-pressed="true"] { background: var(--brass); color: var(--ink); }
+  .views svg { width: 20px; height: 20px; }
+  .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: none; height: 34px; padding: 0 12px; border-radius: 17px; cursor: pointer;
+    background: transparent; border: 2px solid var(--rule); color: var(--dim);
+    font-family: var(--type); font-size: 0.85rem; white-space: nowrap;
+  }
+  .chip[aria-pressed="true"] { border-color: var(--brass); color: var(--ink); background: var(--brass); }
+  .chip.sort { color: var(--paper); }
+  .resultline { font-family: var(--type); font-size: 0.85rem; color: var(--dim); }
+  .resultline b { color: var(--paper); font-weight: 400; }
+
+  /* ---------- hall of fame ---------- */
+  .fame { padding-block: 18px 4px; }
+  .h2 { font-family: var(--display); font-weight: 400; color: var(--brass); font-size: 1.6rem; letter-spacing: 0.04em; margin: 0 0 8px; }
+  .h2 small { font-family: var(--type); color: var(--dim); font-size: 0.8rem; letter-spacing: 0; margin-left: 6px; }
+  .rail { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 8px; scrollbar-width: thin; }
+  .fcard {
+    flex: none; width: 128px; scroll-snap-align: start; text-align: left; cursor: pointer;
+    background: var(--slab); border: 2px solid var(--rule); border-radius: 4px; padding: 0 0 8px; overflow: hidden;
+  }
+  .fcard.godfather { width: 156px; border: 3px ridge var(--brass-hi); background: linear-gradient(160deg, #3a2600, var(--slab)); }
+  .fcard .tag { display: block; font-family: var(--type); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); background: var(--brass); padding: 3px 8px; }
+  .fcard .tag.red { background: var(--blood-hi); color: var(--paper); }
+  .fcard .tag.lime { background: var(--lime); }
+  .fcard .shot { margin: 8px 8px 6px; }
+  .fcard .call { display: block; padding: 0 8px; font-family: var(--display); color: var(--brass); font-size: 1.25rem; letter-spacing: 0.03em; line-height: 1.1; }
+  .fcard .sub { display: block; padding: 0 8px; font-family: var(--type); font-size: 0.78rem; color: var(--dim); }
+
+  /* mugshot tile: height-chart stripes + placard, the site's motif, drawn small */
+  .shot {
+    position: relative; aspect-ratio: 3 / 4; max-width: 100%; border-radius: 2px; overflow: hidden;
+    background: repeating-linear-gradient(180deg, #2b2416 0 9px, #241e12 9px 10px);
+    display: grid; place-items: center;
+  }
+  .shot .ini { font-family: var(--display); color: var(--dim); font-size: 1.6rem; letter-spacing: 0.04em; }
+  .shot.has-photo { background: linear-gradient(180deg, #5a5245, #2a251c); }
+  .shot.has-photo::before { content: ""; position: absolute; left: 50%; top: 22%; width: 42%; aspect-ratio: 1; translate: -50% 0; border-radius: 50%; background: #9a9080; }
+  .shot.has-photo::after { content: ""; position: absolute; left: 50%; bottom: -12%; width: 82%; aspect-ratio: 1.3; translate: -50% 0; border-radius: 50% 50% 0 0; background: #9a9080; }
+  .shot.has-photo .ini { display: none; }
+
+  /* ---------- roster ---------- */
+  .roster { padding-block: 10px 40px; }
+  .jump { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 4px 0 10px; }
+  .jump::-webkit-scrollbar { display: none; }
+  .jump a { flex: none; font-family: var(--type); font-size: 0.85rem; color: var(--paper); text-decoration: none; border: 1px solid var(--rule); border-radius: 3px; padding: 6px 9px; font-variant-numeric: tabular-nums; }
+  .jump a:hover { border-color: var(--brass); }
+  .block { content-visibility: auto; contain-intrinsic-size: auto 4000px; }
+  .block-head {
+    position: sticky; top: calc(env(safe-area-inset-top, 0px) + var(--bar-h, 130px)); z-index: 5;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+    background: var(--ink); padding: 10px 0 6px; border-bottom: 2px solid var(--blood);
+  }
+  .block-head h3 { margin: 0; font-family: var(--display); font-weight: 400; color: var(--brass); font-size: 1.3rem; letter-spacing: 0.04em; }
+  .block-head span { font-family: var(--type); color: var(--dim); font-size: 0.8rem; }
+
+  /* list view */
+  .rows { list-style: none; margin: 0; padding: 0; }
+  .row {
+    display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 12px; align-items: center;
+    width: 100%; padding: 8px 4px; background: none; border: 0; border-bottom: 1px solid var(--rule);
+    text-align: left; cursor: pointer;
+  }
+  .row:hover { background: var(--slab); }
+  .row .shot { width: 40px; }
+  .row .shot .ini { font-size: 1rem; }
+  .row .main { min-width: 0; }
+  .row .call { font-family: var(--display); font-size: 1.35rem; letter-spacing: 0.04em; color: var(--brass); line-height: 1.05; }
+  .row .who { font-size: 0.95rem; color: var(--paper); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .who i { font-style: normal; color: var(--dim); font-family: var(--type); font-size: 0.82rem; }
+  .row .num { font-family: var(--type); color: var(--dim); font-size: 0.9rem; font-variant-numeric: tabular-nums; text-align: right; }
+  .badges { display: inline-flex; gap: 4px; vertical-align: 3px; margin-left: 6px; }
+  .b { font-family: var(--display); font-size: 0.72rem; letter-spacing: 0.06em; line-height: 1; padding: 3px 5px 2px; border-radius: 2px; }
+  .b.og { background: var(--brass); color: var(--ink); }
+  .b.state { background: var(--blood-hi); color: var(--paper); }
+  .b.new { background: var(--lime); color: var(--ink); }
+  .b.boss { background: var(--paper); color: var(--ink); }
+  mark { background: color-mix(in srgb, var(--brass-hi) 35%, transparent); color: inherit; border-radius: 2px; }
+
+  /* wall view */
+  .wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; padding-top: 10px; }
+  .tile { background: var(--slab); border: 2px solid var(--rule); border-radius: 3px; padding: 6px 6px 8px; text-align: center; cursor: pointer; position: relative; min-width: 0; }
+  .tile:hover { border-color: var(--brass); }
+  .tile .call { display: block; margin-top: 5px; font-family: var(--display); color: var(--brass); font-size: 1.1rem; letter-spacing: 0.03em; line-height: 1.05; overflow-wrap: anywhere; }
+  .tile .num { display: block; font-family: var(--type); color: var(--dim); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+  .tile .badges { position: absolute; top: 9px; left: 9px; margin: 0; flex-direction: column; align-items: flex-start; }
+
+  .empty { padding: 30px 0; font-family: var(--type); color: var(--dim); text-align: center; }
+  .empty b { display: block; font-family: var(--display); font-weight: 400; color: var(--brass); font-size: 1.6rem; letter-spacing: 0.04em; }
+
+  /* ---------- rap sheet (bottom sheet) ---------- */
+  .scrim { position: fixed; inset: 0; z-index: 40; background: rgb(0 0 0 / 0.65); }
+  .sheet {
+    position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; margin: 0 auto; max-width: 560px;
+    max-height: 86vh; overflow-y: auto; overscroll-behavior: contain;
+    background: var(--slab); border: 3px ridge var(--brass); border-bottom: 0; border-radius: 10px 10px 0 0;
+    padding: 10px max(18px, env(safe-area-inset-right, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+    animation: up 0.18s ease-out;
+  }
+  @keyframes up { from { transform: translateY(24px); opacity: 0.6; } }
+  .grab { width: 44px; height: 5px; border-radius: 3px; background: var(--rule); margin: 0 auto 12px; }
+  .sheet .top { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 14px; align-items: end; }
+  .sheet .call { font-family: var(--display); color: var(--brass); font-size: 2.4rem; line-height: 1; letter-spacing: 0.03em; text-shadow: 2px 2px 0 var(--blood); overflow-wrap: anywhere; }
+  .sheet .name { font-size: 1.1rem; }
+  .sheet .num { font-family: var(--type); color: var(--dim); }
+  .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin: 16px 0 0; font-size: 1rem; }
+  .facts dt { font-family: var(--type); color: var(--dim); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; padding-top: 2px; }
+  .facts dd { margin: 0; min-width: 0; }
+  .linkish { background: none; border: 0; padding: 0; color: var(--brass-hi); text-decoration: underline; cursor: pointer; font-family: var(--display); font-size: 1.1rem; letter-spacing: 0.03em; }
+  .recruits { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .btn { flex: 1 1 140px; height: 46px; display: grid; place-items: center; border-radius: 4px; cursor: pointer; text-decoration: none; font-family: var(--display); font-size: 1.15rem; letter-spacing: 0.04em; }
+  .btn.primary { background: var(--blood); color: var(--brass-hi); border: 2px solid var(--brass); }
+  .btn.ghost { background: transparent; color: var(--paper); border: 2px solid var(--rule); }
+  .sheet .close { position: absolute; top: 8px; right: max(10px, env(safe-area-inset-right, 0px)); width: 40px; height: 40px; background: none; border: 0; color: var(--dim); font-size: 1.6rem; cursor: pointer; }
+
+  /* ---------- review notes ---------- */
+  .notes { border-top: 3px double var(--brass); padding-block: 24px 48px; }
+  .notes p, .notes li { max-width: 66ch; color: var(--paper); font-weight: 400; font-size: 1rem; }
+  .notes ul { padding-left: 1.2em; display: grid; gap: 8px; }
+  .notes strong { color: var(--brass); }
+  .sample { font-family: var(--type); color: var(--dim); font-size: 0.8rem; }
+
+  @media (min-width: 720px) {
+    .bar .wrap { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+    .bar .chips { grid-column: 1 / -1; }
+    .wall { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+  }
+  @media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
+</style>
+
+<header class="mast gutter">
+  <div class="wrap">
+    <div class="eyebrow">Brass Knuckle Gang · 2m CW or bust</div>
+    <h1>THE ROSTER</h1>
+    <div class="stats" id="stats"></div>
+  </div>
+</header>
+
+<div class="bar gutter" id="bar">
+  <div class="wrap">
+    <div class="search">
+      <input id="q" type="search" placeholder="Call, name, # or state" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Search the roster">
+      <div class="views" role="group" aria-label="View">
+        <button id="v-list" aria-pressed="true" title="List"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="2" y="3" width="16" height="3"/><rect x="2" y="8.5" width="16" height="3"/><rect x="2" y="14" width="16" height="3"/></svg><span hidden>List</span></button>
+        <button id="v-wall" aria-pressed="false" title="Mugshot wall"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="7" height="7"/><rect x="11" y="2" width="7" height="7"/><rect x="2" y="11" width="7" height="7"/><rect x="11" y="11" width="7" height="7"/></svg><span hidden>Wall</span></button>
+      </div>
+    </div>
+    <div class="chips" id="chips" role="group" aria-label="Filter and sort">
+      <button class="chip" data-f="all" aria-pressed="true">Everybody</button>
+      <button class="chip" data-f="new" aria-pressed="false">Fresh meat · 30 days</button>
+      <button class="chip" data-f="og" aria-pressed="false">State &amp; country OGs</button>
+      <button class="chip" data-f="recruiters" aria-pressed="false">Recruiters</button>
+      <button class="chip" data-f="photo" aria-pressed="false">Has a mugshot</button>
+      <button class="chip sort" id="sort" aria-pressed="false">Sort: BKG #</button>
+    </div>
+    <div class="resultline" id="resultline" aria-live="polite"></div>
+  </div>
+</div>
+
+<section class="fame gutter" id="fame">
+  <div class="wrap">
+    <h2 class="h2">MOST WANTED <small>tap any card</small></h2>
+    <div class="rail" id="rail"></div>
+  </div>
+</section>
+
+<main class="roster gutter">
+  <div class="wrap">
+    <nav class="jump" id="jump" aria-label="Jump to block"></nav>
+    <div id="out"></div>
+  </div>
+</main>
+
+<section class="notes gutter">
+  <div class="wrap">
+    <h2 class="h2">WHAT CHANGES</h2>
+    <ul>
+      <li><strong>The roster gets its own page.</strong> index.html keeps the Godfather, the newest five, the headcount and a big button to the full roster. The home page stops carrying 700 cards.</li>
+      <li><strong>List is the default on phones.</strong> One 60px row per member instead of a 300px card, so about 5× less scrolling. The mugshot wall is still there, three across on a phone.</li>
+      <li><strong>Search and filters.</strong> Callsign, name, BKG # and state all search. The filters cover new members, state OGs, recruiters and members with photos.</li>
+      <li><strong>Blocks of 100 with a jump bar.</strong> The sticky header always shows which hundred you are in, and one tap jumps to any block.</li>
+      <li><strong>Rap sheet per member.</strong> Shows joined date, territory, who recruited them and who they recruited, a QRZ link, and a shareable link (<span class="sample">bkg.club/roster#KI7QCF</span>).</li>
+      <li><strong>Badges become chips.</strong> The diagonal ribbons, card tilt, hover zoom and flashing NEW!! go away. On a phone they overlapped and couldn't be read.</li>
+      <li><strong>No-JS safe.</strong> The build still writes every member into the HTML, so site_contract.py keeps checking it. Search, sorting and the sheet are layered on top.</li>
+    </ul>
+    <p class="sample">Sample data: everyone after #001 is made up for this mockup. Only 6% of sample members have photos. The real site's QRZ photos would show grayscale in the same tile.</p>
+  </div>
+</section>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-call" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+  // ---------- sample roster (seeded, stable between loads) ----------
+  var seed = 7290;
+  function rnd() { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }
+  function pick(a) { return a[Math.floor(rnd() * a.length)]; }
+  var TOTAL = 730;
+  var FIRST = ["Dave","Josh","Charlie","Tim","Jason","Elliot","Paul","Conor","Mike","Ethan","Devan","Darryl","Hannah","Maria","Sam","Alex","Priya","Kenji","Luis","Rosa","Ben","Nate","Grace","Owen","Iris","Theo","Wes","Ruth","Abe","Tess","Jules","Mo","Ada","Cal","Dot","Ezra","Faye","Gus","Hal","Ivy","Jo","Kit","Lou","Max","Nell","Ollie","Pete","Quinn","Ray","Sue"];
+  var LAST = ["Walker","Martin","Hughes","Hale","Moreno","Dunn","Becker","Sato","Bishop","Doyle","Garcia","Dillard","Price","Kowalski","Okafor","Lindqvist","Park","Nakamura","Reyes","Fischer","Abbott","Carver","Delgado","Ellis","Foster","Grant","Hurley","Ingram","Jansen","Keller","Lowe","Mercer","Novak","Ortiz","Pruitt","Quill","Rhodes","Stone","Tate","Uribe","Vance","Wilder","Yates","Zeller"];
+  // [territory, kind, call-district digit, weight]
+  var PLACES = [["WA","state","7",60],["OR","state","7",34],["ID","state","7",18],["MT","state","7",9],["CA","state","6",62],["AZ","state","7",22],["UT","state","7",16],["NV","state","7",8],["CO","state","0",24],["TX","state","5",38],["OK","state","5",8],["IL","state","9",26],["IN","state","9",12],["WI","state","9",10],["MI","state","8",18],["OH","state","8",20],["NY","state","2",22],["NJ","state","2",10],["PA","state","3",18],["MA","state","1",14],["ME","state","1",6],["VT","state","1",4],["VA","state","4",18],["NC","state","4",16],["TN","state","4",12],["GA","state","4",12],["FL","state","4",22],["MN","state","0",12],["MO","state","0",8],["KS","state","0",5],["NM","state","5",6],["AK","state","7",4],["HI","state","6",3],["Canada","dx","VE",14],["England","dx","G",6],["Germany","dx","DL",5],["Japan","dx","JA",5],["Australia","dx","VK",4],["Netherlands","dx","PA",2]];
+  var weighted = []; PLACES.forEach(function (p) { for (var i = 0; i < p[3]; i++) weighted.push(p); });
+  var PREFIX = ["K","W","N","KA","KB","KC","KD","KE","KF","KI","KJ","KK","KM","KN","AA","AB","AC","AD","AE","AF","AG","AI","AJ","AK","WA","WB"];
+  var L = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  var used = { KI7QCF: 1 };
+  function suffix(n) { var s = ""; for (var i = 0; i < n; i++) s += pick(L.split("")); return s; }
+  function makeCall(p) {
+    for (;;) {
+      var c;
+      if (p[1] === "dx") c = p[2] + (p[2] === "G" ? "" : String(1 + Math.floor(rnd() * 9))) + (p[2] === "G" ? String(Math.floor(rnd() * 9)) : "") + suffix(rnd() < 0.5 ? 2 : 3);
+      else { var pre = pick(PREFIX); c = pre + p[2] + suffix(pre.length === 2 ? (rnd() < 0.7 ? 3 : 2) : (rnd() < 0.5 ? 2 : 3)); }
+      if (!used[c]) { used[c] = 1; return c; }
+    }
+  }
+  // Join dates: slow start in spring 2025, then the outbreak. #730 joined 2026-10-20.
+  var START = Date.UTC(2025, 2, 1), END = Date.UTC(2026, 9, 20);
+  function joinedAt(i) { var f = Math.log(1 + 40 * (i / TOTAL)) / Math.log(41); return new Date(START + f * (END - START)); }
+
+  var members = [{ n: 1, call: "KI7QCF", name: "Forrest Stephenson", place: PLACES[0], joined: new Date(START), sponsor: null, photo: true }];
+  // A few heavy hitters do most of the recruiting, as in real downlines.
+  var hitters = [];
+  for (var i = 2; i <= TOTAL; i++) {
+    var place = pick(weighted);
+    var sponsor;
+    if (i < 12) sponsor = 1;
+    else if (rnd() < 0.45 && hitters.length) sponsor = pick(hitters);
+    else sponsor = 1 + Math.floor(rnd() * (i - 1));
+    members.push({ n: i, call: makeCall(place), name: pick(FIRST) + " " + pick(LAST), place: place, joined: joinedAt(i), sponsor: sponsor, photo: rnd() < 0.06 });
+    if (i < 200 && rnd() < 0.04) hitters.push(i);
+  }
+  var byNum = {}; members.forEach(function (m) { byNum[m.n] = m; m.recruits = []; });
+  members.forEach(function (m) { if (m.sponsor) byNum[m.sponsor].recruits.push(m.n); });
+  var firstIn = {};
+  members.forEach(function (m) { if (!firstIn[m.place[0]]) { firstIn[m.place[0]] = m.n; m.terrOG = true; } });
+  var TODAY = Date.UTC(2026, 9, 21);
+  members.forEach(function (m) {
+    m.isNew = TODAY - m.joined.getTime() <= 30 * 864e5;
+    m.og = m.n === 2;
+    m.hay = (m.call + " " + m.name + " " + m.place[0] + " " + m.n).toUpperCase();
+  });
+  var byCall = {}; members.forEach(function (m) { byCall[m.call] = m; });
+
+  // ---------- helpers ----------
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function pad(n) { return String(n).padStart(3, "0"); }
+  function fmt(d) { return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" }); }
+  function initials(m) { return m.name.split(" ").map(function (w) { return w[0]; }).join(""); }
+  function shot(m, cls) { return '<span class="shot' + (m.photo ? " has-photo" : "") + (cls ? " " + cls : "") + '" aria-hidden="true"><span class="ini">' + esc(initials(m)) + "</span></span>"; }
+  function badges(m) {
+    var b = "";
+    if (m.n === 1) b += '<span class="b boss">GODFATHER</span>';
+    if (m.og) b += '<span class="b og">OG</span>';
+    if (m.terrOG && m.n !== 1) b += '<span class="b state" title="First BKG member in ' + esc(m.place[0]) + '">' + esc(m.place[1] === "dx" ? "DX" : m.place[0]) + " OG</span>";
+    if (m.isNew) b += '<span class="b new">NEW</span>';
+    return b ? '<span class="badges">' + b + "</span>" : "";
+  }
+  function hl(text, q) {
+    var t = esc(text); if (!q) return t;
+    var i = text.toUpperCase().indexOf(q); if (i < 0) return t;
+    return esc(text.slice(0, i)) + "<mark>" + esc(text.slice(i, i + q.length)) + "</mark>" + esc(text.slice(i + q.length));
+  }
+
+  // ---------- stats + hall of fame ----------
+  var states = new Set(), countries = new Set();
+  members.forEach(function (m) { (m.place[1] === "dx" ? countries : states).add(m.place[0]); });
+  var newCount = members.filter(function (m) { return m.isNew; }).length;
+  document.getElementById("stats").innerHTML =
+    "<span><b>" + members.length + "</b>brass pounders</span>" +
+    "<span><b>" + states.size + "</b>states</span>" +
+    "<span><b>" + countries.size + "</b>DX countries</span>" +
+    "<span><b>+" + newCount + "</b>last 30 days</span>";
+
+  var topRecruiters = members.filter(function (m) { return m.n !== 1; }).sort(function (a, b) { return b.recruits.length - a.recruits.length || a.n - b.n; }).slice(0, 4);
+  var newest = members.slice(-5).reverse();
+  function fcard(m, tag, tagCls, sub, extra) {
+    return '<button class="fcard' + (extra || "") + '" data-call="' + m.call + '"><span class="tag ' + tagCls + '">' + tag + "</span>" + shot(m) +
+      '<span class="call">' + m.call + '</span><span class="sub">' + sub + "</span></button>";
+  }
+  document.getElementById("rail").innerHTML =
+    fcard(members[0], "👑 Godfather", "", "BKG #001 · " + members[0].recruits.length + " direct recruits", " godfather") +
+    topRecruiters.map(function (m, i) { return fcard(m, "Top recruiter #" + (i + 1), "red", "BKG #" + pad(m.n) + " · " + m.recruits.length + " recruits"); }).join("") +
+    newest.map(function (m) { return fcard(m, "Fresh meat", "lime", "BKG #" + pad(m.n) + " · " + fmt(m.joined)); }).join("");
+
+  // ---------- state ----------
+  var state = { q: "", f: "all", sort: "num", view: "list" };
+  try { var saved = JSON.parse(localStorage.getItem("bkg-roster-view") || "null"); if (saved && (saved.view === "list" || saved.view === "wall")) state.view = saved.view; } catch (e) {}
+  var SORTS = [["num", "Sort: BKG #"], ["newest", "Sort: Newest"], ["call", "Sort: Callsign"], ["place", "Sort: State"]];
+
+  function filtered() {
+    var q = state.q;
+    var list = members.filter(function (m) {
+      if (state.f === "new" && !m.isNew) return false;
+      if (state.f === "og" && !(m.terrOG || m.og)) return false;
+      if (state.f === "recruiters" && m.recruits.length < 3) return false;
+      if (state.f === "photo" && !m.photo) return false;
+      if (q) { if (/^#?\d+$/.test(q)) return String(m.n) === q.replace("#", "").replace(/^0+/, ""); return m.hay.indexOf(q) >= 0; }
+      return true;
+    });
+    if (state.sort === "newest") list = list.slice().reverse();
+    else if (state.sort === "call") list = list.slice().sort(function (a, b) { return a.call < b.call ? -1 : 1; });
+    else if (state.sort === "place") list = list.slice().sort(function (a, b) { return a.place[0] < b.place[0] ? -1 : a.place[0] > b.place[0] ? 1 : a.n - b.n; });
+    else if (state.f === "recruiters") list = list.slice().sort(function (a, b) { return b.recruits.length - a.recruits.length || a.n - b.n; });
+    return list;
+  }
+
+  function groups(list) {
+    var out = [], cur = null;
+    list.forEach(function (m) {
+      var key, label;
+      if (state.sort === "place") { key = m.place[0]; label = m.place[0]; }
+      else if (state.sort === "call") { key = m.call[0]; label = m.call[0]; }
+      else if (state.sort === "newest") { key = m.joined.toISOString().slice(0, 7); label = m.joined.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).toUpperCase(); }
+      else if (state.f === "recruiters") { key = "r"; label = "RANKED BY RECRUITS"; }
+      else { var lo = Math.floor((m.n - 1) / 100) * 100 + 1; key = lo; label = "#" + pad(lo) + "–#" + pad(lo + 99); }
+      if (!cur || cur.key !== key) { cur = { key: key, label: label, items: [] }; out.push(cur); }
+      cur.items.push(m);
+    });
+    return out;
+  }
+
+  function rowHTML(m, q) {
+    var place = m.place[1] === "dx" ? m.place[0] : m.place[0];
+    var extra = state.f === "recruiters" ? " · " + m.recruits.length + " recruits" : "";
+    return '<li><button class="row" data-call="' + m.call + '">' + shot(m) +
+      '<span class="main"><span class="call">' + hl(m.call, q) + "</span>" + badges(m) +
+      '<div class="who">' + hl(m.name, q) + " <i>· " + hl(place, q) + extra + "</i></div></span>" +
+      '<span class="num">#' + pad(m.n) + "</span></button></li>";
+  }
+  function tileHTML(m) {
+    return '<button class="tile" data-call="' + m.call + '">' + shot(m) + badges(m) +
+      '<span class="call">' + m.call + '</span><span class="num">BKG #' + pad(m.n) + "</span></button>";
+  }
+
+  var out = document.getElementById("out"), jump = document.getElementById("jump"), fame = document.getElementById("fame");
+  function render() {
+    var list = filtered(), gs = groups(list), q = state.q;
+    var narrowed = q || state.f !== "all";
+    fame.hidden = !!narrowed;
+    document.getElementById("resultline").innerHTML = narrowed
+      ? "<b>" + list.length + "</b> of " + members.length + " match"
+      : "Showing all <b>" + members.length + "</b>";
+    if (!list.length) {
+      out.innerHTML = '<div class="empty"><b>NOBODY BY THAT CALL</b>Try part of a callsign (QCF), a first name, a state (WA) or a number (#727).</div>';
+      jump.innerHTML = ""; return;
+    }
+    jump.innerHTML = gs.length > 2 ? gs.map(function (g, i) { return '<a href="#g' + i + '">' + esc(g.label.replace(/–#\d+/, "")) + "</a>"; }).join("") : "";
+    out.innerHTML = gs.map(function (g, i) {
+      var body = state.view === "wall"
+        ? '<div class="wall">' + g.items.map(tileHTML).join("") + "</div>"
+        : '<ul class="rows">' + g.items.map(function (m) { return rowHTML(m, q); }).join("") + "</ul>";
+      return '<section class="block" id="g' + i + '"><div class="block-head"><h3>' + esc(g.label) + "</h3><span>" + g.items.length + " members</span></div>" + body + "</section>";
+    }).join("");
+  }
+
+  // ---------- controls ----------
+  var qEl = document.getElementById("q"), t;
+  qEl.addEventListener("input", function () { clearTimeout(t); t = setTimeout(function () { state.q = qEl.value.trim().toUpperCase(); render(); }, 80); });
+  document.getElementById("chips").addEventListener("click", function (e) {
+    var b = e.target.closest(".chip"); if (!b) return;
+    if (b.id === "sort") {
+      var i = SORTS.findIndex(function (s) { return s[0] === state.sort; });
+      var nx = SORTS[(i + 1) % SORTS.length]; state.sort = nx[0]; b.textContent = nx[1];
+    } else {
+      state.f = b.dataset.f;
+      document.querySelectorAll(".chip[data-f]").forEach(function (c) { c.setAttribute("aria-pressed", String(c === b)); });
+    }
+    render();
+  });
+  function setView(v) {
+    state.view = v;
+    document.getElementById("v-list").setAttribute("aria-pressed", String(v === "list"));
+    document.getElementById("v-wall").setAttribute("aria-pressed", String(v === "wall"));
+    try { localStorage.setItem("bkg-roster-view", JSON.stringify({ view: v })); } catch (e) {}
+    render();
+  }
+  document.getElementById("v-list").addEventListener("click", function () { setView("list"); });
+  document.getElementById("v-wall").addEventListener("click", function () { setView("wall"); });
+
+  // keep the sticky block headers just under the toolbar, whatever its height
+  var bar = document.getElementById("bar");
+  function barH() { document.documentElement.style.setProperty("--bar-h", bar.offsetHeight + "px"); }
+  barH(); window.addEventListener("resize", barH);
+  if (window.ResizeObserver) new ResizeObserver(barH).observe(bar);
+  if (document.fonts) document.fonts.ready.then(barH);
+
+  // ---------- rap sheet ----------
+  var sheet = document.getElementById("sheet"), scrim = document.getElementById("scrim"), opener = null;
+  function link(n) { var m = byNum[n]; return '<button class="linkish" data-call="' + m.call + '">' + m.call + "</button>"; }
+  function open(call, from) {
+    var m = byCall[call]; if (!m) return;
+    if (from) opener = from;
+    var where = m.place[1] === "dx" ? m.place[0] + " (DX)" : m.place[0];
+    var rec = m.recruits.length
+      ? '<div class="recruits">' + m.recruits.slice(0, 24).map(link).join("") + (m.recruits.length > 24 ? '<span class="sample">+' + (m.recruits.length - 24) + " more</span>" : "") + "</div>"
+      : '<span style="color:var(--dim)">None yet. Get out there and pound some brass!</span>';
+    sheet.innerHTML =
+      '<div class="grab"></div><button class="close" id="x" aria-label="Close">×</button>' +
+      '<div class="top">' + shot(m) + '<div><div class="call" id="sheet-call">' + m.call + "</div>" + badges(m) +
+      '<div class="name">' + esc(m.name) + '</div><div class="num">BKG #' + pad(m.n) + "</div></div></div>" +
+      '<dl class="facts"><dt>Joined</dt><dd>' + fmt(m.joined) + "</dd>" +
+      "<dt>Turf</dt><dd>" + esc(where) + (m.terrOG ? " · first BKG member here" : "") + "</dd>" +
+      "<dt>Worked in by</dt><dd>" + (m.sponsor ? link(m.sponsor) + ' <span class="sample">BKG #' + pad(m.sponsor) + "</span>" : "Founded the gang") + "</dd>" +
+      "<dt>Recruits (" + m.recruits.length + ")</dt><dd>" + rec + "</dd></dl>" +
+      '<div class="actions"><a class="btn primary" href="https://www.qrz.com/db/' + m.call + '" target="_blank" rel="noopener">QRZ PAGE</a>' +
+      '<button class="btn ghost" id="copy">COPY LINK</button></div>' +
+      '<p class="sample" id="copied" aria-live="polite" style="margin:8px 0 0">bkg.club/roster#' + m.call + "</p>";
+    sheet.hidden = false; scrim.hidden = false; sheet.scrollTop = 0;
+    document.getElementById("x").focus();
+    document.getElementById("copy").addEventListener("click", function () {
+      var txt = "https://bkg.club/roster#" + m.call, note = document.getElementById("copied");
+      try { navigator.clipboard.writeText(txt).then(function () { note.textContent = "Copied " + txt; }, function () { selectNote(note); }); } catch (e) { selectNote(note); }
+    });
+  }
+  function selectNote(el) { var r = document.createRange(); r.selectNodeContents(el); var s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+  function close() { sheet.hidden = true; scrim.hidden = true; if (opener) { opener.focus(); opener = null; } }
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-call]"); if (!t) return;
+    open(t.dataset.call, sheet.contains(t) ? null : t);
+  });
+  scrim.addEventListener("click", close);
+  sheet.addEventListener("click", function (e) { if (e.target.id === "x") close(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && !sheet.hidden) close(); });
+
+  render();
+  var h = (location.hash || "").slice(1).toUpperCase();
+  if (byCall[h]) open(h);
+})();
+</script>
