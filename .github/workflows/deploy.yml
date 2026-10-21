@@ -43,6 +43,11 @@ jobs:
       artifact_name: ${{ steps.revision.outputs.artifact_name }}
       changed: ${{ steps.decide.outputs.changed }}
       fingerprint: ${{ steps.fingerprint.outputs.value }}
+    env:
+      # Display only, separate from the roster data contract version. Set the
+      # ROSTER_LAYOUT repository variable to "classic" to restore the original
+      # card wall (docs/DEPLOYMENT.md).
+      ROSTER_LAYOUT: ${{ vars.ROSTER_LAYOUT || 'list' }}
     steps:
       - uses: actions/checkout@v7
         with:
