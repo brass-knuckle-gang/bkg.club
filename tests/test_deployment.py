@@ -140,12 +140,12 @@ class DeploymentTests(unittest.TestCase):
 
         index = (self.dist / "index.html").read_text()
         self.assertIn("<!-- MEMBER_COUNT:START -->4<!-- MEMBER_COUNT:END -->", index)
-        self.assertIn('<div class="r2" data-view="list">', index)
+        self.assertIn('<div class="rl" data-view="list">', index)
         self.assertNotIn('class="member-card', index)
-        self.assertIn('<li class="r2-row" id="VE3TST" data-n="3" data-joined="2025-01-04" data-place="Canada" data-flag="🇨🇦" data-sponsor="K2TST">', index)
+        self.assertIn('<li class="rl-row" id="VE3TST" data-n="3" data-joined="2025-01-04" data-place="Canada" data-flag="🇨🇦" data-sponsor="K2TST">', index)
         # The founder has a card of their own, so K2TST (one recruit) tops the recruiter strip.
-        self.assertIn('<a class="r2-fcard r2-red" href="#K2TST" data-call="K2TST"><span class="r2-tag">Top recruiter #1</span>', index)
-        self.assertIn('<div class="r2-badges"><span class="r2-b r2-boss">GODFATHER</span><div class="state-og-badge" title="UT OG">UT OG</div></div>', index)
+        self.assertIn('<a class="rl-fcard rl-red" href="#K2TST" data-call="K2TST"><span class="rl-tag">Top recruiter #1</span>', index)
+        self.assertIn('<div class="rl-badges"><span class="rl-b rl-boss">GODFATHER</span><div class="state-og-badge" title="UT OG">UT OG</div></div>', index)
         self.assertIn('<link rel="stylesheet" href="assets/roster.css">', index)
         self.assertIn('<script src="assets/roster.js" defer></script>', index)
         self.assertIn("BKG #005", index)  # The existing future-member row.
@@ -181,35 +181,29 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(self.downloads, ["https://fixture.invalid/new.png", "https://fixture.invalid/unavailable.jpg"])
         self.assertEqual(json.loads((self.source / "qrz-cache.json").read_text())["W1OLD"], "W1NEW")
 
-    def test_roster_style_switch_restores_classic_card_wall(self):
-        with patch.dict(os.environ, {"BKG_ROSTER_STYLE": "classic"}):
+    def test_roster_layout_switch_restores_classic_card_wall(self):
+        with patch.dict(os.environ, {"ROSTER_LAYOUT": "classic"}):
             self.assertEqual(self.build(), 0)
         site_contract.validate_dist(self.dist)
         index = (self.dist / "index.html").read_text()
         self.assertIn('class="member-card founder-card"', index)
         self.assertIn('href="https://www.qrz.com/db/W1NEW"', index)
-        self.assertNotIn('class="r2"', index)
-        # The v2 assets still ship, and roster.js does nothing without .r2.
+        self.assertNotIn('class="rl"', index)
+        # The list assets still ship, and roster.js does nothing without .rl.
         self.assertTrue((self.dist / "assets/roster.js").is_file())
 
-        # The command-line flag wins over the environment.
-        with patch.dict(os.environ, {"BKG_ROSTER_STYLE": "classic"}), contextlib.redirect_stdout(io.StringIO()), \
-                contextlib.redirect_stderr(io.StringIO()):
-            self.assertEqual(self.builder.main(["--output-dir", str(self.dist), "--roster-style", "v2"]), 0)
-        self.assertIn('class="r2"', (self.dist / "index.html").read_text())
-
-    def test_unknown_roster_style_fails_and_keeps_previous_dist(self):
+    def test_unknown_roster_layout_fails_and_keeps_previous_dist(self):
         self.assertEqual(self.build(), 0)
         previous = (self.dist / "index.html").read_bytes()
-        with patch.dict(os.environ, {"BKG_ROSTER_STYLE": "cards"}):
+        with patch.dict(os.environ, {"ROSTER_LAYOUT": "cards"}):
             self.assertEqual(self.build(), 1)
         self.assertEqual((self.dist / "index.html").read_bytes(), previous)
 
-    def test_blank_roster_style_variable_uses_v2(self):
-        # An unset repository variable reaches the build as an empty string.
-        with patch.dict(os.environ, {"BKG_ROSTER_STYLE": ""}):
+    def test_blank_roster_layout_variable_uses_list(self):
+        # An unset repository variable can reach the build as an empty string.
+        with patch.dict(os.environ, {"ROSTER_LAYOUT": ""}):
             self.assertEqual(self.build(), 0)
-        self.assertIn('class="r2"', (self.dist / "index.html").read_text())
+        self.assertIn('class="rl"', (self.dist / "index.html").read_text())
 
     def test_qrz_outage_uses_canonical_cache_and_previous_photos(self):
         self.qrz = {callsign: None for callsign in self.qrz}

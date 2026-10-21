@@ -30,16 +30,18 @@ For cache recovery, download a matching known-good input artifact with `gh run d
 
 ## Switch the roster back to the classic card wall
 
-The roster on `index.html` has two layouts. `v2` (the default) is the searchable list and mugshot wall in `assets/roster.css` and `assets/roster.js`. `classic` is the original one-card-per-member wall. The builder picks one with `--roster-style`, else the `BKG_ROSTER_STYLE` environment variable, else `v2`. The deploy workflow passes the `ROSTER_STYLE` repository variable through, so the layout can change without a commit:
+The roster on `index.html` has two layouts. `list` (the default) is the searchable list and mugshot wall in `assets/roster.css` and `assets/roster.js`. `classic` is the original one-card-per-member wall. The builder reads the `ROSTER_LAYOUT` environment variable, and the deploy workflow sets it from the repository variable of the same name, so the layout can change without a commit:
 
-1. In GitHub, open **Settings → Secrets and variables → Actions → Variables** and add a repository variable named `ROSTER_STYLE` with the value `classic`.
+1. In GitHub, open **Settings → Secrets and variables → Actions → Variables** and add a repository variable named `ROSTER_LAYOUT` with the value `classic`.
 2. Open **Actions → Deploy → Run workflow** on `main`, or wait for the next hourly run. Changing the layout changes the site fingerprint, so the scheduled run deploys it.
 
-To go back to `v2`, delete the variable (or set it to `v2`) and run the workflow again. Any other value fails the build before upload, so the live site stays as it is. Both layouts pass the same `validate-site.py` checks, and the classic markup is unchanged from before v2.
+To go back to `list`, delete the variable (or set it to `list`) and run the workflow again. Any other value fails the build before upload, so the live site stays as it is. Both layouts pass the same `validate-site.py` checks, and the classic markup is unchanged.
 
-To preview either layout locally: `python3 scripts/build-roster.py --source json --roster-json <file> --roster-style classic --output-dir dist`.
+`ROSTER_LAYOUT` only changes how the roster looks. It is independent of the roster data contract version (`--schema-version` / `ROSTER_EXPORT_VERSION`): either layout renders either contract, and neither layout adds photos, places or other data the selected snapshot does not publish. Roll back one without touching the other.
 
-Re-deploying an older Pages artifact (below) also restores the old roster, but the next hourly run rebuilds from `main` and replaces it. Set `ROSTER_STYLE` for anything longer than an hour. The `pre-roster-v2` branch marks the last commit before v2, in case the change has to be reverted in source.
+To preview either layout locally, set the variable on the build: `ROSTER_LAYOUT=classic python3 scripts/build-roster.py --source json --roster-json <file> --output-dir dist`.
+
+Re-deploying an older Pages artifact (below) also restores the old roster, but the next hourly run rebuilds from `main` and replaces it. Set `ROSTER_LAYOUT` for anything longer than an hour. The `pre-roster-list` branch marks the last commit before the list layout, in case the change has to be reverted in source.
 
 ## Roll back the exact published files
 

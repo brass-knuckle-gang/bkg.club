@@ -69,14 +69,16 @@ QRZ_CACHE_ABOUT = (
 NEW_BADGE_LIMIT = 3  # last N members get the "NEW!!" badge
 OG_BADGE_NUMBERS = {2}  # member numbers that get the "OG" badge (founder #1 has its own treatment)
 
-# "v2" is the searchable list/wall roster; "classic" is the original card wall,
-# kept as a rollback. Production reads BKG_ROSTER_STYLE (the ROSTER_STYLE repo
-# variable) so the old roster can return without a code change.
-ROSTER_STYLES = ("v2", "classic")
-DEFAULT_ROSTER_STYLE = "v2"
-ROSTER_BLOCK_SIZE = 100  # members per numbered block in the v2 roster
-FAME_RECRUITERS = 4  # top recruiters in the v2 "Most Wanted" strip
-FAME_NEWEST = 5  # newest members in the v2 "Most Wanted" strip
+# Roster layout on index.html: "list" is the searchable list/mugshot wall;
+# "classic" is the original card wall, kept as a rollback. The deploy workflow
+# sets ROSTER_LAYOUT from the repository variable of the same name, so the old
+# roster can return without a code change. This is display only and separate
+# from the roster data contract version (--schema-version).
+ROSTER_LAYOUTS = ("list", "classic")
+DEFAULT_ROSTER_LAYOUT = "list"
+ROSTER_BLOCK_SIZE = 100  # members per numbered block in the list layout
+FAME_RECRUITERS = 4  # top recruiters in the list layout's "Most Wanted" strip
+FAME_NEWEST = 5  # newest members in the list layout's "Most Wanted" strip
 
 QRZ_XML_URL = "https://xmldata.qrz.com/xml/current/"
 QRZ_NS = {"q": "http://xmldata.qrz.com"}
@@ -959,9 +961,17 @@ def render_ghost_card(next_number: int) -> str:
                 </div>"""
 
 
-def render_roster_block(members: list[dict], style: str = DEFAULT_ROSTER_STYLE) -> str:
-    if style == "v2":
-        return render_roster_v2(members)
+def roster_layout() -> str:
+    """The ROSTER_LAYOUT environment value, or the default when unset or blank."""
+    layout = os.environ.get("ROSTER_LAYOUT", "").strip() or DEFAULT_ROSTER_LAYOUT
+    if layout not in ROSTER_LAYOUTS:
+        raise ValueError(f"Unknown ROSTER_LAYOUT {layout!r}; use one of: {', '.join(ROSTER_LAYOUTS)}")
+    return layout
+
+
+def render_roster_block(members: list[dict], layout: str = DEFAULT_ROSTER_LAYOUT) -> str:
+    if layout == "list":
+        return render_roster_list(members)
     return render_roster_classic(members)
 
 
@@ -987,7 +997,7 @@ def render_roster_classic(members: list[dict]) -> str:
 
 
 def roster_place(member: dict) -> tuple[str, str]:
-    """(territory, flag) for the v2 roster: ("UT", "") or ("Canada", "🇨🇦")."""
+    """(territory, flag) for the list layout: ("UT", "") or ("Canada", "🇨🇦")."""
     bucket = member_map_bucket(member)
     if bucket is None:
         return "", ""
@@ -1004,8 +1014,8 @@ def roster_thumb_html(member: dict) -> str:
     path = member.get("mugshot_path")
     if path:
         callsign = html_escape(member["callsign"])
-        return f'<img src="{html_escape(path)}" alt="{callsign} QRZ profile photo" loading="lazy">'
-    return f'<span class="r2-ini">{html_escape(roster_initials(member["name"]))}</span>'
+        return f'<img src="{html_escape(path)}" alt="{callsign} profile photo" loading="lazy">'
+    return f'<span class="rl-ini">{html_escape(roster_initials(member["name"]))}</span>'
 
 
 def render_roster_row(member: dict, *, is_og: bool, is_new: bool) -> str:
@@ -1015,34 +1025,34 @@ def render_roster_row(member: dict, *, is_og: bool, is_new: bool) -> str:
     sponsor = member.get("sponsor_member")
     badges = ""
     if member["number"] == 1:
-        badges += '<span class="r2-b r2-boss">GODFATHER</span>'
+        badges += '<span class="rl-b rl-boss">GODFATHER</span>'
     if is_og:
-        badges += '<span class="r2-b r2-og">OG</span>'
+        badges += '<span class="rl-b rl-og">OG</span>'
     badges += territory_og_badge_html(member).strip()
     if is_new:
-        badges += '<span class="r2-b r2-new">NEW</span>'
+        badges += '<span class="rl-b rl-new">NEW</span>'
     data = (
         f' data-n="{member["number"]}"'
         f' data-joined="{parse_join_date(member.get("join_date", "")) or ""}"'
         f' data-place="{html_escape(place)}" data-flag="{flag}"'
         f' data-sponsor="{html_escape(sponsor["callsign"]) if sponsor else ""}"'
     )
-    return f"""                    <li class="r2-row" id="{callsign}"{data}>
-                        <span class="r2-shot">{roster_thumb_html(member)}</span>
-                        <div class="r2-main">
-                            <div class="r2-line"><a href="https://www.qrz.com/db/{callsign}" target="_blank" rel="noopener" class="member-callsign">{callsign}</a><div class="r2-badges">{badges}</div></div>
-                            <div class="r2-who"><div class="member-name">{name}</div><div class="r2-place">{flag + " " if flag else ""}{html_escape(place)}</div></div>
+    return f"""                    <li class="rl-row" id="{callsign}"{data}>
+                        <span class="rl-shot">{roster_thumb_html(member)}</span>
+                        <div class="rl-main">
+                            <div class="rl-line"><a href="https://www.qrz.com/db/{callsign}" target="_blank" rel="noopener" class="member-callsign">{callsign}</a><div class="rl-badges">{badges}</div></div>
+                            <div class="rl-who"><div class="member-name">{name}</div><div class="rl-place">{flag + " " if flag else ""}{html_escape(place)}</div></div>
                         </div>
                         <div class="member-number">BKG #{member["number"]:03d}</div>
                     </li>"""
 
 
 def render_roster_ghost_row(next_number: int) -> str:
-    return f"""                    <li class="r2-row r2-ghost">
-                        <span class="r2-shot"><span class="r2-ini">?</span></span>
-                        <div class="r2-main">
-                            <div class="r2-line"><a href="#join" class="r2-ghost-call">UR CALL HERE??</a></div>
-                            <div class="r2-who"><div class="member-name">Could be U!!</div></div>
+    return f"""                    <li class="rl-row rl-ghost">
+                        <span class="rl-shot"><span class="rl-ini">?</span></span>
+                        <div class="rl-main">
+                            <div class="rl-line"><a href="#join" class="rl-ghost-call">UR CALL HERE??</a></div>
+                            <div class="rl-who"><div class="member-name">Could be U!!</div></div>
                         </div>
                         <div class="member-number">BKG #{next_number:03d}</div>
                     </li>"""
@@ -1051,18 +1061,19 @@ def render_roster_ghost_row(next_number: int) -> str:
 def render_fame_card(member: dict, tag: str, tone: str, sub: str) -> str:
     callsign = html_escape(member["callsign"])
     return (
-        f'<a class="r2-fcard r2-{tone}" href="#{callsign}" data-call="{callsign}">'
-        f'<span class="r2-tag">{tag}</span><span class="r2-shot">{roster_thumb_html(member)}</span>'
-        f'<span class="r2-fcall">{callsign}</span><span class="r2-sub">{sub}</span></a>'
+        f'<a class="rl-fcard rl-{tone}" href="#{callsign}" data-call="{callsign}">'
+        f'<span class="rl-tag">{tag}</span><span class="rl-shot">{roster_thumb_html(member)}</span>'
+        f'<span class="rl-fcall">{callsign}</span><span class="rl-sub">{sub}</span></a>'
     )
 
 
-def render_roster_v2(members: list[dict]) -> str:
+def render_roster_list(members: list[dict]) -> str:
     """Searchable roster: list or mugshot wall, blocks of 100, rap sheets.
 
     Every member is server-rendered (so the page works without JavaScript and
     site_contract.py still sees each callsign, name and number); assets/roster.js
-    adds search, filters, sorting, the wall view and the rap sheet on top.
+    adds search, filters, sorting, the wall view and the rap sheet on top. Photos
+    and places come only from the member data already prepared for this build.
     """
     if not members:
         return ""
@@ -1105,39 +1116,39 @@ def render_roster_v2(members: list[dict]) -> str:
         if index == last_block:
             rows.append(render_roster_ghost_row(next_number))
         blocks.append(
-            f"""                <section class="r2-block" id="r2-{low:03d}">
-                    <div class="r2-head"><h3>#{low:03d}–#{low + ROSTER_BLOCK_SIZE - 1:03d}</h3><span>{len(group)} members</span></div>
-                    <ol class="r2-rows">
+            f"""                <section class="rl-block" id="rl-{low:03d}">
+                    <div class="rl-head"><h3>#{low:03d}–#{low + ROSTER_BLOCK_SIZE - 1:03d}</h3><span>{len(group)} members</span></div>
+                    <ol class="rl-rows">
 {chr(10).join(rows)}
                     </ol>
                 </section>"""
         )
-    jump = "".join(f'<a href="#r2-{i * ROSTER_BLOCK_SIZE + 1:03d}">#{i * ROSTER_BLOCK_SIZE + 1:03d}</a>' for i in sorted(by_block))
-    return f"""                <div class="r2" data-view="list">
-                <div class="r2-bar" hidden>
-                    <div class="r2-search">
-                        <input id="r2-q" type="search" placeholder="Call, name, # or state" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Search the roster">
-                        <div class="r2-views" role="group" aria-label="View">
-                            <button type="button" data-view="list" aria-pressed="true" title="List"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="2" y="3" width="16" height="3"/><rect x="2" y="8.5" width="16" height="3"/><rect x="2" y="14" width="16" height="3"/></svg><span class="r2-sr">List</span></button>
-                            <button type="button" data-view="wall" aria-pressed="false" title="Mugshot wall"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="7" height="7"/><rect x="11" y="2" width="7" height="7"/><rect x="2" y="11" width="7" height="7"/><rect x="11" y="11" width="7" height="7"/></svg><span class="r2-sr">Mugshot wall</span></button>
+    jump = "".join(f'<a href="#rl-{i * ROSTER_BLOCK_SIZE + 1:03d}">#{i * ROSTER_BLOCK_SIZE + 1:03d}</a>' for i in sorted(by_block))
+    return f"""                <div class="rl" data-view="list">
+                <div class="rl-bar" hidden>
+                    <div class="rl-search">
+                        <input id="rl-q" type="search" placeholder="Call, name, # or state" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Search the roster">
+                        <div class="rl-views" role="group" aria-label="View">
+                            <button type="button" data-view="list" aria-pressed="true" title="List"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="2" y="3" width="16" height="3"/><rect x="2" y="8.5" width="16" height="3"/><rect x="2" y="14" width="16" height="3"/></svg><span class="rl-sr">List</span></button>
+                            <button type="button" data-view="wall" aria-pressed="false" title="Mugshot wall"><svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="7" height="7"/><rect x="11" y="2" width="7" height="7"/><rect x="2" y="11" width="7" height="7"/><rect x="11" y="11" width="7" height="7"/></svg><span class="rl-sr">Mugshot wall</span></button>
                         </div>
                     </div>
-                    <div class="r2-chips" role="group" aria-label="Filter and sort">
-                        <button type="button" class="r2-chip" data-filter="all" aria-pressed="true">Everybody</button>
-                        <button type="button" class="r2-chip" data-filter="new" aria-pressed="false">Fresh meat · 30 days</button>
-                        <button type="button" class="r2-chip" data-filter="og" aria-pressed="false">OGs</button>
-                        <button type="button" class="r2-chip" data-filter="recruiters" aria-pressed="false">Recruiters</button>
-                        <button type="button" class="r2-chip" data-filter="photo" aria-pressed="false">Has a mugshot</button>
-                        <button type="button" class="r2-chip r2-sort" aria-pressed="false">Sort: BKG #</button>
+                    <div class="rl-chips" role="group" aria-label="Filter and sort">
+                        <button type="button" class="rl-chip" data-filter="all" aria-pressed="true">Everybody</button>
+                        <button type="button" class="rl-chip" data-filter="new" aria-pressed="false">Fresh meat · 30 days</button>
+                        <button type="button" class="rl-chip" data-filter="og" aria-pressed="false">OGs</button>
+                        <button type="button" class="rl-chip" data-filter="recruiters" aria-pressed="false">Recruiters</button>
+                        <button type="button" class="rl-chip" data-filter="photo" aria-pressed="false">Has a mugshot</button>
+                        <button type="button" class="rl-chip rl-sort" aria-pressed="false">Sort: BKG #</button>
                     </div>
-                    <div class="r2-result" aria-live="polite"></div>
+                    <div class="rl-result" aria-live="polite"></div>
                 </div>
-                <section class="r2-fame" aria-label="Most wanted">
+                <section class="rl-fame" aria-label="Most wanted">
                     <h3>MOST WANTED</h3>
-                    <div class="r2-rail">{"".join(fame)}</div>
+                    <div class="rl-rail">{"".join(fame)}</div>
                 </section>
-                <nav class="r2-jump" aria-label="Jump to block">{jump}</nav>
-                <div class="r2-out">
+                <nav class="rl-jump" aria-label="Jump to block">{jump}</nav>
+                <div class="rl-out">
 {chr(10).join(blocks)}
                 </div>
                 </div>"""
@@ -1463,9 +1474,10 @@ def replace_between(html: str, start_marker: str, end_marker: str, replacement: 
     return pattern.sub(lambda _match: new_block, html, count=1)
 
 
-def update_index(members: list[dict], output_dir: Path, roster_style: str = DEFAULT_ROSTER_STYLE) -> None:
+def update_index(members: list[dict], output_dir: Path) -> None:
     html = INDEX_PATH.read_text()
-    roster = render_roster_block(members, roster_style)
+    layout = roster_layout()
+    roster = render_roster_block(members, layout)
     html = replace_between(
         html,
         "<!-- ROSTER:START - auto-generated by scripts/build-roster.py from Google Sheet -->",
@@ -1567,7 +1579,7 @@ def stage_public_files(output_dir: Path, *, include_photos: bool = True) -> None
 
 
 def build(output_dir: Path, *, source: str = "sheets", roster_json: Path | None = None,
-          enrichment_dir: Path | None = None, roster_style: str = DEFAULT_ROSTER_STYLE) -> None:
+          enrichment_dir: Path | None = None) -> None:
     if source == "json":
         from roster_input import parse_roster_json, read_roster_json
         from roster_enrichment import annotate_json_enrichment
@@ -1604,8 +1616,8 @@ def build(output_dir: Path, *, source: str = "sheets", roster_json: Path | None 
         # After QRZ so updated sheet callsigns resolve.
         resolve_sponsors(members)
         stage_public_files(output_dir)
-    update_index(members, output_dir, roster_style)
-    print(f"Updated {INDEX_PATH.name} ({roster_style} roster)")
+    update_index(members, output_dir)
+    print(f"Updated {INDEX_PATH.name}")
 
     update_tree(members, output_dir)
     print(f"Updated {TREE_PATH.name}")
@@ -1632,9 +1644,6 @@ def main(argv: list[str] | None = None) -> int:
                         help="explicit local JSON export; otherwise JSON uses ROSTER_EXPORT_URL")
     parser.add_argument("--enrichment-dir", type=Path,
                         help="optional sanitized JSON enrichment cache; never refreshed during rendering")
-    parser.add_argument("--roster-style", choices=ROSTER_STYLES,
-                        help=f"roster layout (default: $BKG_ROSTER_STYLE, else {DEFAULT_ROSTER_STYLE}; "
-                             "'classic' restores the original card wall)")
     args = parser.parse_args(argv)
     output_dir = args.output_dir.resolve()
     try:
@@ -1642,9 +1651,6 @@ def main(argv: list[str] | None = None) -> int:
         if (output_dir == source_root or output_dir in source_root.parents
                 or (output_dir.is_relative_to(source_root) and output_dir != source_root / "dist")):
             raise ValueError("Output must be dist/ or a directory outside the source repository")
-        roster_style = args.roster_style or os.environ.get("BKG_ROSTER_STYLE", "").strip() or DEFAULT_ROSTER_STYLE
-        if roster_style not in ROSTER_STYLES:
-            raise ValueError(f"Unknown roster style {roster_style!r}; use one of: {', '.join(ROSTER_STYLES)}")
         if args.source == "sheets" and (args.roster_json or args.enrichment_dir):
             raise ValueError("JSON options require explicit --source json")
         if args.source == "json":
@@ -1665,7 +1671,7 @@ def main(argv: list[str] | None = None) -> int:
             staged = Path(temporary) / "public"
             staged.mkdir()
             build(staged, source=args.source, roster_json=args.roster_json,
-                  enrichment_dir=args.enrichment_dir, roster_style=roster_style)
+                  enrichment_dir=args.enrichment_dir)
             validate_dist(staged, source=args.source)
             previous = Path(temporary) / "previous"
             if output_dir.exists():

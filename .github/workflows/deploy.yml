@@ -39,6 +39,11 @@ jobs:
       artifact_name: ${{ steps.revision.outputs.artifact_name }}
       changed: ${{ steps.decide.outputs.changed }}
       fingerprint: ${{ steps.fingerprint.outputs.value }}
+    env:
+      # Display only, separate from the roster data contract version. Set the
+      # ROSTER_LAYOUT repository variable to "classic" to restore the original
+      # card wall (docs/DEPLOYMENT.md).
+      ROSTER_LAYOUT: ${{ vars.ROSTER_LAYOUT || 'list' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -90,11 +95,7 @@ jobs:
             --max-age-hours 24 --interval-hours 1 --workers 4 \
             --require-usable ${RECHECK:+--recheck "$RECHECK"}
 
-      # Roster layout: set the ROSTER_STYLE repository variable to "classic"
-      # to bring back the original card wall (see docs/DEPLOYMENT.md).
       - name: Build roster from the saved snapshot
-        env:
-          BKG_ROSTER_STYLE: ${{ vars.ROSTER_STYLE }}
         run: |
           python3 scripts/build-roster.py --source json \
             --roster-json "$RUNNER_TEMP/bkg-build/roster.json" \
