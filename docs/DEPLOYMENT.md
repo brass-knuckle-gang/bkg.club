@@ -39,7 +39,7 @@ To go back to `v2`, delete the variable (or set it to `v2`) and run the workflow
 
 To preview either layout locally: `python3 scripts/build-roster.py --source json --roster-json <file> --roster-style classic --output-dir dist`.
 
-Re-deploying an older Pages artifact (below) also restores the old roster, but the next hourly run rebuilds from `main` and replaces it. Set `ROSTER_STYLE` for anything longer than an hour. The tag `pre-roster-v2` marks the last commit before v2 if the change has to be reverted in source.
+Re-deploying an older Pages artifact (below) also restores the old roster, but the next hourly run rebuilds from `main` and replaces it. Set `ROSTER_STYLE` for anything longer than an hour. The `pre-roster-v2` branch marks the last commit before v2, in case the change has to be reverted in source.
 
 ## Roll back the exact published files
 
