@@ -26,14 +26,15 @@ class RosterCacheTests(unittest.TestCase):
         response.headers["ETag"] = etag or self.etag
         return response
 
-    def read(self, response, *, url=None, version="2"):
+    def read(self, response, *, url=None, version="2", exclude_invalid_callsigns=False):
         with patch.object(roster_input.urllib.request, "build_opener") as opener:
             if isinstance(response, Exception):
                 opener.return_value.open.side_effect = response
             else:
                 opener.return_value.open.return_value = response
             text = roster_input.read_roster_json(url=url or self.url, environ={},
-                                                 expected_version=version, cache_dir=self.cache)
+                                                 expected_version=version, cache_dir=self.cache,
+                                                 exclude_invalid_callsigns=exclude_invalid_callsigns)
             self.request = opener.return_value.open.call_args.args[0]
             return text
 
@@ -49,6 +50,19 @@ class RosterCacheTests(unittest.TestCase):
         self.assertEqual(self.read(self.not_modified()), self.text)
         self.assertEqual(self.request.get_header("If-none-match"), self.etag)
         self.assertEqual((self.cache / "v2.json").read_bytes(), before)
+
+    def test_projection_cache_keeps_source_bytes_and_source_etag_through_304(self):
+        original = json.loads(self.text)
+        original["members"][0]["callsign"] = "KCØDWZ"
+        original["content_hash"] = roster_input.roster_content_hash(original)
+        self.text = json.dumps(original, ensure_ascii=False)
+        self.etag = f'W/"{original["content_hash"]}"'
+        self.assertEqual(self.read(self.response(), exclude_invalid_callsigns=True), self.text)
+        projected, _ = roster_input.parse_roster_json(self.text, expected_version="2", exclude_invalid_callsigns=True)
+        self.assertNotEqual(projected["content_hash"], original["content_hash"])
+        self.assertEqual(self.read(self.not_modified(), exclude_invalid_callsigns=True), self.text)
+        self.assertEqual(self.request.get_header("If-none-match"), self.etag)
+        self.assertEqual(json.loads((self.cache / "v2.json").read_text())["snapshot"], self.text)
 
     def test_corrupt_or_wrong_version_cache_forces_unconditional_fetch(self):
         self.read(self.response())
