@@ -12,7 +12,7 @@ The production workflow explicitly selects `--source json` for both builder and 
 
 ## One snapshot per run
 
-`fetch-roster.py` makes one anonymous HTTPS GET, validates the complete response, and atomically saves `$RUNNER_TEMP/bkg-build/roster.json` outside the checkout and published output. Refresh, build, and validation consume that file. Consumers independently revalidate the saved bytes; they never refetch the URL. The final validation also compares the public JSON envelope with the saved input.
+`fetch-roster.py` makes one anonymous HTTPS GET and validates the complete source contract and content hash. It saves the exact response as `$RUNNER_TEMP/bkg-build/roster-source.json` and the publication roster as `roster.json`, outside the checkout and published output. These match unless callsigns are excluded as described below. Refresh, build, and validation consume only the publication roster. Consumers independently revalidate the saved bytes; they never refetch the URL. The final validation compares the public JSON envelope with that saved publication input.
 
 HTTPS, redirect rejection, the 30-second transport timeout, 8 MiB input limit, sanitized errors, schema/hash/reference checks, and empty-roster rejection are preserved. Optional Access headers are supported by the reader for other endpoints only when both credential fields are valid; an incomplete or empty pair fails before requesting. The deployed public feed needs neither header nor API token. Missing configuration or invalid input stops the workflow before artifact upload; the last published site remains available.
 
@@ -29,6 +29,23 @@ The output guard deliberately permits JSON in `dist/` as well as external previe
 OG badges and note labels come only from stored `og_assignments`. A holder who moves from Vermont to New York keeps `VT OG`; current QTH places that member on the New York map. JSON does not choose a new holder by current state, member number, or enrichment. Inactive members, inactive sponsors, and assignments with inactive holders are suppressed upstream; the builder validates all remaining references and never restores them from a cache.
 
 Validation rejects unsupported schema versions, additional/private fields, duplicate identities or JSON keys, unsorted arrays, invalid sponsor/OG references, sponsor cycles, unsafe text, and mismatched content hashes. Empty active rosters are rejected even though the upstream empty fixture is valid API output. HTML and embedded JSON escape reviewed text before publication. Generation and validation complete in a temporary directory before the previous output can be replaced.
+
+Publication tolerates one narrowly defined record error: a printable callsign
+containing characters other than ASCII letters and digits, including slashes.
+After validating the entire source and its original hash, it excludes those
+members and creates a projection with its own valid content hash. No callsign is
+guessed or rewritten. Recruits of an excluded member remain in the roster with a
+null sponsor; OG assignments held by excluded members are omitted without
+reassignment. Counts, roster rows, maps, downline, notes, photos, and public JSON
+all consume the same projection. If every member would be excluded, publication
+fails and preserves the previous site. All other validation remains strict.
+
+The fetch step emits Actions warnings and a step summary with excluded BKG
+numbers and reasons, never untrusted field values. Its JSON record contains
+source/publication counts and hashes plus the exclusions. The 30-day input
+artifact retains the exact source and publication files and this record even
+when the accepted site is unchanged. Conditional GET caches always retain the
+source bytes and source ETag; they never send a projection hash upstream.
 
 ## Separate photo and geographic enrichment
 
@@ -78,7 +95,7 @@ Run `python3 -m unittest discover -s tests -v` without production credentials. T
 | Downline | Identical 6 nodes and 3 stable sponsor edges. |
 | Outbreak | Identical 6 identities, sponsor edges, territories, 5 parsed QSO dates, and optional coarse coordinates; the missing date stays null. |
 | `members.txt` | Same 6 callsign/number records. JSON uses full reviewed names and only stored OG assignments; Sheets retains abbreviated names and inferred OGs. |
-| Public JSON snapshot | Exact validated upstream envelope, including its hash and historical date text; absent from Sheets output. |
+| Public JSON snapshot | Validated publication envelope, identical to upstream unless callsigns were excluded; absent from Sheets output. |
 
 The intentional OG differences are explicit: Sheets infers IL for #1 and NY for moved holder #88, while JSON renders stored IL for #7 and VT for #88. Both retain Canada for #21; JSON does not add the hardcoded founder/number OG note. Additional tests remove inactive #7 and its IL assignment, leave IL member #1 without an OG, and reuse #7's callsign on #40 while #21's suppressed sponsor stays null. Tests also exercise reviewed callsign changes, moved QTH suppressing stale coordinates while keeping a photo/stored OG, missing/corrupt enrichment, filtered inactive cache/photos, escaped HTML/script text, and malformed/empty exports preserving the previous output. Separate enrichment tests cover failed refresh retaining sanitized geography and photos.
 
@@ -112,7 +129,7 @@ Snapshot validation is strict and version-specific. v1 remains the command-line
 default. `--schema-version 2` is required to accept v2, and v2 rejects
 `--enrichment-dir`. Photo downloads are a separate publication command; the
 renderer is entirely offline. The output includes only selected active photos
-and the exact envelope at `data/v2/roster.json`. The content hash covers accepted
+and the publication envelope at `data/v2/roster.json`. The content hash covers accepted
 locations and photo metadata along with the existing membership/OG fields.
 
 ```sh

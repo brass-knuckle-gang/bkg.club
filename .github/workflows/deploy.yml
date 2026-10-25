@@ -76,6 +76,7 @@ jobs:
             bkg-roster-v${{ env.ROSTER_EXPORT_VERSION }}-
 
       - name: Fetch and validate one public roster snapshot
+        id: snapshot
         env:
           ROSTER_EXPORT_URL: ${{ secrets.ROSTER_EXPORT_URL }}
           ROSTER_EXPORT_V2_URL: ${{ secrets.ROSTER_EXPORT_V2_URL }}
@@ -198,10 +199,10 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # Pair the exact reviewed input and sanitized cache with the immutable
-      # Pages archive for inspection and future cache recovery (30 days).
+      # Keep the exact source, publication projection, exclusion report and
+      # sanitized inputs, including exclusions during an unchanged deploy.
       - name: Retain reviewed snapshot and validated public inputs
-        if: steps.decide.outputs.changed == 'true'
+        if: steps.decide.outputs.changed == 'true' || steps.snapshot.outputs.excluded_members != '0'
         uses: actions/upload-artifact@v7
         with:
           name: bkg-build-inputs-${{ github.run_id }}-${{ github.run_attempt }}

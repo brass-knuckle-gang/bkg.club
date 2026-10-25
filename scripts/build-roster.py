@@ -1587,7 +1587,11 @@ def build(output_dir: Path, *, source: str = "sheets", roster_json: Path | None 
           asset_dir: Path | None = None, asset_origin: str | None = None) -> None:
     if source == "json":
         from roster_input import parse_roster_json, read_roster_json
-        envelope, members = parse_roster_json(read_roster_json(roster_json), expected_version=schema_version)
+        exclusions = []
+        envelope, members = parse_roster_json(read_roster_json(roster_json), expected_version=schema_version,
+                                               exclude_invalid_callsigns=True, exclusions=exclusions)
+        for exclusion in exclusions:
+            print(f"WARNING: Excluding BKG #{exclusion['bkg_number']}: {exclusion['reason']}", file=sys.stderr)
         for member in members:
             member["state"], member["country"] = qth_location(member["qth"])
         if schema_version == "2":
