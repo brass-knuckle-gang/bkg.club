@@ -852,7 +852,7 @@ fn arena(y: i32, x0: i32, row: &mut [Rgb565], shadow: Option<i16>, st: &Stage, k
 }
 
 // ---------------------------------------------------------------------------------------------
-// The startup screen: the logo, BRASS KNUCKLES GANG punched in a letter line at a time, and
+// The startup screen: the logo, BRASS KNUCKLE GANG punched in a letter line at a time, and
 // impact stars going off all over the screen.
 
 /// The art rows the splash animates; the motto band sits under them, at full resolution.
@@ -870,7 +870,7 @@ const RED: Rgb565 = rgb(0xD81818);
 const GREEN: Rgb565 = rgb(0x30FF50);
 const BAND: Rgb565 = rgb(0x0A0306);
 const STARS: usize = 12;
-const LINES: [(&str, u32, i32); 3] = [("BRASS", 650, 43), ("KNUCKLES", 900, 60), ("GANG", 1150, 77)];
+const LINES: [(&str, u32, i32); 3] = [("BRASS", 650, 43), ("KNUCKLE", 900, 60), ("GANG", 1150, 77)];
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct Splash {

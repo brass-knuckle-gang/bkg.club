@@ -65,7 +65,7 @@ const RECEIVE: [Row; 7] = [
     row("CALLS", "CALLSIGNS TO COPY AND KEY BACK", "", Item::Practice(Practice::Drill(Kind::Calls))),
     row("NINJA", "A WORD IN MORSE, THEN SPOKEN", "MORSE CODE NINJA  AD0WE", Item::Practice(Practice::Drill(Kind::Ninja))),
     row("HEAD", "COPY WHOLE WORDS IN YOUR HEAD", "", Item::Practice(Practice::Drill(Kind::Head))),
-    row("BOXING", "DODGE PUNCHES: KEY BACK THE TELL", "BRASS KNUCKLES GANG", Item::Open(Screen::Boxing)),
+    row("BOXING", "DODGE PUNCHES: KEY BACK THE TELL", "BRASS KNUCKLE GANG", Item::Open(Screen::Boxing)),
     row("SUPERFISH", "FLAP THROUGH PIPES, KEY THE WORDS", "SUPERFISH CW", Item::Superfish),
 ];
 

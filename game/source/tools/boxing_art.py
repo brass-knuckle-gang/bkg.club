@@ -1119,7 +1119,7 @@ STAR = [
 ]
 
 
-# The Brass Knuckles Gang logo, as the gang drew it: a 1-bit silhouette, shaded in brass by
+# The Brass Knuckle Gang logo, as the gang drew it: a 1-bit silhouette, shaded in brass by
 # tools/spritegen.py. A tools/art/logo.png replaces it.
 LOGO_MASK = [
     "......................###..............###......................",

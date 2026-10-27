@@ -1,7 +1,7 @@
 //! Brass Knuckles Knock Out: the title screen and fighter select, the fighter's intro card, the
 //! fight, and the results. The rules live in `pocketcw_logic::boxing`; the ring is `ring`.
 //!
-//! Opening the game plays the startup screen: the brass knuckles logo, BRASS KNUCKLES GANG and
+//! Opening the game plays the startup screen: the brass knuckles logo, BRASS KNUCKLE GANG and
 //! the motto, with impact stars going off all over. Each fight is on one of four stages, picked
 //! at random.
 //!

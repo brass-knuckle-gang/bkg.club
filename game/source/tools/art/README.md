@@ -1,6 +1,6 @@
 # Startup logo
 
-Put the Brass Knuckles Gang logo here as `logo.png`, then run:
+Put the Brass Knuckle Gang logo here as `logo.png`, then run:
 
     python3 tools/spritegen.py
 
