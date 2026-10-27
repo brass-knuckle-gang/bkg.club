@@ -44,6 +44,7 @@ class DeploymentTests(unittest.TestCase):
             target = self.source / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
+        shutil.copytree(ROOT / site_contract.GAME_DIR, self.source / site_contract.GAME_DIR)
         for relative in ("name-overrides.txt", "location-overrides.txt"):
             shutil.copyfile(FIXTURES / relative, self.source / relative)
         (self.source / "qrz-cache.json").write_text('{"W1OLD":"W1NEW"}\n')
@@ -133,7 +134,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(self.build(), 0)
         site_contract.validate_dist(self.dist)
         self.assertEqual((self.source / "index.html").read_bytes(), source_index)
-        for relative in site_contract.PUBLIC_FILES:
+        for relative in (*site_contract.PUBLIC_FILES, *site_contract.GAME_REQUIRED):
             self.assertTrue((self.dist / relative).is_file(), relative)
         for private in ("qrz-cache.json", "name-overrides.txt", "location-overrides.txt", "private.txt", "scripts", ".github", "images/mugshots/.sources.json"):
             self.assertFalse((self.dist / private).exists(), private)
@@ -332,7 +333,7 @@ class DeploymentTests(unittest.TestCase):
 
     def test_validator_rejects_missing_assets_photos_and_internal_files(self):
         self.assertEqual(self.build(), 0)
-        for relative in (*site_contract.PUBLIC_FILES, "members.txt", "images/mugshots/W1NEW.png"):
+        for relative in (*site_contract.PUBLIC_FILES, *site_contract.GAME_REQUIRED, "members.txt", "images/mugshots/W1NEW.png"):
             with self.subTest(relative=relative):
                 target = self.dist / relative
                 original = target.read_bytes()

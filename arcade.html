@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>~*~BKG ARCADE~*~ Learn Morse By Punching Things!!</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%231a0a00' stroke='%23D4AF37' stroke-width='2'/%3E%3Crect x='5' y='20' width='22' height='6' rx='2' fill='%23D4AF37'/%3E%3Crect x='5' y='16' width='22' height='5' fill='%23D4AF37'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/bkg.css">
+    <style>
+        /* ============================================================
+           ARCADE PAGE (arcade.html)
+           ------------------------------------------------------------
+           Wraps the self-contained game build in game/index.html (made
+           by Derick, KO6PBZ). That file is a compiled build: never edit
+           it here. Changes go in the game's own repo, then re-copy it.
+           The frame is same-origin, so one click on PLAY loads the game
+           and presses its own start button, which unlocks the sound.
+           ============================================================ */
+        .game-wrap {
+            max-width: 1000px;
+            margin: 0 auto 20px;
+            background: #000;
+            border: 4px ridge var(--brass);
+            position: relative;
+        }
+        .game-frame {
+            display: block;
+            width: 100%;
+            height: 860px;
+            max-height: 90vh;
+            min-height: 520px;
+            border: 0;
+            background: #140b0e;
+        }
+        .game-play {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            width: 100%;
+            background: radial-gradient(ellipse at center, #2c1a21 0%, #140b0e 75%);
+            color: var(--brass-light);
+            border: 0;
+            cursor: pointer;
+            font-family: 'Bangers', cursive;
+            letter-spacing: 2px;
+            text-align: center;
+            padding: 16px;
+            overflow: hidden;
+        }
+        .game-splash {
+            display: block;
+            width: min(100%, 680px);
+            height: auto;
+            aspect-ratio: 4 / 3;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            border: 4px ridge var(--brass);
+            box-shadow: 0 0 0 6px #0a0507, 0 0 40px rgba(212, 175, 55, 0.35);
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+        .game-play .big {
+            font-size: clamp(2rem, 7vw, 3.4rem);
+            color: var(--brass-light);
+            text-shadow: 3px 3px 0 var(--blood-red), 5px 5px 0 #000;
+            animation: pressStart 1s steps(2, jump-none) infinite;
+        }
+        @keyframes pressStart { 0% { opacity: 1; } 100% { opacity: 0.35; } }
+        .game-play .small { font-family: 'Special Elite', monospace; font-size: 0.95rem; letter-spacing: 0; color: #ccc; }
+        .game-play:hover .game-splash, .game-play:focus-visible .game-splash {
+            transform: scale(1.02);
+            box-shadow: 0 0 0 6px #0a0507, 0 0 60px rgba(255, 215, 0, 0.7);
+        }
+        .game-play:hover .big, .game-play:focus-visible .big { color: #fff; }
+        .game-play:focus-visible { outline: 3px solid var(--brass-light); outline-offset: -6px; }
+        @media (prefers-reduced-motion: reduce) {
+            .game-play .big { animation: none; }
+            .game-splash { transition: none; }
+        }
+        .game-play[hidden] { display: none; }
+        .arcade-game-title {
+            max-width: 1000px;
+            margin: 0 auto 4px;
+            font-family: 'Bangers', cursive;
+            font-size: 1.8rem;
+            letter-spacing: 1px;
+            color: var(--brass-light);
+            text-shadow: 2px 2px 0 var(--blood-red);
+        }
+        .arcade-game-blurb {
+            max-width: 1000px;
+            margin: 0 auto 12px;
+            font-family: 'Comic Neue', 'Comic Sans MS', 'Chalkboard SE', cursive;
+            color: #ddd;
+        }
+        .game-info {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+            border: 4px ridge var(--brass);
+            padding: 18px;
+            font-family: 'Comic Neue', 'Comic Sans MS', 'Chalkboard SE', cursive;
+            color: #ddd;
+            line-height: 1.5;
+        }
+        .game-info h3 { font-family: 'Bangers', cursive; color: var(--brass-light); letter-spacing: 1px; margin: 0 0 6px; font-size: 1.4rem; }
+        .game-info p { margin: 0 0 12px; }
+        .game-info a { color: var(--brass-light); }
+        .game-credit { font-family: 'Special Elite', monospace; font-size: 0.95rem; }
+        .game-beta {
+            max-width: 1000px;
+            margin: 0 auto 14px;
+            background: var(--blood-red);
+            border: 3px ridge var(--brass);
+            color: #fff;
+            padding: 10px 14px;
+            font-family: 'Comic Neue', 'Comic Sans MS', 'Chalkboard SE', cursive;
+            font-size: 1rem;
+            line-height: 1.4;
+        }
+        .game-beta strong { font-family: 'Bangers', cursive; letter-spacing: 1px; font-size: 1.2rem; color: var(--brass-light); margin-right: 6px; }
+        .game-beta a { color: var(--brass-light); }
+        .game-keys { margin: 0 0 12px; padding-left: 20px; font-size: 0.95rem; }
+        .game-keys kbd {
+            font-family: 'Special Elite', monospace;
+            background: #000;
+            border: 2px outset var(--brass-dark);
+            padding: 0 5px;
+            color: var(--brass-light);
+        }
+    </style>
+</head>
+<body>
+    <div class="tiled-bg"></div>
+    <div class="grunge-overlay"></div>
+    <div class="floating-knuckle">🤜</div>
+    <div class="floating-knuckle">🤛</div>
+    <div class="floating-knuckle">🤜</div>
+    <div class="floating-knuckle">🤛</div>
+
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-area">
+                <div>
+                    <a href="index.html" class="logo-text"><span>BKG</span>.club</a>
+                    <div class="tagline">Get ur brass on the air!! ✨</div>
+                </div>
+            </div>
+            <nav class="nav-links">
+                <a href="index.html#home">HOME</a>
+                <a href="index.html#bylaws">BYLAWS</a>
+                <a href="index.html#join">JOIN</a>
+                <a href="index.html#roster">ROSTER</a>
+                <a href="index.html#map">MAP</a>
+                <a href="nearby.html">NEARBY</a>
+                <a href="tree.html">DOWNLINE</a>
+                <a href="recruit.html">RECRUIT</a>
+                <a href="clubs.html">CLUBS</a>
+                <a href="safety.html">SAFETY</a>
+                <a href="outbreak.html">OUTBREAK</a>
+                <a href="badges.html">BADGES</a>
+                <a href="arcade.html" class="active">ARCADE</a>
+                <a href="https://programmer.bkg.club" target="_blank" rel="noopener">PROGRAMMER</a>
+                <a href="https://discord.gg/wDs5dth22k" target="_blank" rel="noopener">DISCORD</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="marquee-container">
+        <div class="marquee-text">
+            ★彡 WELCOME 2 THE BKG ARCADE!! 彡★ NOW PLAYING: BRASS KNUCKLES KNOCK OUT!! 彡★ KEY BACK THE TELL 2 DODGE, THEN COUNTER!! 彡★ ALL DITS JAB, ALL DAHS HOOK!! 彡★ EIGHT FIGHTERS, ONE LID LARRY!! 彡★ 2 METER CW OR BUST!!! 彡★
+        </div>
+    </div>
+
+    <main class="main-wrapper">
+        <a href="index.html" class="back-link">⟵ BACK 2 HQ</a>
+        <h2 class="section-title">THE ARCADE</h2>
+        <div class="section-subtitle">🤜 Games made by the gang, for the gang. Insert brass. 🤜</div>
+
+        <h3 class="arcade-game-title">NOW PLAYING: BRASS KNUCKLES KNOCK OUT</h3>
+        <div class="arcade-game-blurb">A boxing game that teaches Morse code. Sponsored by yours truly.</div>
+
+        <div class="game-beta" role="note">
+            <strong>BETA!!</strong> This game is still in beta. Found a bug? Report it in the
+            <a href="https://discord.gg/wDs5dth22k" target="_blank" rel="noopener">Brass Knuckle Gang Discord</a>.
+        </div>
+
+        <div class="game-wrap" id="gameWrap">
+            <iframe class="game-frame" id="gameFrame" title="Brass Knuckles Knock Out, a Morse code boxing game"
+                    allow="autoplay" loading="lazy" tabindex="0"></iframe>
+            <button type="button" class="game-play" id="gamePlay">
+                <img class="game-splash" src="assets/knockout-splash.png" width="960" height="720"
+                     alt="Brass Knuckles Gang title screen: a gold brass knuckles above red pixel lettering">
+                <span class="big">▶ PRESS START</span>
+                <span class="small">Loads the game and turns the sound on. Turn ur speakers up!!</span>
+            </button>
+        </div>
+
+        <div class="game-info">
+            <h3>HOW 2 PLAY</h3>
+            <p>Every opponent sends a Morse character before each punch. Key the same character back to dodge, then counter. All dits jab, all dahs hook, mixed characters throw combos. Fighters add characters in Koch order as you climb the ladder.</p>
+            <ul class="game-keys">
+                <li><kbd>Z</kbd> and <kbd>X</kbd>: dit and dah. Hold both to squeeze.</li>
+                <li>Left and right <kbd>Ctrl</kbd> or <kbd>[</kbd> and <kbd>]</kbd>: dit and dah, for a Vail adapter or any USB paddle adapter in keyboard mode.</li>
+                <li><kbd>Space</kbd> or <kbd>Enter</kbd>: pick a fighter, ring the bell, pause. <kbd>←</kbd> <kbd>→</kbd>: next or previous fighter.</li>
+                <li><kbd>1</kbd> to <kbd>4</kbd>: F1 to F4. On a phone, tap the buttons under the screen.</li>
+            </ul>
+            <p>Click the game first so it gets ur keystrokes. Fighters and best scores are saved in this browser only.</p>
+            <p>🐛 It's a beta: if something breaks, tell us in the <a href="https://discord.gg/wDs5dth22k" target="_blank" rel="noopener">Discord</a> with what you were doing and which browser or device you used.</p>
+
+            <p class="game-credit">Created by Derick, KO6PBZ. Built on the HamCube <a href="https://github.com/kvmet/k5mme_pocketcw" target="_blank" rel="noopener">PocketCW firmware</a> by Kristen, K5MME. Sponsored by The Brass Knuckle Gang.</p>
+            <p class="game-credit">Free software under the GNU GPL v3: <a href="game/source/README.md">source code</a> ·
+                <a href="game/LICENSE">license</a> · <a href="game/THIRD-PARTY.txt">third-party notices</a> ·
+                <a href="game/index.html">play full screen</a></p>
+        </div>
+    </main>
+
+    <script>
+    (function () {
+        var frame = document.getElementById('gameFrame');
+        var play = document.getElementById('gamePlay');
+        var GAME_KEYS = ['Space', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
+                         'KeyZ', 'KeyX', 'BracketLeft', 'BracketRight', 'ControlLeft', 'ControlRight', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Escape'];
+
+        // The game's own start button is what unlocks sound, so press it for the
+        // visitor. This runs inside their click, and the frame is same-origin.
+        function pressGameStart() {
+            try {
+                var doc = frame.contentDocument;
+                var start = doc && doc.getElementById('start');
+                if (start && !start.hidden) start.click();
+            } catch (e) { /* if blocked, the game's own start button still works */ }
+            try { frame.contentWindow.focus(); } catch (e) { frame.focus(); }
+        }
+
+        play.addEventListener('click', function () {
+            play.hidden = true;
+            frame.addEventListener('load', pressGameStart, { once: true });
+            frame.src = 'game/index.html';
+        });
+
+        // A USB paddle adapter (Vail, etc.) types keys, so the frame must keep focus.
+        // Hand focus back whenever the visitor returns to this tab or clicks the game.
+        function refocus() {
+            if (!play.hidden) return;
+            try { frame.contentWindow.focus(); } catch (e) { frame.focus(); }
+        }
+        window.addEventListener('focus', refocus);
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) refocus(); });
+        document.getElementById('gameWrap').addEventListener('pointerup', refocus);
+
+        // While the game is active the page must not scroll on Space or the arrows.
+        // Keys typed inside the frame go to the game, so this only covers the moment
+        // after the visitor clicks the game border, before the frame has focus.
+        window.addEventListener('keydown', function (e) {
+            if (play.hidden && GAME_KEYS.indexOf(e.code) !== -1 &&
+                (document.activeElement === frame || document.activeElement === document.body)) {
+                if (e.code === 'Space' || e.code.indexOf('Arrow') === 0) e.preventDefault();
+                try { frame.contentWindow.focus(); } catch (err) { /* ignore */ }
+            }
+        });
+    })();
+    </script>
+</body>
+</html>

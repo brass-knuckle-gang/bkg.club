@@ -1,0 +1,45 @@
+//! Hardware-free parts of the firmware, tested on the host with `cargo test`.
+#![no_std]
+
+pub mod adpcm;
+pub mod battery;
+pub mod board;
+pub mod boxing;
+pub mod buttons;
+pub mod config;
+pub mod decode_lines;
+pub mod decoder;
+pub mod dial;
+pub mod drill;
+pub mod hand;
+pub mod hotline;
+pub mod hunt;
+pub mod input;
+pub mod keyboard;
+pub mod keyer;
+pub mod letters;
+pub mod listen;
+pub mod log;
+mod math;
+pub mod memories;
+pub mod midi;
+pub mod morse;
+pub mod pack;
+pub mod panel;
+pub mod player;
+pub mod progress;
+pub mod pwm;
+pub mod qso;
+pub mod ragchew;
+pub mod record;
+pub mod rng;
+pub mod sender;
+pub mod serial;
+pub mod settings;
+pub mod sfdp;
+pub mod synth;
+pub mod text;
+pub mod ticks;
+pub mod timing;
+pub mod volume;
+pub mod winkeyer;
