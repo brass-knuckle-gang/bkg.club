@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>~*~BKG KNOCK OUT~*~ Learn Morse By Punching Things!!</title>
+    <title>~*~BKG KNOCK OUT (BETA)~*~ Learn Morse By Punching Things!!</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%231a0a00' stroke='%23D4AF37' stroke-width='2'/%3E%3Crect x='5' y='20' width='22' height='6' rx='2' fill='%23D4AF37'/%3E%3Crect x='5' y='16' width='22' height='5' fill='%23D4AF37'/%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -72,6 +72,19 @@
         .game-info p { margin: 0 0 12px; }
         .game-info a { color: var(--brass-light); }
         .game-credit { font-family: 'Special Elite', monospace; font-size: 0.95rem; }
+        .game-beta {
+            max-width: 1000px;
+            margin: 0 auto 14px;
+            background: var(--blood-red);
+            border: 3px ridge var(--brass);
+            color: #fff;
+            padding: 10px 14px;
+            font-family: 'Comic Neue', 'Comic Sans MS', 'Chalkboard SE', cursive;
+            font-size: 1rem;
+            line-height: 1.4;
+        }
+        .game-beta strong { font-family: 'Bangers', cursive; letter-spacing: 1px; font-size: 1.2rem; color: var(--brass-light); margin-right: 6px; }
+        .game-beta a { color: var(--brass-light); }
         .game-keys { margin: 0 0 12px; padding-left: 20px; font-size: 0.95rem; }
         .game-keys kbd {
             font-family: 'Special Elite', monospace;
@@ -129,6 +142,11 @@
         <h2 class="section-title">BRASS KNUCKLES KNOCK OUT</h2>
         <div class="section-subtitle">🤜 A boxing game that teaches Morse code. Sponsored by yours truly. 🤜</div>
 
+        <div class="game-beta" role="note">
+            <strong>BETA!!</strong> This game is still in beta. Found a bug? Report it in the
+            <a href="https://discord.gg/wDs5dth22k" target="_blank" rel="noopener">Brass Knuckle Gang Discord</a>.
+        </div>
+
         <div class="game-wrap" id="gameWrap">
             <iframe class="game-frame" id="gameFrame" title="Brass Knuckles Knock Out, a Morse code boxing game"
                     allow="autoplay" loading="lazy" tabindex="0"></iframe>
@@ -148,6 +166,7 @@
                 <li><kbd>1</kbd> to <kbd>4</kbd>: F1 to F4. On a phone, tap the buttons under the screen.</li>
             </ul>
             <p>Click the game first so it gets ur keystrokes. Fighters and best scores are saved in this browser only.</p>
+            <p>🐛 It's a beta: if something breaks, tell us in the <a href="https://discord.gg/wDs5dth22k" target="_blank" rel="noopener">Discord</a> with what you were doing and which browser or device you used.</p>
 
             <p class="game-credit">Created by Derick, KO6PBZ. Built on the HamCube <a href="https://github.com/kvmet/k5mme_pocketcw" target="_blank" rel="noopener">PocketCW firmware</a> by Kristen, K5MME. Sponsored by The Brass Knuckle Gang.</p>
             <p class="game-credit">Free software under the GNU GPL v3: <a href="game/source/README.md">source code</a> ·
