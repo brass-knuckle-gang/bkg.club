@@ -92,8 +92,24 @@
                     </div>
                 </div>
                 <div class="form-row">
-                    <label>New Op QTH (State)</label>
+                    <label id="recruitQthLabel" for="recruitQth">New Op QTH (State / Province / Country)</label>
                     <input type="text" id="recruitQth" placeholder="e.g. Utah" autocomplete="off">
+                    <select id="recruitProvince" aria-labelledby="recruitQthLabel" hidden disabled>
+                        <option value="">Choose a Canadian province or territory</option>
+                        <option value="Alberta" data-code="AB">Alberta (AB)</option>
+                        <option value="British Columbia" data-code="BC">British Columbia (BC)</option>
+                        <option value="Manitoba" data-code="MB">Manitoba (MB)</option>
+                        <option value="New Brunswick" data-code="NB">New Brunswick (NB)</option>
+                        <option value="Newfoundland and Labrador" data-code="NL">Newfoundland and Labrador (NL)</option>
+                        <option value="Northwest Territories" data-code="NT">Northwest Territories (NT)</option>
+                        <option value="Nova Scotia" data-code="NS">Nova Scotia (NS)</option>
+                        <option value="Nunavut" data-code="NU">Nunavut (NU)</option>
+                        <option value="Ontario" data-code="ON">Ontario (ON)</option>
+                        <option value="Prince Edward Island" data-code="PE">Prince Edward Island (PE)</option>
+                        <option value="Quebec" data-code="QC">Quebec (QC)</option>
+                        <option value="Saskatchewan" data-code="SK">Saskatchewan (SK)</option>
+                        <option value="Yukon" data-code="YT">Yukon (YT)</option>
+                    </select>
                 </div>
             </div>
 
@@ -210,6 +226,35 @@
         const confirmBack = document.getElementById('confirmBack');
         const confirmSend = document.getElementById('confirmSend');
         const CONFIRM_LABEL = confirmSend.textContent;
+
+        const recruitCallInput = document.getElementById('recruitCall');
+        const qthInput = document.getElementById('recruitQth');
+        const provinceSelect = document.getElementById('recruitProvince');
+        const qthLabel = document.getElementById('recruitQthLabel');
+        function updateQthControl() {
+            const canadian = /^(?:VA|VE|VO|VY)\d/i.test(recruitCallInput.value.trim());
+            qthInput.hidden = canadian;
+            qthInput.disabled = canadian;
+            provinceSelect.hidden = !canadian;
+            provinceSelect.disabled = !canadian;
+            provinceSelect.required = canadian;
+            qthLabel.htmlFor = canadian ? 'recruitProvince' : 'recruitQth';
+            if (canadian) {
+                const current = qthInput.value.trim().toUpperCase();
+                const option = Array.from(provinceSelect.options).find(function (option) {
+                    return option.value.toUpperCase() === current || option.dataset.code === current;
+                });
+                provinceSelect.value = option ? option.value : '';
+                qthInput.value = provinceSelect.value;
+            }
+        }
+        recruitCallInput.addEventListener('input', updateQthControl);
+        provinceSelect.addEventListener('change', function () {
+            // Keep the relay's existing field ID and email label so current
+            // Gmail intake receives a canonical province without a cutover.
+            qthInput.value = provinceSelect.value;
+        });
+        updateQthControl();
 
         function showError(msg) {
             errorBox.innerHTML = msg;
