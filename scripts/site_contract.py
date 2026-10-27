@@ -10,8 +10,8 @@ from urllib.parse import unquote, urlsplit
 
 PUBLIC_FILES = (
     "index.html", "tree.html", "nearby.html", "outbreak.html",
-    "recruit.html", "clubs.html", "safety.html", "badges.html", "game.html", "CNAME", "favicon.svg",
-    "logo.jpg", "assets/bkg.css", "assets/roster.css", "assets/roster.js",
+    "recruit.html", "clubs.html", "safety.html", "badges.html", "arcade.html", "CNAME", "favicon.svg",
+    "logo.jpg", "assets/bkg.css", "assets/roster.css", "assets/roster.js", "assets/knockout-splash.png",
     "docs/mockups/mobile-readability.html",
 )
 PHOTO_DIRS = ("images/mugshots", "images/mugshots-override")
