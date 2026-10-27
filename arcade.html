@@ -193,12 +193,12 @@
 
         <div class="game-wrap" id="gameWrap">
             <iframe class="game-frame" id="gameFrame" title="Brass Knuckles Knock Out, a Morse code boxing game"
-                    allow="autoplay" loading="lazy" tabindex="0"></iframe>
+                    src="game/index.html" allow="autoplay" tabindex="0"></iframe>
             <button type="button" class="game-play" id="gamePlay">
                 <img class="game-splash" src="assets/knockout-splash.png" width="960" height="720"
                      alt="Brass Knuckles Gang title screen: a gold brass knuckles above red pixel lettering">
                 <span class="big">▶ PRESS START</span>
-                <span class="small">Loads the game and turns the sound on. Turn ur speakers up!!</span>
+                <span class="small">Turns the sound on. Turn ur speakers up!! On a phone, tap the game once more if it is quiet.</span>
             </button>
         </div>
 
@@ -228,8 +228,10 @@
         var GAME_KEYS = ['Space', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown',
                          'KeyZ', 'KeyX', 'BracketLeft', 'BracketRight', 'ControlLeft', 'ControlRight', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Escape'];
 
-        // The game's own start button is what unlocks sound, so press it for the
-        // visitor. This runs inside their click, and the frame is same-origin.
+        // The game's own start button is what unlocks sound. iPhones and iPads only start
+        // sound inside a tap, so the frame loads up front and this runs synchronously in the
+        // visitor's tap on PLAY (the frame is same-origin). If the browser still refuses, the
+        // game keeps running and starts its sound on the visitor's next tap inside it.
         function pressGameStart() {
             try {
                 var doc = frame.contentDocument;
@@ -241,8 +243,11 @@
 
         play.addEventListener('click', function () {
             play.hidden = true;
-            frame.addEventListener('load', pressGameStart, { once: true });
-            frame.src = 'game/index.html';
+            var loaded = false;
+            try { loaded = frame.contentDocument && frame.contentDocument.readyState === 'complete' &&
+                           !!frame.contentDocument.getElementById('start'); } catch (e) { /* ignore */ }
+            if (loaded) pressGameStart();
+            else frame.addEventListener('load', pressGameStart, { once: true });
         });
 
         // A USB paddle adapter (Vail, etc.) types keys, so the frame must keep focus.
