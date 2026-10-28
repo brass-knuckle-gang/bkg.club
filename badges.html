@@ -86,6 +86,11 @@
                         <label for="callsign">Callsign</label>
                         <input type="text" id="callsign" autocomplete="off" spellcheck="false">
                     </div>
+                    <div class="form-row" id="ogTitleRow" hidden>
+                        <label for="ogTitle">OG title</label>
+                        <select id="ogTitle"></select>
+                        <p>Choose one title for this badge. The OG ZIP includes a separate badge for every title.</p>
+                    </div>
                     <div class="form-row">
                         <label for="tab">Bottom tab</label>
                         <input type="text" id="tab" autocomplete="off" spellcheck="false" placeholder="Leave empty for no tab">
@@ -103,7 +108,7 @@
                         <summary>Refresh roster data</summary>
                         <p id="refreshNote"></p>
                         <div class="form-row">
-                            <textarea id="pasteJson" placeholder="Paste the export JSON here" spellcheck="false"></textarea>
+                            <textarea id="pasteJson" placeholder="Paste the V2 roster export JSON here" spellcheck="false"></textarea>
                         </div>
                         <div class="press-btns">
                             <button class="press-btn" id="applyJson">Load pasted roster</button>
@@ -343,13 +348,40 @@ const US = {Alabama:"AL",Alaska:"AK",Arizona:"AZ",Arkansas:"AR",California:"CA",
 
 let sel = null, finish = "emboss", lastSvg = "";
 
-function tabFor(m){
-  const label = ROSTER.og[m.n];                 // only OG holders carry a tab
-  if(!label) return "";
-  return label.toUpperCase() + " OG";
+function titlesFor(m){
+  return ROSTER.og[m.n] || [];
 }
-function stateTabFor(m){                        // fallback for non-OG members
-  return ((US[m.q] || m.q) + " OG").toUpperCase();
+
+// Live, pasted, and uploaded snapshots use the same identity/title projection.
+// Keep every assignment; a member number is not a unique OG title key.
+function parseRoster(d){
+  if(!d || d.schema_version !== "2") throw new Error("Load a V2 roster export");
+  if(!Array.isArray(d.members) || !Array.isArray(d.og_assignments))
+    throw new Error("The roster must contain members and OG assignments");
+  const numbers = new Set(), regions = new Set(), og = Object.create(null);
+  const members = d.members.map(m => {
+    if(!m || !Number.isSafeInteger(m.bkg_number) || m.bkg_number < 1 || numbers.has(m.bkg_number) ||
+       ![m.callsign, m.name, m.qth].every(v => typeof v === "string"))
+      throw new Error("The roster contains an invalid or duplicate member");
+    numbers.add(m.bkg_number);
+    return {n:m.bkg_number, c:m.callsign, nm:m.name, q:m.qth};
+  });
+  for(const a of d.og_assignments){
+    if(!a || !numbers.has(a.bkg_number) || typeof a.region_key !== "string" || !a.region_key.trim() ||
+       regions.has(a.region_key) || typeof a.region_label !== "string" || !a.region_label.trim())
+      throw new Error("The roster contains an invalid or duplicate OG assignment");
+    regions.add(a.region_key);
+    (og[a.bkg_number] ||= []).push({key:a.region_key, tab:a.region_label.toUpperCase() + " OG"});
+  }
+  return {at:typeof d.generated_at === "string" ? d.generated_at : "", members, og};
+}
+
+function ogBadges(){
+  const safe = text => text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return ROSTER.members.flatMap(m => titlesFor(m).map(title => ({
+    callsign:m.c, tab:title.tab,
+    filename:`bkg-${safe(m.c)}-${safe(title.key)}-og.svg`
+  })));
 }
 
 function opts(){
@@ -393,7 +425,7 @@ function drawList(){
     return;
   }
   for(const m of list){
-    const og = tabFor(m);
+    const og = titlesFor(m).map(title => title.tab).join(" · ");
     const li = document.createElement("li");
     li.setAttribute("role","option"); li.tabIndex = 0;
     li.setAttribute("aria-selected", sel && sel.n === m.n ? "true" : "false");
@@ -416,9 +448,18 @@ function drawList(){
 function choose(m){
   sel = m;
   $("#callsign").value = m.c;
-  $("#tab").value = tabFor(m) || "";
+  const titles = titlesFor(m), picker = $("#ogTitle");
+  picker.replaceChildren();
+  for(const title of titles){
+    const option = document.createElement("option");
+    option.value = title.key; option.textContent = title.tab;
+    picker.append(option);
+  }
+  $("#ogTitleRow").hidden = titles.length < 2;
+  picker.value = titles[0]?.key || "";
+  $("#tab").value = titles[0]?.tab || "";
   drawList(); render();
-  if(!tabFor(m)) toast(m.c + " doesn't hold an OG seat \u2014 tab left empty");
+  if(!titles.length) toast(m.c + " doesn't hold an OG seat \u2014 tab left empty");
 }
 
 /* ---- saving ---- */
@@ -489,6 +530,11 @@ function toast(msg){
 
 /* ---- wiring ---- */
 for(const id of ["callsign","tab"]) $("#" + id).addEventListener("input", render);
+$("#ogTitle").addEventListener("change", () => {
+  const title = sel && titlesFor(sel).find(title => title.key === $("#ogTitle").value);
+  $("#tab").value = title?.tab || "";
+  render();
+});
 $("#search").addEventListener("input", drawList);
 document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
   document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
@@ -512,11 +558,8 @@ $("#dlZip").addEventListener("click", async () => {
   const btn = $("#dlZip"); btn.disabled = true; btn.textContent = "Building\u2026";
   try {
     const base = opts(), files = [];
-    for(const m of ROSTER.members){
-      const t = tabFor(m);
-      if(!t) continue;
-      const svg = badge({...base, callsign: m.c, tab: t});
-      files.push([`bkg-${m.c.toLowerCase()}-${t.toLowerCase().replace(/\s+/g,"-")}.svg`, svg]);
+    for(const entry of ogBadges()){
+      files.push([entry.filename, badge({...base, callsign:entry.callsign, tab:entry.tab})]);
     }
     if(await save("bkg-og-badges.zip", zip(files)))
       toast(files.length + " OG badges saved");
@@ -525,16 +568,16 @@ $("#dlZip").addEventListener("click", async () => {
 });
 
 function loadRoster(text){
-  let d;
-  try { d = JSON.parse(text); }
-  catch { toast("That isn't valid JSON"); return; }
-  if(!Array.isArray(d.members)){ toast("No members array in that file"); return; }
-  ROSTER = {
-    at: d.generated_at || "",
-    members: d.members.map(m => ({n:m.bkg_number, c:m.callsign, nm:m.name, q:m.qth})),
-    og: Object.fromEntries((d.og_assignments||[]).map(a => [a.bkg_number, a.region_label]))
-  };
-  sel = null; stamp(); drawList();
+  let roster;
+  try { roster = parseRoster(JSON.parse(text)); }
+  catch(e){ toast(e instanceof SyntaxError ? "That isn't valid JSON" : e.message); return; }
+  const number = sel?.n;
+  ROSTER = roster;
+  liveNote = "Showing the roster you loaded. Reload to use the live roster again.";
+  sel = null; stamp();
+  const member = ROSTER.members.find(m => m.n === number) || ROSTER.members[0];
+  if(member) choose(member);
+  else { $("#callsign").value = ""; $("#tab").value = ""; $("#ogTitleRow").hidden = true; drawList(); render(); }
   toast(ROSTER.members.length + " members loaded");
 }
 $("#applyJson").addEventListener("click", () => loadRoster($("#pasteJson").value));
@@ -545,8 +588,8 @@ $("#fileInput").addEventListener("change", e => {
 });
 
 function stamp(){
-  const n = ROSTER.members.length, og = Object.keys(ROSTER.og).length;
-  $("#rosterCount").textContent = n ? n + " members \u00b7 " + og + " OG seats" : "No roster loaded";
+  const n = ROSTER.members.length, og = ogBadges().length;
+  $("#rosterCount").textContent = n ? n + " members \u00b7 " + og + " OG titles" : "No roster loaded";
   const when = ROSTER.at ? new Date(ROSTER.at).toLocaleDateString(undefined,
     {year:"numeric",month:"short",day:"numeric"}) : "unknown date";
   $("#stageNote").dataset.when = when;
@@ -556,19 +599,13 @@ function stamp(){
 
 // The Worker sends Access-Control-Allow-Origin: *, so GitHub Pages can
 // fetch it directly; its own Cache-Control keeps this to one hit per 5 min.
-const ROSTER_URL = "https://bkg-public-roster.cool-cake-fac1.workers.dev/api/roster/export";
+const ROSTER_URL = "https://bkg-public-roster.cool-cake-fac1.workers.dev/api/roster/export/v2";
 let liveNote = "";
 async function pullLive(){
   try {
     const r = await fetch(ROSTER_URL);
     if(!r.ok) throw new Error("roster endpoint returned " + r.status);
-    const d = await r.json();
-    if(!Array.isArray(d.members)) throw new Error("unexpected roster shape");
-    ROSTER = {
-      at: d.generated_at || "",
-      members: d.members.map(m => ({n:m.bkg_number, c:m.callsign, nm:m.name, q:m.qth})),
-      og: Object.fromEntries((d.og_assignments||[]).map(a => [a.bkg_number, a.region_label]))
-    };
+    ROSTER = parseRoster(await r.json());
     liveNote = "Roster is live from the export endpoint, refreshed on every load.";
   } catch(e){
     liveNote = "Couldn't reach the roster endpoint: " + e.message;
