@@ -215,18 +215,28 @@ kbd {
   }
 
   function frame(now) {
-    // Before the sound starts, the page's clock runs the game; after, the sound does.
-    if (!running) x.advance(Math.min(100, Math.round(now - last)));
+    // Before the sound starts, the page's clock runs the game; after, the sound does. If the
+    // browser has not let the sound run (iOS only starts audio inside a tap), the page's clock
+    // keeps the game moving rather than freezing it.
+    if (!running || audio.state !== "running") x.advance(Math.min(100, Math.round(now - last)));
     last = now;
     draw();
     requestAnimationFrame(frame);
   }
 
+  // Browsers only let sound start from a tap or key press, so every one of them tries again.
+  function unlock() {
+    if (audio && audio.state !== "running") {
+      try { audio.resume().catch(() => {}); } catch (e) { /* no sound */ }
+    }
+  }
+
   function start() {
-    if (running || !x) return;
+    if (!x) return;
+    unlock();
+    if (running) return;
     startButton.hidden = true;
     try {
-      audio.resume();
       const node = audio.createScriptProcessor(1024, 1, 1);
       node.onaudioprocess = e => {
         const out = e.outputBuffer.getChannelData(0);
@@ -259,6 +269,8 @@ kbd {
     requestAnimationFrame(frame);
     setInterval(save, 1000);
   });
+
+  ["pointerdown", "touchend", "keydown", "click"].forEach(type => window.addEventListener(type, unlock, true));
 
   window.addEventListener("keydown", e => {
     if (e.repeat) { if (e.code in KEYS) e.preventDefault(); return; }
