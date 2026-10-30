@@ -27,13 +27,34 @@ test('an uncertain attempt cannot be replaced by edited details or a new UUID', 
     const restored = rules.pending(JSON.parse(JSON.stringify(attempt)));
     assert.deepEqual(rules.attempt(payload, restored, 'new-key'), attempt);
     assert.throws(() => rules.attempt({ ...payload, notes: 'Edited' }, restored, 'new-key'), /original submission/);
-    for (const [status, code] of [[400, 'invalid_request'], [409, 'idempotency_conflict'], [422, 'invalid_turnstile'], [429, 'rate_limited'], [503, 'intake_unavailable']]) {
-        assert.equal(rules.canEditAfter(status, code, true), false);
+    for (const status of [400, 409, 422, 429, 503]) {
+        assert.equal(rules.canEditAfter(status, true), false);
     }
-    assert.equal(rules.canEditAfter(400, 'invalid_request', false), true);
-    assert.equal(rules.canEditAfter(409, 'already_member', false), true);
-    assert.equal(rules.canEditAfter(409, 'idempotency_conflict', false), false);
-    assert.equal(rules.canEditAfter(503, 'intake_unavailable', false), false);
+    assert.equal(rules.canEditAfter(400, false), true);
+    assert.equal(rules.canEditAfter(409, false), false);
+    assert.equal(rules.canEditAfter(503, false), false);
+});
+
+test('UI acknowledgements never become intake fields or alter the submission fingerprint', () => {
+    const values = {
+        sponsorCallsign: 'VE6TEST', sponsorNumber: 'BKG42', sponsorName: 'Example Sponsor',
+        submitterEmail: 'sponsor@example.test', callsign: 'N0NEW', name: 'Example Recruit',
+        qth: 'Utah', recruitEmail: '', qsoDate: '2026-10-29', qsoTime: '21:30',
+        bandMode: '2m CW', notes: '',
+        formVersion: '2', membershipConfirmed: true, sponsorReviewRequested: true,
+    };
+    const payload = rules.payload(values);
+    assert.deepEqual(Object.keys(payload).sort(), [
+        'bandMode', 'callsign', 'name', 'notes', 'qsoDate', 'qsoTime', 'qth',
+        'recruitEmail', 'sponsorCallsign', 'sponsorName', 'sponsorNumber', 'submitterEmail',
+    ]);
+    assert.equal(payload.recruitEmail, '');
+    assert.deepEqual(rules.payload({ ...values, membershipConfirmed: false, sponsorReviewRequested: false }), payload);
+    const attempt = { ...rules.attempt(payload, null, 'original-key'), ui: {
+        membershipConfirmed: true, sponsorReviewRequested: true,
+    } };
+    assert.equal(JSON.parse(attempt.payload).membershipConfirmed, undefined);
+    assert.equal(rules.attempt(payload, attempt, 'replacement-key').key, 'original-key');
 });
 
 test('malformed stored attempts cannot become submissions', () => {

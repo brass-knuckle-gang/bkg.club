@@ -31,6 +31,7 @@
     let members = [];
     let rosterLoaded = false;
     let reviewedPayload = null;
+    let reviewedChecks = null;
     let inFlight = false;
     let widgetId = null;
     // Keep the attempt in memory even when browser storage is unavailable.
@@ -162,19 +163,20 @@
         el('qsoDate').setCustomValidity(future ? 'The QSO date and time must not be in the future (UTC).' : '');
     }
     function payloadFromForm() {
-        const payload = {};
-        FIELDS.forEach(function (field) { payload[field[1]] = val(field[0]); });
-        payload.formVersion = '2';
-        payload.membershipConfirmed = el('membershipConfirmed').checked ? 'true' : '';
-        payload.sponsorReviewRequested = el('sponsorReviewRequested').checked ? 'true' : '';
-        return payload;
+        const values = {};
+        FIELDS.forEach(function (field) { values[field[1]] = val(field[0]); });
+        return rules.payload(values);
     }
-    function fillForm(payload) {
+    function formChecks() {
+        return { membershipConfirmed: el('membershipConfirmed').checked,
+            sponsorReviewRequested: el('sponsorReviewRequested').checked };
+    }
+    function fillForm(payload, checks) {
         FIELDS.forEach(function (field) {
             if (typeof payload[field[1]] === 'string') el(field[0]).value = payload[field[1]];
         });
-        el('membershipConfirmed').checked = payload.membershipConfirmed === 'true';
-        el('sponsorReviewRequested').checked = payload.sponsorReviewRequested === 'true';
+        el('membershipConfirmed').checked = Boolean(checks && checks.membershipConfirmed === true);
+        el('sponsorReviewRequested').checked = Boolean(checks && checks.sponsorReviewRequested === true);
         updateQthControl();
     }
     function lockRecovery() {
@@ -189,14 +191,15 @@
             theme: 'dark', 'refresh-expired': 'auto'
         });
     }
-    function review(payload) {
+    function review(payload, checks) {
         reviewedPayload = payload;
+        reviewedChecks = checks || null;
         const summary = el('confirmSummary');
         summary.replaceChildren();
         const rows = FIELDS.map(function (field) { return [field[2], payload[field[1]]]; });
-        if (payload.formVersion === '2') {
-            rows.push(['QSO and membership consent', payload.membershipConfirmed === 'true' ? 'Confirmed' : 'Not confirmed']);
-            if (payload.sponsorReviewRequested === 'true') rows.push(['Sponsor', 'Officer review requested']);
+        if (reviewedChecks) {
+            rows.push(['QSO and membership consent', reviewedChecks.membershipConfirmed ? 'Confirmed' : 'Not confirmed']);
+            if (reviewedChecks.sponsorReviewRequested) rows.push(['Sponsor', 'Officer review requested']);
         }
         rows.forEach(function (row) {
             const dt = document.createElement('dt');
@@ -214,6 +217,7 @@
     }
     function showReceipt(receipt) {
         reviewedPayload = null;
+        reviewedChecks = null;
         savePending(null);
         writeStorage('sessionStorage', RECEIPT_KEY, receipt);
         form.style.display = 'none';
@@ -225,10 +229,9 @@
         el('formSuccess').scrollIntoView({ behavior: 'smooth' });
     }
     function markFields(names) {
-        const extra = { membershipConfirmed: 'membershipConfirmed', sponsorReviewRequested: 'sponsorReviewRequested', formVersion: 'submitBtn' };
         (names || []).forEach(function (name) {
             const field = FIELDS.find(function (f) { return f[1] === name; });
-            let control = field ? el(field[0]) : el(extra[name]);
+            let control = field ? el(field[0]) : null;
             if (name === 'qth') control = !provinceSelect.disabled ? provinceSelect : !usRegionSelect.disabled ? usRegionSelect : qthInput;
             if (name === 'sponsorNumber') control = el('sponsorCall');
             if (control) control.setAttribute('aria-invalid', 'true');
@@ -241,6 +244,8 @@
         if (!token) { error('Complete the robot check, then send. If it did not load, reload or contact k7bkgang@gmail.com.'); return; }
         const recovering = Boolean(pendingAttempt);
         const attempt = rules.attempt(reviewedPayload, pendingAttempt || rejectedAttempt, crypto.randomUUID());
+        // UI acknowledgements survive reloads separately from the wire payload.
+        if (reviewedChecks) attempt.ui = reviewedChecks;
         savePending(attempt);
         rememberSponsor();
         inFlight = true;
@@ -261,7 +266,7 @@
                 return;
             }
             const code = data.error && data.error.code || '';
-            const editable = rules.canEditAfter(response.status, code, recovering);
+            const editable = rules.canEditAfter(response.status, recovering);
             if (editable) {
                 pendingAttempt = null;
                 rejectedAttempt = Object.assign({}, attempt, { state: 'rejected' });
@@ -272,11 +277,7 @@
                 markFields(data.error && data.error.fields);
             }
             let message;
-            if (code === 'already_member') message = 'This recruit is already a member. Check the roster or contact the officers.';
-            else if (code === 'sponsor_not_found') {
-                el('sponsorReviewRow').hidden = false;
-                message = 'The current membership records could not match your sponsor callsign. Check it or request officer review.';
-            } else if (code === 'invalid_request') message = 'Check the highlighted fields, including callsigns, matching sponsor number, UTC date/time, and membership confirmation.';
+            if (code === 'invalid_request') message = 'Check the highlighted fields, including callsigns and UTC date/time.';
             else if (code === 'idempotency_conflict') message = 'The server has different details under this submission key. Keep this attempt and contact k7bkgang@gmail.com; do not start another intake.';
             else if (response.status === 422) message = 'The robot check expired or failed. Complete a fresh check and retry.';
             else if (response.status === 429 || response.status === 503) {
@@ -310,7 +311,7 @@
         validateRecruit();
         validateQso();
         if (!form.reportValidity()) return;
-        review(payloadFromForm());
+        review(payloadFromForm(), formChecks());
     });
     confirmBack.addEventListener('click', showForm);
     confirmSend.addEventListener('click', send);
@@ -365,10 +366,10 @@
     updateQthControl();
     if (pendingAttempt) {
         const payload = JSON.parse(pendingAttempt.payload);
-        fillForm(payload);
-        review(payload);
+        fillForm(payload, pendingAttempt.ui);
+        review(payload, pendingAttempt.ui);
     } else if (rejectedAttempt) {
-        fillForm(JSON.parse(rejectedAttempt.payload));
+        fillForm(JSON.parse(rejectedAttempt.payload), rejectedAttempt.ui);
     } else {
         const receipt = readStorage('sessionStorage', RECEIPT_KEY);
         if (receipt && typeof receipt.receipt === 'string' && typeof receipt.receivedAt === 'string') showReceipt(receipt);

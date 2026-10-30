@@ -24,6 +24,14 @@
         return !/^[A-Z0-9]+$/.test(normalizeCall(value))
             ? 'Use the base callsign with A–Z letters and 0–9 digits.' : '';
     }
+    function payload(values) {
+        var result = {};
+        // Keep browser-only confirmations out of the existing intake contract.
+        ['name', 'callsign', 'recruitEmail', 'submitterEmail', 'qth', 'sponsorName',
+            'sponsorCallsign', 'sponsorNumber', 'qsoDate', 'qsoTime', 'bandMode', 'notes']
+            .forEach(function (key) { if (typeof values[key] === 'string') result[key] = values[key]; });
+        return result;
+    }
     function pending(value) {
         if (!value || typeof value.key !== 'string' || typeof value.payload !== 'string'
             || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.key)) return null;
@@ -41,13 +49,13 @@
         if (previous && previous.state !== 'rejected') throw new Error('Resolve the original submission first.');
         return { key: key, payload: JSON.stringify(payload), startedAt: new Date().toISOString() };
     }
-    function canEditAfter(status, code, recovering) {
+    function canEditAfter(status, recovering) {
         // A rejection of a retry cannot disprove acceptance of an earlier send.
         return !recovering && (status === 400 || status === 413 || status === 415
-            || status === 422 || status === 429 || (status === 409 && code === 'already_member'));
+            || status === 422 || status === 429);
     }
     var api = { normalizeCall: normalizeCall, time: time, utc: utc, findSponsor: findSponsor,
-        callIssue: callIssue, pending: pending, attempt: attempt, canEditAfter: canEditAfter };
+        callIssue: callIssue, payload: payload, pending: pending, attempt: attempt, canEditAfter: canEditAfter };
     if (typeof module === 'object' && module.exports) module.exports = api;
     else root.BkgRecruit = api;
 }(typeof globalThis === 'object' ? globalThis : this));

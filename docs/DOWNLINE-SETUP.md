@@ -54,9 +54,10 @@ submission never issues a number or publishes a member automatically.
 
 The enhanced form matches sponsor callsigns or BKG numbers against the public
 roster, separates sponsor/recruit contact addresses, accepts 24-hour UTC time,
-and records confirmation of a 2m CW QSO and the recruit's agreement to join.
+and asks for confirmation of a 2m CW QSO and the recruit's agreement to join.
 Unmatched sponsors can explicitly request officer review. Officers review the
 application in BKG automation and approve or reject it there.
 
-See [the recruit form guide](RECRUIT-FORM.md) for deployment order, private-data
+These changes use the existing API contract and can be published independently.
+See [the recruit form guide](RECRUIT-FORM.md) for form behavior, private-data
 handling and recovery. The former FormSubmit relay is no longer used.
