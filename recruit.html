@@ -70,14 +70,24 @@
                 <div class="form-legend">🤜 THE SPONSOR (U!)</div>
                 <div class="form-grid">
                     <div class="form-row">
-                        <label for="sponsorCall">Sponsor Callsign <span class="req">*</span></label>
-                        <input type="text" id="sponsorCall" required placeholder="e.g. KI7QCF" autocomplete="off">
+                        <label for="sponsorCall">Your Callsign or BKG # <span class="req">*</span></label>
+                        <input type="text" id="sponsorCall" required maxlength="32" placeholder="e.g. KI7QCF or BKG1" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="sponsorMatch">
                     </div>
                     <div class="form-row">
-                        <label for="sponsorNum">Sponsor BKG #</label>
-                        <input type="text" id="sponsorNum" placeholder="e.g. 1" autocomplete="off">
-                        <div class="form-hint">Leave blank if u don't remember it</div>
+                        <label for="email">Your email <span class="req">*</span></label>
+                        <input type="email" id="email" required maxlength="254" placeholder="u@example.com" autocomplete="email">
+                        <div class="form-hint">For officer questions and a welcome to forward if needed. Never published.</div>
                     </div>
+                </div>
+                <input type="hidden" id="sponsorNum">
+                <input type="hidden" id="sponsorName">
+                <div id="sponsorMatch" class="form-match" role="status" aria-live="polite">Looking up the public roster…</div>
+                <button type="button" id="sponsorSuggestion" class="back-link" hidden></button>
+                <div class="form-row" id="sponsorReviewRow" hidden>
+                    <label class="form-check"><input type="checkbox" id="sponsorReviewRequested"> I can't find my membership. Ask an officer to check my sponsor details.</label>
+                </div>
+                <div class="form-row">
+                    <label class="form-check"><input type="checkbox" id="rememberSponsor"> Remember my callsign and email on this device</label>
                 </div>
             </div>
 
@@ -86,16 +96,17 @@
                 <div class="form-grid">
                     <div class="form-row">
                         <label for="recruitCall">New Op Callsign <span class="req">*</span></label>
-                        <input type="text" id="recruitCall" required placeholder="e.g. W1ABC" autocomplete="off">
+                        <input type="text" id="recruitCall" required maxlength="32" placeholder="e.g. W1ABC" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="recruitMatch">
                     </div>
                     <div class="form-row">
                         <label for="recruitName">New Op Name <span class="req">*</span></label>
-                        <input type="text" id="recruitName" required placeholder="e.g. Jane Doe" autocomplete="off">
+                        <input type="text" id="recruitName" maxlength="120" required placeholder="e.g. Jane Doe" autocomplete="off">
                     </div>
                 </div>
+                <div id="recruitMatch" class="form-match" role="status" aria-live="polite"></div>
                 <div class="form-row">
                     <label id="recruitQthLabel" for="recruitQth">New Op QTH (State / Province / Country)</label>
-                    <input type="text" id="recruitQth" placeholder="e.g. Utah" autocomplete="off">
+                    <input type="text" id="recruitQth" maxlength="120" placeholder="e.g. Utah" autocomplete="off">
                     <select id="recruitUsRegion" aria-labelledby="recruitQthLabel" hidden disabled>
                         <option value="">Choose a state or U.S. DXCC entity</option>
                         <optgroup label="States and District of Columbia">
@@ -187,9 +198,9 @@
                     </select>
                 </div>
                 <div class="form-row">
-                    <label for="recruitEmail">New Op Email</label>
-                    <input type="email" id="recruitEmail" placeholder="optional" autocomplete="off">
-                    <div class="form-hint">Where the welcome goes. Blank = we send it via u.</div>
+                    <label for="recruitEmail">Recruit’s email — optional, if known</label>
+                    <input type="email" id="recruitEmail" maxlength="254" placeholder="recruit@example.com" autocomplete="off">
+                    <div class="form-hint">Their welcome can go directly here. Leave blank for a welcome you can forward. Never published.</div>
                 </div>
             </div>
 
@@ -201,14 +212,15 @@
                         <input type="date" id="qsoDate" required>
                     </div>
                     <div class="form-row">
-                        <label for="qsoTime">Time (UTC) <span class="req">*</span></label>
-                        <input type="time" id="qsoTime" required>
-                        <div class="form-hint">In UTC / Zulu — not ur local time!</div>
+                        <label for="qsoTime">Time (UTC, 24-hour) <span class="req">*</span></label>
+                        <input type="text" id="qsoTime" required inputmode="numeric" maxlength="5" placeholder="2130 or 21:30" aria-describedby="qsoTimeHint">
+                        <div class="form-hint" id="qsoTimeHint">0000–2359 UTC / Zulu. Midnight is 0000.</div>
                     </div>
                 </div>
                 <div class="form-row">
                     <label for="qsoBand">Band / Mode</label>
-                    <input type="text" id="qsoBand" value="2m CW" autocomplete="off">
+                    <input type="text" id="qsoBand" value="2m CW" readonly>
+                    <button type="button" id="useUtcNow" class="back-link">USE CURRENT UTC DATE &amp; TIME</button>
                 </div>
             </div>
 
@@ -216,16 +228,14 @@
                 <div class="form-legend">✍️ EXTRA</div>
                 <div class="form-row">
                     <label for="notes">Notes for the officers</label>
-                    <textarea id="notes" rows="3" placeholder="POTA/SOTA activation? Anything else worth noting?"></textarea>
+                    <textarea id="notes" rows="3" maxlength="2000" placeholder="POTA/SOTA activation? Anything else worth noting?"></textarea>
                 </div>
                 <div class="form-row">
-                    <label for="email">Ur email (so we can reach u) <span class="req">*</span></label>
-                    <input type="email" id="email" required placeholder="e.g. u@example.com" autocomplete="off">
-                    <div class="form-hint">Officers only. Never published.</div>
+                    <label class="form-check"><input type="checkbox" id="membershipConfirmed" required> We completed a 2m CW QSO, and this operator agreed to join BKG. <span class="req">*</span></label>
                 </div>
             </div>
 
-            <button type="submit" class="submit-btn" id="submitBtn">🤜 SEND IT IN!! 🤜</button>
+            <button type="submit" class="submit-btn" id="submitBtn">👀 REVIEW APPLICATION</button>
 
         </form>
 
@@ -234,6 +244,7 @@
         <div class="form-confirm" id="formConfirm">
             <h2>👀 DOUBLE-CHECK UR INTAKE</h2>
             <p class="confirm-lead">This is what gets pounded into the queue. Look it over, then send it in!</p>
+            <div class="form-note" id="recoveryNote" hidden>An earlier send may have arrived. Retry its original details to recover the receipt before editing or starting another application. <a href="mailto:k7bkgang@gmail.com">Contact the officers</a> if you need help.</div>
             <dl class="confirm-summary" id="confirmSummary"></dl>
             <div class="turnstile-slot">
                 <div id="turnstile"></div>
@@ -250,6 +261,10 @@
             <p>Ur recruit got pounded into the queue!! An officer will review it,
                assign a BKG #, and grow the downline.</p>
             <p class="receipt-line">Receipt: <code id="receiptCode"></code></p>
+            <p id="receiptTime"></p>
+            <button type="button" id="copyReceipt" class="back-link">COPY RECEIPT</button>
+            <span id="copyStatus" role="status"></span>
+            <button type="button" id="anotherRecruit" class="submit-btn">SUBMIT ANOTHER RECRUIT</button>
             <p>73 de BKG 📡</p>
             <p style="margin-top:16px;">
                 <a href="tree.html" class="back-link">SEE THE DOWNLINE ⟶</a>
@@ -267,337 +282,7 @@
         </div>
     </footer>
 
-    <script>
-    /* ============================================================
-       DIRECT INTAKE WIRING
-       ------------------------------------------------------------
-       Submissions POST straight to the gang's membership service
-       (bkg-automation intake Worker). Every accepted submission
-       lands in the officers' pending-review queue; nothing is
-       published or numbered until an officer approves it.
-
-       Contract: bkg-automation/docs/direct-intake-contract.md
-         - Idempotency-Key: one UUID per logical submission, kept
-           across double clicks, timeouts, and page reloads so a
-           retry can never create a second application.
-         - Turnstile token from the widget below (action
-           "recruit-application"), verified server-side.
-         - Submitter email and recruit email are separate fields.
-       ============================================================ */
-    const INTAKE_ENDPOINT = "https://bkg-membership-intake.cool-cake-fac1.workers.dev/v1/applications";
-    // Public sitekey of the production Turnstile widget (hostname www.bkg.club).
-    const TURNSTILE_SITEKEY = "0x4AAAAAAFsHyM6nyvrtrADC";
-    const TURNSTILE_ACTION = "recruit-application";
-    const PENDING_STORAGE_KEY = "bkg-recruit-pending-v1";
-    const CONTACT_DISCORD = "https://discord.gg/wDs5dth22k";
-    const CONTACT_EMAIL = "k7bkgang@gmail.com";
-
-    // [input id, API field, label shown in the review step], in review order.
-    const FIELDS = [
-        ["sponsorCall",  "sponsorCallsign", "Sponsor Callsign"],
-        ["sponsorNum",   "sponsorNumber",   "Sponsor BKG #"],
-        ["recruitCall",  "callsign",        "New Op Callsign"],
-        ["recruitName",  "name",            "New Op Name"],
-        ["recruitQth",   "qth",             "New Op QTH (State / Province / Country)"],
-        ["recruitEmail", "recruitEmail",    "New Op Email"],
-        ["qsoDate",      "qsoDate",         "QSO Date (UTC)"],
-        ["qsoTime",      "qsoTime",         "QSO Time (UTC)"],
-        ["qsoBand",      "bandMode",        "Band / Mode"],
-        ["notes",        "notes",           "Notes"],
-        ["email",        "submitterEmail",  "Ur Email"]
-    ];
-
-    (function () {
-        const form = document.getElementById('recruitForm');
-        const note = document.querySelector('.form-note');
-        const success = document.getElementById('formSuccess');
-        const receiptCode = document.getElementById('receiptCode');
-        const errorBox = document.getElementById('formError');
-        const confirmPanel = document.getElementById('formConfirm');
-        const confirmSummary = document.getElementById('confirmSummary');
-        const confirmBack = document.getElementById('confirmBack');
-        const confirmSend = document.getElementById('confirmSend');
-        const CONFIRM_LABEL = confirmSend.textContent;
-        let widgetId = null;
-        let inFlight = false;
-
-        const recruitCallInput = document.getElementById('recruitCall');
-        const qthInput = document.getElementById('recruitQth');
-        const provinceSelect = document.getElementById('recruitProvince');
-        const usRegionSelect = document.getElementById('recruitUsRegion');
-        const qthLabel = document.getElementById('recruitQthLabel');
-        function updateQthControl() {
-            const callsign = recruitCallInput.value.trim().toUpperCase();
-            const canadian = /^(?:VA|VE|VO|VY)\d/.test(callsign);
-            const prefix = callsign.slice(0, 2);
-            const american = /^[KNW]/.test(callsign) || (prefix.length === 2 && prefix >= 'AA' && prefix <= 'AL');
-            const activeSelect = canadian ? provinceSelect : american ? usRegionSelect : null;
-            qthInput.hidden = Boolean(activeSelect);
-            qthInput.disabled = Boolean(activeSelect);
-            [provinceSelect, usRegionSelect].forEach(function (select) {
-                const active = select === activeSelect;
-                select.hidden = !active;
-                select.disabled = !active;
-                select.required = active;
-            });
-            qthLabel.htmlFor = activeSelect ? activeSelect.id : 'recruitQth';
-            if (activeSelect) {
-                const current = qthInput.value.trim().toUpperCase();
-                const option = Array.from(activeSelect.options).find(function (option) {
-                    const aliases = (option.dataset.aliases || option.dataset.code || '').toUpperCase().split('|');
-                    return option.value.toUpperCase() === current || aliases.includes(current);
-                });
-                activeSelect.value = option ? option.value : '';
-                qthInput.value = activeSelect.value;
-            }
-        }
-        recruitCallInput.addEventListener('input', updateQthControl);
-        [provinceSelect, usRegionSelect].forEach(function (select) {
-            select.addEventListener('change', function () {
-                // Keep the canonical region in the API payload's QTH field.
-                qthInput.value = select.value;
-            });
-        });
-        restorePending();
-        updateQthControl();
-
-        function escapeHtml(s) {
-            return String(s).replace(/[&<>"']/g, function (c) {
-                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-            });
-        }
-        function val(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
-        function fieldControl(id) {
-            if (id === 'recruitQth') {
-                if (!provinceSelect.disabled) return provinceSelect;
-                if (!usRegionSelect.disabled) return usRegionSelect;
-            }
-            return document.getElementById(id);
-        }
-        function showError(html) {
-            errorBox.innerHTML = html;
-            errorBox.classList.add('show');
-            errorBox.scrollIntoView({ behavior: 'smooth' });
-        }
-        function clearError() {
-            errorBox.classList.remove('show');
-            form.querySelectorAll('.field-error, [aria-invalid]').forEach(function (el) {
-                el.classList.remove('field-error');
-                el.removeAttribute('aria-invalid');
-            });
-        }
-        function contactRoute() {
-            return 'Reach the gang on <a href="' + CONTACT_DISCORD + '" target="_blank" rel="noopener">Discord</a>' +
-                   ' or email <a href="mailto:' + CONTACT_EMAIL + '">' + CONTACT_EMAIL + '</a> with the QSO details.';
-        }
-        function showForm() {
-            confirmPanel.classList.remove('show');
-            form.style.display = '';
-            if (note) note.style.display = '';
-        }
-
-        // ---- Idempotency key: one per logical submission ------------------
-        function buildPayload() {
-            const payload = {};
-            FIELDS.forEach(function (f) { payload[f[1]] = val(f[0]); });
-            return payload;
-        }
-        function loadPending() {
-            try { return JSON.parse(sessionStorage.getItem(PENDING_STORAGE_KEY) || 'null'); }
-            catch (e) { return null; }
-        }
-        function restorePending() {
-            const pending = loadPending();
-            if (!pending || typeof pending.payload !== 'string') return;
-            try {
-                const payload = JSON.parse(pending.payload);
-                if (!payload || typeof payload !== 'object') return;
-                FIELDS.forEach(function (f) {
-                    if (typeof payload[f[1]] === 'string') {
-                        document.getElementById(f[0]).value = payload[f[1]];
-                    }
-                });
-            } catch (e) { /* Ignore an unusable saved submission. */ }
-        }
-        function savePending(pending) {
-            try { sessionStorage.setItem(PENDING_STORAGE_KEY, JSON.stringify(pending)); } catch (e) { /* private mode */ }
-        }
-        function clearPending() {
-            try { sessionStorage.removeItem(PENDING_STORAGE_KEY); } catch (e) { /* ignore */ }
-        }
-        function newKey() {
-            if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-            // Fallback v4 UUID for very old browsers.
-            const b = new Uint8Array(16); crypto.getRandomValues(b);
-            b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
-            const h = Array.prototype.map.call(b, function (x) { return x.toString(16).padStart(2, '0'); }).join('');
-            return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
-        }
-        // Reuse the stored key only while the details are byte-for-byte the
-        // same; edited details are a new logical submission with a new key.
-        function keyFor(payload) {
-            const serialized = JSON.stringify(payload);
-            const pending = loadPending();
-            if (pending && pending.payload === serialized && typeof pending.key === 'string') return pending.key;
-            const key = newKey();
-            savePending({ key: key, payload: serialized, startedAt: new Date().toISOString() });
-            return key;
-        }
-
-        // ---- Turnstile ------------------------------------------------------
-        function turnstileReady() { return typeof window.turnstile !== 'undefined'; }
-        function renderWidget() {
-            if (!turnstileReady()) return;
-            if (widgetId !== null) { window.turnstile.reset(widgetId); return; }
-            widgetId = window.turnstile.render('#turnstile', {
-                sitekey: TURNSTILE_SITEKEY,
-                action: TURNSTILE_ACTION,
-                theme: 'dark',
-                'refresh-expired': 'auto'
-            });
-        }
-        function resetWidget() { if (widgetId !== null && turnstileReady()) window.turnstile.reset(widgetId); }
-        function widgetToken() { return (widgetId !== null && turnstileReady()) ? (window.turnstile.getResponse(widgetId) || '') : ''; }
-        document.getElementById('turnstileScript').addEventListener('load', function () {
-            if (confirmPanel.classList.contains('show')) renderWidget();
-        });
-
-        // ---- Step 1: validate, then review -----------------------------------
-        form.addEventListener('submit', function (e) {
-            e.preventDefault();
-            clearError();
-            if (!form.reportValidity()) return;
-
-            confirmSummary.innerHTML = FIELDS.map(function (f) {
-                const v = val(f[0]);
-                const cell = v ? escapeHtml(v) : '<span class="confirm-blank">— left blank —</span>';
-                return '<dt>' + escapeHtml(f[2]) + '</dt><dd>' + cell + '</dd>';
-            }).join('');
-
-            confirmSend.disabled = false;
-            confirmSend.textContent = CONFIRM_LABEL;
-            form.style.display = 'none';
-            if (note) note.style.display = 'none';
-            confirmPanel.classList.add('show');
-            renderWidget();
-            confirmPanel.scrollIntoView({ behavior: 'smooth' });
-        });
-
-        confirmBack.addEventListener('click', function () {
-            showForm();
-            form.scrollIntoView({ behavior: 'smooth' });
-        });
-
-        // ---- Step 2: send to the membership service ----------------------------
-        function fail(html, opts) {
-            opts = opts || {};
-            inFlight = false;
-            confirmSend.disabled = false;
-            confirmSend.textContent = CONFIRM_LABEL;
-            if (opts.resetWidget) resetWidget();
-            if (opts.backToForm) showForm();
-            showError(html);
-        }
-        function markFields(names) {
-            const bad = [];
-            (names || []).forEach(function (name) {
-                const f = FIELDS.filter(function (x) { return x[1] === name; })[0];
-                if (!f) return;
-                const el = fieldControl(f[0]);
-                if (el) { el.classList.add('field-error'); el.setAttribute('aria-invalid', 'true'); }
-                bad.push(f[2]);
-            });
-            return bad;
-        }
-        function retryAfterText(res, fallback) {
-            const secs = parseInt(res.headers.get('Retry-After'), 10);
-            return (secs > 0) ? ('Try again in about ' + secs + ' second' + (secs === 1 ? '' : 's') + '.') : fallback;
-        }
-
-        confirmSend.addEventListener('click', function () {
-            if (inFlight) return;
-            clearError();
-            if (TURNSTILE_SITEKEY.indexOf('REPLACE_WITH') === 0) {
-                fail("📡 Recruit intake isn't switched on yet. " + contactRoute());
-                return;
-            }
-            const token = widgetToken();
-            if (!token) {
-                fail(turnstileReady()
-                    ? "🤖 Finish the robot check above, then send it in."
-                    : "🤖 The robot check didn't load. Disable blockers for challenges.cloudflare.com and reload, or " + contactRoute());
-                return;
-            }
-
-            const payload = buildPayload();
-            const key = keyFor(payload);
-            payload.turnstileToken = token;
-
-            inFlight = true;
-            confirmSend.disabled = true;
-            confirmSend.textContent = '📡 SENDING...';
-
-            const controller = ('AbortController' in window) ? new AbortController() : null;
-            const timer = controller ? setTimeout(function () { controller.abort(); }, 20000) : null;
-
-            fetch(INTAKE_ENDPOINT, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
-                body: JSON.stringify(payload),
-                signal: controller ? controller.signal : undefined
-            })
-            .then(function (res) {
-                return res.json().catch(function () { return {}; }).then(function (data) { return { res: res, data: data }; });
-            })
-            .then(function (r) {
-                if (timer) clearTimeout(timer);
-                const res = r.res, data = r.data || {};
-                const code = (data.error && data.error.code) || '';
-
-                if (res.status === 202 && data.receipt) {
-                    clearPending();
-                    inFlight = false;
-                    confirmPanel.classList.remove('show');
-                    form.style.display = 'none';
-                    if (note) note.style.display = 'none';
-                    receiptCode.textContent = data.receipt;
-                    success.classList.add('show');
-                    success.scrollIntoView({ behavior: 'smooth' });
-                    return;
-                }
-                if (res.status === 400 && code === 'invalid_request') {
-                    const bad = markFields(data.error.fields);
-                    fail("✍️ Fix " + (bad.length ? ("these: <strong>" + escapeHtml(bad.join(', ')) + "</strong>") : "the highlighted fields") + " and send it again.", { backToForm: true });
-                    return;
-                }
-                if (res.status === 422) {
-                    fail("🤖 The robot check expired or didn't pass. Do it once more and send again — ur details are still here.", { resetWidget: true });
-                    return;
-                }
-                if (res.status === 429) {
-                    fail("⏳ Whoa, too many sends from here. " + retryAfterText(res, 'Give it a few minutes.') + " Ur details are still here.", { resetWidget: true });
-                    return;
-                }
-                if (res.status === 409) {
-                    clearPending();
-                    fail("🔁 An earlier attempt with different details already went through under this submission. Go back, double-check, and send it as a new intake.", { backToForm: true });
-                    return;
-                }
-                if (res.status === 503) {
-                    const unavailable = (code === 'intake_unavailable');
-                    fail((unavailable ? "📡 Recruit intake is paused right now. " : "📡 The robot-check service hiccuped. ") +
-                         retryAfterText(res, 'Try again in a minute.') + (unavailable ? "<br>" + contactRoute() : ""), { resetWidget: true });
-                    return;
-                }
-                fail("📡 The gang's server said no (HTTP " + res.status + (code ? ", " + escapeHtml(code) : "") + "). Try again in a sec, or " + contactRoute(), { resetWidget: true });
-            })
-            .catch(function () {
-                if (timer) clearTimeout(timer);
-                // No reliable result. Keep the same key so a retry can't duplicate.
-                fail("📡 Couldn't reach the gang's server. Check ur connection and hit send again — if it already got through, we'll just confirm it. Or " + contactRoute(), { resetWidget: true });
-            });
-        });
-    })();
-    </script>
+    <script src="assets/recruit-core.js"></script>
+    <script src="assets/recruit.js"></script>
 </body>
 </html>
