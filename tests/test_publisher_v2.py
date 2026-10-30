@@ -75,6 +75,22 @@ class PublisherV2Tests(unittest.TestCase):
         self.assertEqual(len(list((self.dist / "images/mugshots").iterdir())), 1)
         self.assertFalse((self.dist / "images/mugshots-override").exists())
 
+    def test_bad_callsign_is_excluded_consistently_from_every_public_output(self):
+        self.envelope["members"][0]["callsign"] = "KCØDWZ"
+        json_build.rehash(self.envelope)
+        self.write_roster()
+        self.assertEqual(self.build(), 0)
+        validate_dist(self.dist, source="json")
+        published = json.loads((self.dist / "data/v2/roster.json").read_text())
+        self.assertNotEqual(published["content_hash"], self.envelope["content_hash"])
+        self.assertEqual(len(published["members"]), len(self.envelope["members"]) - 1)
+        self.assertNotIn(1, [m["bkg_number"] for m in published["members"]])
+        self.assertTrue(all(row["num"] != 1 for row in self.data("tree.html", "DOWNLINE_DATA")))
+        self.assertEqual(self.data("nearby.html", "GEO_DATA"), [])
+        self.assertEqual(list((self.dist / "images/mugshots").glob("*.webp")), [])
+        for relative in ("index.html", "tree.html", "nearby.html", "outbreak.html", "members.txt"):
+            self.assertNotIn("KCØDWZ", (self.dist / relative).read_text())
+
     def test_upstream_v2_fixture_hash_and_full_precision_centers_publish_unchanged(self):
         fixtures = json_build.ROOT / "tests/fixtures/public-roster/fixtures"
         text = (fixtures / "roster-v2.json").read_text()

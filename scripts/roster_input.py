@@ -29,7 +29,7 @@ GRID_PATTERN = re.compile(r"[A-R]{2}[0-9]{2}(?:[A-X]{2})?\Z")
 PHOTO_KEYS = {"url", "sha256", "content_type", "byte_length"}
 MAX_PUBLIC_PHOTO_BYTES = 1024 * 1024
 OG_KEYS = {"region_key", "region_label", "bkg_number"}
-CALLSIGN_PATTERN = re.compile(r"[A-Za-z0-9]+(?:/[A-Za-z0-9]+)*\Z")
+CALLSIGN_PATTERN = re.compile(r"[A-Za-z0-9]+\Z")
 UTC_TIMESTAMP_PATTERN = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)\Z"
 )
@@ -111,11 +111,16 @@ def _photo(value) -> None:
         raise ValueError("Invalid photo URL") from None
 
 
-def parse_roster_json(text: str, *, expected_version: str = "1") -> tuple[dict, list[dict]]:
+def parse_roster_json(text: str, *, expected_version: str = "1",
+                      exclude_invalid_callsigns: bool = False,
+                      exclusions: list | None = None) -> tuple[dict, list[dict]]:
     """Validate the explicitly selected contract, then adapt reviewed members.
 
-    The original envelope is returned without normalizing its strings or array
-    order. Member ``join_date`` is the stored QSO date; sponsor relationships
+    By default the original envelope is returned without normalizing strings or
+    array order. Publication can explicitly exclude invalid callsigns, only after
+    validating the complete source contract and hash. That projection has its own
+    hash, unresolved sponsors for excluded members, and no reassigned OGs.
+    Member ``join_date`` is the stored QSO date; sponsor relationships
     are resolved only through stable BKG numbers. ``og_regions`` retains the
     export's stored region labels even when its holder currently lives elsewhere.
     """
@@ -159,7 +164,8 @@ def parse_roster_json(text: str, *, expected_version: str = "1") -> tuple[dict, 
         for key in ("callsign", "name", "qth", "qso_date"):
             _string(row[key], f"Member {key}", line_safe=key == "name")
         callsign = row["callsign"]
-        _require(bool(CALLSIGN_PATTERN.fullmatch(callsign)), "Invalid member callsign")
+        _require(exclude_invalid_callsigns or bool(CALLSIGN_PATTERN.fullmatch(callsign)),
+                 f"Invalid member callsign (BKG #{number})")
         _require(callsign.upper() not in callsigns, "Duplicate member callsign")
         callsigns.add(callsign.upper())
         sponsor = row["sponsor_bkg_number"]
@@ -221,11 +227,29 @@ def parse_roster_json(text: str, *, expected_version: str = "1") -> tuple[dict, 
             "region_label": assignment["region_label"],
         })
 
+    _require(envelope["content_hash"] == roster_content_hash(envelope), "Roster content hash mismatch")
+    if exclude_invalid_callsigns:
+        excluded = {row["bkg_number"] for row in rows if not CALLSIGN_PATTERN.fullmatch(row["callsign"])}
+        if excluded:
+            projected = dict(envelope)
+            projected["members"] = [dict(row, sponsor_bkg_number=(
+                None if row["sponsor_bkg_number"] in excluded else row["sponsor_bkg_number"]
+            )) for row in rows if row["bkg_number"] not in excluded]
+            _require(bool(projected["members"]), "Roster contains no usable members")
+            projected["og_assignments"] = [row for row in assignments if row["bkg_number"] not in excluded]
+            projected["content_hash"] = roster_content_hash(projected)
+            result = parse_roster_json(json.dumps(projected, ensure_ascii=False), expected_version=expected_version)
+            if exclusions is not None:
+                exclusions.extend({"bkg_number": number, "reason": "Invalid callsign characters"}
+                                  for number in sorted(excluded))
+            return result
+    return envelope, members
+
+
+def roster_content_hash(envelope: dict) -> str:
     payload = {key: envelope[key] for key in ("schema_version", "members", "og_assignments")}
     canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    expected = "sha256:" + hashlib.sha256(canonical).hexdigest()
-    _require(envelope["content_hash"] == expected, "Roster content hash mismatch")
-    return envelope, members
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
 
 
 class _NoRedirects(urllib.request.HTTPRedirectHandler):
@@ -242,7 +266,8 @@ def _decode_roster(data: bytes) -> str:
 
 
 def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
-                     environ=None, expected_version: str = "1", cache_dir=None) -> str:
+                     environ=None, expected_version: str = "1", cache_dir=None,
+                     exclude_invalid_callsigns: bool = False) -> str:
     """Read an explicitly selected file or anonymous HTTPS roster endpoint.
 
     Call this only after selecting JSON input. With no file or explicit URL,
@@ -299,7 +324,11 @@ def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
             cached = json.loads(data.decode("utf-8"))
             _object(cached, {"endpoint_sha256", "etag", "snapshot"}, "Roster cache")
             _require(cached["endpoint_sha256"] == endpoint_hash, "Roster cache endpoint changed")
-            cached_envelope, _ = parse_roster_json(cached["snapshot"], expected_version=expected_version)
+            parse_roster_json(cached["snapshot"], expected_version=expected_version,
+                              exclude_invalid_callsigns=exclude_invalid_callsigns)
+            # Conditional requests always use the verified source hash, never
+            # the hash of a filtered publication projection.
+            cached_envelope = json.loads(cached["snapshot"])
             _require(cached["etag"] == f'W/"{cached_envelope["content_hash"]}"', "Roster cache ETag mismatch")
             cached_text, cached_etag = cached["snapshot"], cached["etag"]
             request.add_header("If-None-Match", cached_etag)
@@ -310,7 +339,8 @@ def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
         _require(cached_text is not None and response.headers.get("ETag") == cached_etag,
                  "Roster 304 requires a matching validated cache and ETag")
         # Revalidate on every use, including responses with no JSON body.
-        parse_roster_json(cached_text, expected_version=expected_version)
+        parse_roster_json(cached_text, expected_version=expected_version,
+                          exclude_invalid_callsigns=exclude_invalid_callsigns)
         return cached_text
 
     try:
@@ -320,7 +350,9 @@ def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
             _require(response.getcode() == 200, "Roster export did not return HTTP 200")
             text = _decode_roster(response.read(MAX_ROSTER_BYTES + 1))
             if cache_file is not None:
-                envelope, _ = parse_roster_json(text, expected_version=expected_version)
+                parse_roster_json(text, expected_version=expected_version,
+                                  exclude_invalid_callsigns=exclude_invalid_callsigns)
+                envelope = json.loads(text)
                 etag = response.headers.get("ETag")
                 expected_etag = f'W/"{envelope["content_hash"]}"'
                 _require(etag is None or etag == expected_etag, "Roster response ETag mismatch")

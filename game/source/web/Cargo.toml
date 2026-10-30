@@ -1,0 +1,23 @@
+[package]
+name = "pocketcw-web"
+version = "0.4.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "Brass Knuckles Knock Out in a web browser: the HamCube game's own code, built for WebAssembly."
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+embedded-graphics = "0.8.2"
+pocketcw-logic = { version = "0.4.0", path = "../logic" }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+panic = "abort"

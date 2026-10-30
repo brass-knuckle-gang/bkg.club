@@ -1575,7 +1575,7 @@ body {
 }
 
 /* Recruit intake: field errors, robot check, receipt */
-.form-row input.field-error, .form-row textarea.field-error {
+.form-row input.field-error, .form-row textarea.field-error, .form-row select.field-error {
     border-color: var(--hot-pink);
     box-shadow: 0 0 10px rgba(255, 20, 147, 0.6);
 }

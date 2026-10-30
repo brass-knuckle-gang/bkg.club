@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Comic+Neue:wght@400;700&family=Special+Elite&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/bkg.css">
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+    <script id="turnstileScript" src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
 <body>
     <div class="tiled-bg"></div>
@@ -40,6 +40,7 @@
                 <a href="safety.html">SAFETY</a>
                 <a href="outbreak.html">OUTBREAK</a>
                 <a href="badges.html">BADGES</a>
+                <a href="arcade.html">ARCADE</a>
                 <a href="https://programmer.bkg.club" target="_blank" rel="noopener">PROGRAMMER</a>
                 <a href="https://discord.gg/wDs5dth22k" target="_blank" rel="noopener">DISCORD</a>
             </nav>
@@ -92,16 +93,103 @@
                         <input type="text" id="recruitName" required placeholder="e.g. Jane Doe" autocomplete="off">
                     </div>
                 </div>
-                <div class="form-grid">
-                    <div class="form-row">
-                        <label for="recruitQth">New Op QTH (State)</label>
-                        <input type="text" id="recruitQth" placeholder="e.g. Utah" autocomplete="off">
-                    </div>
-                    <div class="form-row">
-                        <label for="recruitEmail">New Op Email</label>
-                        <input type="email" id="recruitEmail" placeholder="optional" autocomplete="off">
-                        <div class="form-hint">Where the welcome goes. Blank = we send it via u.</div>
-                    </div>
+                <div class="form-row">
+                    <label id="recruitQthLabel" for="recruitQth">New Op QTH (State / Province / Country)</label>
+                    <input type="text" id="recruitQth" placeholder="e.g. Utah" autocomplete="off">
+                    <select id="recruitUsRegion" aria-labelledby="recruitQthLabel" hidden disabled>
+                        <option value="">Choose a state or U.S. DXCC entity</option>
+                        <optgroup label="States and District of Columbia">
+                            <option value="Alabama" data-aliases="AL">Alabama (AL)</option>
+                            <option value="Alaska" data-aliases="AK">Alaska (AK)</option>
+                            <option value="Arizona" data-aliases="AZ">Arizona (AZ)</option>
+                            <option value="Arkansas" data-aliases="AR">Arkansas (AR)</option>
+                            <option value="California" data-aliases="CA">California (CA)</option>
+                            <option value="Colorado" data-aliases="CO">Colorado (CO)</option>
+                            <option value="Connecticut" data-aliases="CT">Connecticut (CT)</option>
+                            <option value="Delaware" data-aliases="DE">Delaware (DE)</option>
+                            <option value="District of Columbia" data-aliases="DC">District of Columbia (DC)</option>
+                            <option value="Florida" data-aliases="FL">Florida (FL)</option>
+                            <option value="Georgia" data-aliases="GA">Georgia (GA)</option>
+                            <option value="Hawaii" data-aliases="HI">Hawaii (HI)</option>
+                            <option value="Idaho" data-aliases="ID">Idaho (ID)</option>
+                            <option value="Illinois" data-aliases="IL">Illinois (IL)</option>
+                            <option value="Indiana" data-aliases="IN">Indiana (IN)</option>
+                            <option value="Iowa" data-aliases="IA">Iowa (IA)</option>
+                            <option value="Kansas" data-aliases="KS">Kansas (KS)</option>
+                            <option value="Kentucky" data-aliases="KY">Kentucky (KY)</option>
+                            <option value="Louisiana" data-aliases="LA">Louisiana (LA)</option>
+                            <option value="Maine" data-aliases="ME">Maine (ME)</option>
+                            <option value="Maryland" data-aliases="MD">Maryland (MD)</option>
+                            <option value="Massachusetts" data-aliases="MA">Massachusetts (MA)</option>
+                            <option value="Michigan" data-aliases="MI">Michigan (MI)</option>
+                            <option value="Minnesota" data-aliases="MN">Minnesota (MN)</option>
+                            <option value="Mississippi" data-aliases="MS">Mississippi (MS)</option>
+                            <option value="Missouri" data-aliases="MO">Missouri (MO)</option>
+                            <option value="Montana" data-aliases="MT">Montana (MT)</option>
+                            <option value="Nebraska" data-aliases="NE">Nebraska (NE)</option>
+                            <option value="Nevada" data-aliases="NV">Nevada (NV)</option>
+                            <option value="New Hampshire" data-aliases="NH">New Hampshire (NH)</option>
+                            <option value="New Jersey" data-aliases="NJ">New Jersey (NJ)</option>
+                            <option value="New Mexico" data-aliases="NM">New Mexico (NM)</option>
+                            <option value="New York" data-aliases="NY">New York (NY)</option>
+                            <option value="North Carolina" data-aliases="NC">North Carolina (NC)</option>
+                            <option value="North Dakota" data-aliases="ND">North Dakota (ND)</option>
+                            <option value="Ohio" data-aliases="OH">Ohio (OH)</option>
+                            <option value="Oklahoma" data-aliases="OK">Oklahoma (OK)</option>
+                            <option value="Oregon" data-aliases="OR">Oregon (OR)</option>
+                            <option value="Pennsylvania" data-aliases="PA">Pennsylvania (PA)</option>
+                            <option value="Rhode Island" data-aliases="RI">Rhode Island (RI)</option>
+                            <option value="South Carolina" data-aliases="SC">South Carolina (SC)</option>
+                            <option value="South Dakota" data-aliases="SD">South Dakota (SD)</option>
+                            <option value="Tennessee" data-aliases="TN">Tennessee (TN)</option>
+                            <option value="Texas" data-aliases="TX">Texas (TX)</option>
+                            <option value="Utah" data-aliases="UT">Utah (UT)</option>
+                            <option value="Vermont" data-aliases="VT">Vermont (VT)</option>
+                            <option value="Virginia" data-aliases="VA">Virginia (VA)</option>
+                            <option value="Washington" data-aliases="WA">Washington (WA)</option>
+                            <option value="West Virginia" data-aliases="WV">West Virginia (WV)</option>
+                            <option value="Wisconsin" data-aliases="WI">Wisconsin (WI)</option>
+                            <option value="Wyoming" data-aliases="WY">Wyoming (WY)</option>
+                        </optgroup>
+                        <optgroup label="Other U.S. DXCC entities">
+                            <option value="American Samoa" data-aliases="AS">American Samoa</option>
+                            <option value="Baker &amp; Howland Islands" data-aliases="Baker and Howland Islands">Baker &amp; Howland Islands</option>
+                            <option value="Desecheo Island" data-aliases="">Desecheo Island</option>
+                            <option value="Guam" data-aliases="GU">Guam</option>
+                            <option value="Guantanamo Bay" data-aliases="">Guantanamo Bay</option>
+                            <option value="Johnston Island" data-aliases="">Johnston Island</option>
+                            <option value="Kure Island" data-aliases="">Kure Island</option>
+                            <option value="Midway Island" data-aliases="">Midway Island</option>
+                            <option value="Navassa Island" data-aliases="">Navassa Island</option>
+                            <option value="Northern Mariana Islands" data-aliases="MP|Mariana Islands">Northern Mariana Islands</option>
+                            <option value="Palmyra &amp; Jarvis Islands" data-aliases="Palmyra and Jarvis Islands">Palmyra &amp; Jarvis Islands</option>
+                            <option value="Puerto Rico" data-aliases="PR">Puerto Rico</option>
+                            <option value="Swains Island" data-aliases="">Swains Island</option>
+                            <option value="U.S. Virgin Islands" data-aliases="VI|US Virgin Islands|Virgin Islands">U.S. Virgin Islands</option>
+                            <option value="Wake Island" data-aliases="">Wake Island</option>
+                        </optgroup>
+                    </select>
+                    <select id="recruitProvince" aria-labelledby="recruitQthLabel" hidden disabled>
+                        <option value="">Choose a Canadian province or territory</option>
+                        <option value="Alberta" data-code="AB">Alberta (AB)</option>
+                        <option value="British Columbia" data-code="BC">British Columbia (BC)</option>
+                        <option value="Manitoba" data-code="MB">Manitoba (MB)</option>
+                        <option value="New Brunswick" data-code="NB">New Brunswick (NB)</option>
+                        <option value="Newfoundland and Labrador" data-code="NL">Newfoundland and Labrador (NL)</option>
+                        <option value="Northwest Territories" data-code="NT">Northwest Territories (NT)</option>
+                        <option value="Nova Scotia" data-code="NS">Nova Scotia (NS)</option>
+                        <option value="Nunavut" data-code="NU">Nunavut (NU)</option>
+                        <option value="Ontario" data-code="ON">Ontario (ON)</option>
+                        <option value="Prince Edward Island" data-code="PE">Prince Edward Island (PE)</option>
+                        <option value="Quebec" data-code="QC">Quebec (QC)</option>
+                        <option value="Saskatchewan" data-code="SK">Saskatchewan (SK)</option>
+                        <option value="Yukon" data-code="YT">Yukon (YT)</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <label for="recruitEmail">New Op Email</label>
+                    <input type="email" id="recruitEmail" placeholder="optional" autocomplete="off">
+                    <div class="form-hint">Where the welcome goes. Blank = we send it via u.</div>
                 </div>
             </div>
 
@@ -139,8 +227,9 @@
 
             <button type="submit" class="submit-btn" id="submitBtn">🤜 SEND IT IN!! 🤜</button>
 
-            <div class="form-error" id="formError" role="alert"></div>
         </form>
+
+        <div class="form-error" id="formError" role="alert"></div>
 
         <div class="form-confirm" id="formConfirm">
             <h2>👀 DOUBLE-CHECK UR INTAKE</h2>
@@ -197,7 +286,7 @@
        ============================================================ */
     const INTAKE_ENDPOINT = "https://bkg-membership-intake.cool-cake-fac1.workers.dev/v1/applications";
     // Public sitekey of the production Turnstile widget (hostname www.bkg.club).
-    const TURNSTILE_SITEKEY = "REPLACE_WITH_PRODUCTION_TURNSTILE_SITEKEY";
+    const TURNSTILE_SITEKEY = "0x4AAAAAAFsHyM6nyvrtrADC";
     const TURNSTILE_ACTION = "recruit-application";
     const PENDING_STORAGE_KEY = "bkg-recruit-pending-v1";
     const CONTACT_DISCORD = "https://discord.gg/wDs5dth22k";
@@ -209,7 +298,7 @@
         ["sponsorNum",   "sponsorNumber",   "Sponsor BKG #"],
         ["recruitCall",  "callsign",        "New Op Callsign"],
         ["recruitName",  "name",            "New Op Name"],
-        ["recruitQth",   "qth",             "New Op QTH (State)"],
+        ["recruitQth",   "qth",             "New Op QTH (State / Province / Country)"],
         ["recruitEmail", "recruitEmail",    "New Op Email"],
         ["qsoDate",      "qsoDate",         "QSO Date (UTC)"],
         ["qsoTime",      "qsoTime",         "QSO Time (UTC)"],
@@ -232,12 +321,59 @@
         let widgetId = null;
         let inFlight = false;
 
+        const recruitCallInput = document.getElementById('recruitCall');
+        const qthInput = document.getElementById('recruitQth');
+        const provinceSelect = document.getElementById('recruitProvince');
+        const usRegionSelect = document.getElementById('recruitUsRegion');
+        const qthLabel = document.getElementById('recruitQthLabel');
+        function updateQthControl() {
+            const callsign = recruitCallInput.value.trim().toUpperCase();
+            const canadian = /^(?:VA|VE|VO|VY)\d/.test(callsign);
+            const prefix = callsign.slice(0, 2);
+            const american = /^[KNW]/.test(callsign) || (prefix.length === 2 && prefix >= 'AA' && prefix <= 'AL');
+            const activeSelect = canadian ? provinceSelect : american ? usRegionSelect : null;
+            qthInput.hidden = Boolean(activeSelect);
+            qthInput.disabled = Boolean(activeSelect);
+            [provinceSelect, usRegionSelect].forEach(function (select) {
+                const active = select === activeSelect;
+                select.hidden = !active;
+                select.disabled = !active;
+                select.required = active;
+            });
+            qthLabel.htmlFor = activeSelect ? activeSelect.id : 'recruitQth';
+            if (activeSelect) {
+                const current = qthInput.value.trim().toUpperCase();
+                const option = Array.from(activeSelect.options).find(function (option) {
+                    const aliases = (option.dataset.aliases || option.dataset.code || '').toUpperCase().split('|');
+                    return option.value.toUpperCase() === current || aliases.includes(current);
+                });
+                activeSelect.value = option ? option.value : '';
+                qthInput.value = activeSelect.value;
+            }
+        }
+        recruitCallInput.addEventListener('input', updateQthControl);
+        [provinceSelect, usRegionSelect].forEach(function (select) {
+            select.addEventListener('change', function () {
+                // Keep the canonical region in the API payload's QTH field.
+                qthInput.value = select.value;
+            });
+        });
+        restorePending();
+        updateQthControl();
+
         function escapeHtml(s) {
             return String(s).replace(/[&<>"']/g, function (c) {
                 return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
             });
         }
         function val(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+        function fieldControl(id) {
+            if (id === 'recruitQth') {
+                if (!provinceSelect.disabled) return provinceSelect;
+                if (!usRegionSelect.disabled) return usRegionSelect;
+            }
+            return document.getElementById(id);
+        }
         function showError(html) {
             errorBox.innerHTML = html;
             errorBox.classList.add('show');
@@ -245,9 +381,9 @@
         }
         function clearError() {
             errorBox.classList.remove('show');
-            FIELDS.forEach(function (f) {
-                const el = document.getElementById(f[0]);
-                if (el) { el.classList.remove('field-error'); el.removeAttribute('aria-invalid'); }
+            form.querySelectorAll('.field-error, [aria-invalid]').forEach(function (el) {
+                el.classList.remove('field-error');
+                el.removeAttribute('aria-invalid');
             });
         }
         function contactRoute() {
@@ -269,6 +405,19 @@
         function loadPending() {
             try { return JSON.parse(sessionStorage.getItem(PENDING_STORAGE_KEY) || 'null'); }
             catch (e) { return null; }
+        }
+        function restorePending() {
+            const pending = loadPending();
+            if (!pending || typeof pending.payload !== 'string') return;
+            try {
+                const payload = JSON.parse(pending.payload);
+                if (!payload || typeof payload !== 'object') return;
+                FIELDS.forEach(function (f) {
+                    if (typeof payload[f[1]] === 'string') {
+                        document.getElementById(f[0]).value = payload[f[1]];
+                    }
+                });
+            } catch (e) { /* Ignore an unusable saved submission. */ }
         }
         function savePending(pending) {
             try { sessionStorage.setItem(PENDING_STORAGE_KEY, JSON.stringify(pending)); } catch (e) { /* private mode */ }
@@ -309,6 +458,9 @@
         }
         function resetWidget() { if (widgetId !== null && turnstileReady()) window.turnstile.reset(widgetId); }
         function widgetToken() { return (widgetId !== null && turnstileReady()) ? (window.turnstile.getResponse(widgetId) || '') : ''; }
+        document.getElementById('turnstileScript').addEventListener('load', function () {
+            if (confirmPanel.classList.contains('show')) renderWidget();
+        });
 
         // ---- Step 1: validate, then review -----------------------------------
         form.addEventListener('submit', function (e) {
@@ -351,7 +503,7 @@
             (names || []).forEach(function (name) {
                 const f = FIELDS.filter(function (x) { return x[1] === name; })[0];
                 if (!f) return;
-                const el = document.getElementById(f[0]);
+                const el = fieldControl(f[0]);
                 if (el) { el.classList.add('field-error'); el.setAttribute('aria-invalid', 'true'); }
                 bad.push(f[2]);
             });

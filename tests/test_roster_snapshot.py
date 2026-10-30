@@ -36,10 +36,34 @@ class SnapshotTests(unittest.TestCase):
             self.addCleanup(replacement.stop)
 
     def fetch(self):
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as errors:
+        with contextlib.redirect_stdout(io.StringIO()) as record, contextlib.redirect_stderr(io.StringIO()) as errors:
             status = self.command.main(["--output", str(self.snapshot)])
+        self.record = record.getvalue()
+        self.errors = errors.getvalue()
         self.assertNotIn("private.fixture.invalid", errors.getvalue())
         return status
+
+    def test_exclusions_publish_a_valid_projection_and_retain_exact_source_and_diagnostics(self):
+        source = json.loads(self.body)
+        source["members"][0]["callsign"] = "KCØDWZ"
+        source["content_hash"] = roster_input.roster_content_hash(source)
+        self.body = json.dumps(source, ensure_ascii=False).encode()
+        summary, output = self.workspace / "summary.md", self.workspace / "output.txt"
+        with patch.object(roster_input.urllib.request, "build_opener") as opener, \
+                patch.dict(roster_input.os.environ, {"GITHUB_STEP_SUMMARY": str(summary), "GITHUB_OUTPUT": str(output)}):
+            opener.return_value.open.return_value = FakeResponse(self.body)
+            self.assertEqual(self.fetch(), 0)
+        published, members = roster_input.parse_roster_json(self.snapshot.read_text())
+        self.assertEqual(len(members), len(source["members"]) - 1)
+        self.assertEqual(self.snapshot.with_name("roster-source.json").read_bytes(), self.body)
+        record = json.loads(self.record)
+        self.assertEqual(record["source_content_hash"], source["content_hash"])
+        self.assertEqual(record["content_hash"], published["content_hash"])
+        self.assertIn("BKG #1", self.errors)
+        self.assertIn("::warning", self.errors)
+        self.assertNotIn("KCØDWZ", self.errors)
+        self.assertIn("1 excluded", summary.read_text())
+        self.assertIn("excluded_members=1", output.read_text())
 
     def test_one_anonymous_fetch_builds_all_artifacts_from_saved_file(self):
         with patch.object(roster_input.urllib.request, "build_opener") as opener:
