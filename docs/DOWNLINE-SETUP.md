@@ -46,63 +46,18 @@ That's all the tree needs. `scripts/build-roster.py` injects the data into
 
 ---
 
-## 2. The recruit form: email relay (no backend)
+## 2. Recruit applications
 
-The site is static (GitHub Pages), so there's no server to receive
-submissions. `recruit.html` POSTs to **[FormSubmit](https://formsubmit.co)** —
-a free, no-signup relay that emails each submission to the gang inbox. Officers
-review it, assign a BKG #, and add the recruit to the roster (admin-review
-flow — submissions do **not** auto-publish to the tree).
+`recruit.html` sends JSON directly to the membership intake API. An accepted
+application receives an opaque receipt and remains pending officer review;
+submission never issues a number or publishes a member automatically.
 
-The form is already wired and live. There are no API keys and nothing to
-deploy; the only setup is a one-time activation click.
+The enhanced form matches sponsor callsigns or BKG numbers against the public
+roster, separates sponsor/recruit contact addresses, accepts 24-hour UTC time,
+and asks for confirmation of a 2m CW QSO and the recruit's agreement to join.
+Unmatched sponsors can explicitly request officer review. Officers review the
+application in BKG automation and approve or reject it there.
 
-### a. One-time activation (required once)
-
-The **first** submission after this goes live triggers a confirmation email
-from FormSubmit to the gang inbox (**k7bkgang@gmail.com**). Open that email and
-click the activation link **once**. After that, every submission is delivered
-automatically. Until it's activated, submissions won't arrive — so send a test
-submission through the live form and click the link when it lands.
-
-> The activation email may take a minute and can land in Spam/Promotions — check
-> there if it doesn't show up.
-
-### b. Where submissions go / changing the inbox
-
-The target address lives near the bottom of `recruit.html`:
-
-```js
-const RELAY_INBOX = "k7bkgang@gmail.com";
-```
-
-Change that string and re-activate (step **a**) to point submissions at a
-different inbox. Each email arrives as a readable table with the sponsor, the
-new op, the QSO details, and notes; if the submitter gave an email it's set as
-the reply-to, so officers can reply to them directly.
-
-> **Spam note:** the address appears in the page source. FormSubmit also
-> supports a hashed alias endpoint (`formsubmit.co/<your-random-string>`) that
-> hides the raw address — grab your string from the confirmation email and swap
-> it into `RELAY_ENDPOINT` if harvesting becomes a problem.
-
-### c. Approving a submission
-
-1. Read the emailed submission.
-2. To accept: add the new op to the **roster sheet** as usual (assign the next
-   BKG #) and set their **`Sponsor`** to the submitting member's callsign/number.
-3. Next build → they appear in the roster, map, and the downline tree.
-
----
-
-## Files
-
-| File                          | What it is |
-|-------------------------------|------------|
-| `tree.html`                   | Downline tree page (data injected at build) |
-| `recruit.html`                | Recruit submission form (emails via FormSubmit relay) |
-| `assets/bkg.css`              | Shared theme for the two new pages |
-| `scripts/build-roster.py`     | Now also resolves sponsors + builds the tree |
-
-No new secrets or services beyond the free FormSubmit relay. The form needs no
-API keys — it POSTs straight to FormSubmit, which emails the gang inbox.
+These changes use the existing API contract and can be published independently.
+See [the recruit form guide](RECRUIT-FORM.md) for form behavior, private-data
+handling and recovery. The former FormSubmit relay is no longer used.

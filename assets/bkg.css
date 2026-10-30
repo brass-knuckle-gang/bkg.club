@@ -1588,3 +1588,20 @@ body {
     padding: 2px 6px;
     word-break: break-all;
 }
+
+/* Recruit identity feedback and accessible consent controls. */
+.form-row label.form-check { display: flex; align-items: flex-start; gap: 10px; line-height: 1.5; font-size: 0.9rem; }
+.form-row .form-check input[type="checkbox"] { width: 20px; min-width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--brass); }
+.form-match { font-family: 'Comic Neue', sans-serif; color: var(--brass-light); margin: 8px 0 14px; overflow-wrap: anywhere; }
+.form-match:empty { display: none; }
+.form-match a, #recoveryNote a { color: var(--brass-light); }
+.recruit-form .back-link { margin-top: 12px; font-size: 0.9rem; }
+.recruit-form input[readonly] { opacity: 0.8; }
+.recruit-form [aria-invalid="true"] { outline: 2px solid var(--hot-pink); }
+.form-confirm button:disabled { opacity: 0.5; cursor: default; }
+.form-success .receipt-line code { overflow-wrap: anywhere; }
+.recruit-form [hidden], .form-confirm [hidden] { display: none !important; }
+@media (max-width: 600px) {
+    .confirm-summary { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+    .confirm-summary dd { margin-bottom: 10px; }
+}
