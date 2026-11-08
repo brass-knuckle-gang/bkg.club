@@ -183,10 +183,17 @@
         el('recoveryNote').hidden = !pendingAttempt;
         confirmBack.disabled = Boolean(pendingAttempt) || inFlight;
     }
+    // Until Cloudflare's script loads, window.turnstile may be undefined or an
+    // element; only an object with render() is the widget API.
+    function turnstileApi() {
+        const api = window.turnstile;
+        return api && typeof api.render === 'function' ? api : null;
+    }
     function renderWidget() {
-        if (!window.turnstile) return;
-        if (widgetId !== null) window.turnstile.reset(widgetId);
-        else widgetId = window.turnstile.render('#turnstile', {
+        const api = turnstileApi();
+        if (!api) return;
+        if (widgetId !== null) api.reset(widgetId);
+        else widgetId = api.render('#turnstileWidget', {
             sitekey: '0x4AAAAAAFsHyM6nyvrtrADC', action: 'recruit-application',
             theme: 'dark', 'refresh-expired': 'auto'
         });
@@ -240,7 +247,8 @@
     async function send() {
         if (inFlight || !reviewedPayload) return;
         clearError();
-        const token = widgetId !== null && window.turnstile ? window.turnstile.getResponse(widgetId) : '';
+        const api = turnstileApi();
+        const token = widgetId !== null && api ? api.getResponse(widgetId) : '';
         if (!token) { error('Complete the robot check, then send. If it did not load, reload or contact k7bkgang@gmail.com.'); return; }
         const recovering = Boolean(pendingAttempt);
         const attempt = rules.attempt(reviewedPayload, pendingAttempt || rejectedAttempt, crypto.randomUUID());
@@ -294,7 +302,7 @@
             confirmSend.disabled = false;
             confirmSend.textContent = sendLabel;
             lockRecovery();
-            if (widgetId !== null && window.turnstile) window.turnstile.reset(widgetId);
+            if (widgetId !== null && turnstileApi()) turnstileApi().reset(widgetId);
         }
     }
     form.addEventListener('submit', function (event) {
@@ -364,16 +372,8 @@
         el('rememberSponsor').checked = true;
     }
     updateQthControl();
-    if (pendingAttempt) {
-        const payload = JSON.parse(pendingAttempt.payload);
-        fillForm(payload, pendingAttempt.ui);
-        review(payload, pendingAttempt.ui);
-    } else if (rejectedAttempt) {
-        fillForm(JSON.parse(rejectedAttempt.payload), rejectedAttempt.ui);
-    } else {
-        const receipt = readStorage('sessionStorage', RECEIPT_KEY);
-        if (receipt && typeof receipt.receipt === 'string' && typeof receipt.receivedAt === 'string') showReceipt(receipt);
-    }
+    // Start before restoring a saved attempt, so a recovery-screen error cannot
+    // leave sponsor lookup without roster data.
     (async function loadRoster() {
         for (const version of [2, 1]) {
             try {
@@ -392,4 +392,14 @@
         }
         if (!pendingAttempt) { matchSponsor(); validateRecruit(); }
     }());
+    if (pendingAttempt) {
+        const payload = JSON.parse(pendingAttempt.payload);
+        fillForm(payload, pendingAttempt.ui);
+        review(payload, pendingAttempt.ui);
+    } else if (rejectedAttempt) {
+        fillForm(JSON.parse(rejectedAttempt.payload), rejectedAttempt.ui);
+    } else {
+        const receipt = readStorage('sessionStorage', RECEIPT_KEY);
+        if (receipt && typeof receipt.receipt === 'string' && typeof receipt.receivedAt === 'string') showReceipt(receipt);
+    }
 }());
