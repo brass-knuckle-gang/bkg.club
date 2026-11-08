@@ -11,7 +11,7 @@ need no backend deployment.
 
 Sponsor lookup reads this site's published `data/v2/roster.json`, falling back
 to `data/v1/roster.json` (published only while production is rolled back to v1).
-The roster is rebuilt hourly, so it can lag recent approvals by about an hour. Only public member identity fields are used. It matches exact callsigns
+GitHub runs the scheduled rebuild only a few times a day, so the roster can lag recent approvals by several hours. Only public member identity fields are used. It matches exact callsigns
 or membership numbers, shows the member's name/current call/number, and offers
 O/0 corrections only as explicit suggestions. A missing match permits an explicit officer-review request using a callsign.
 Matching a call does not authenticate the submitter. Officers continue reviewing

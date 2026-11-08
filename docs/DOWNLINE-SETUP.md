@@ -12,7 +12,7 @@ Two pages on bkg.club deal with who recruited whom:
 
 The tree is part of the normal build: `scripts/build-roster.py` injects it into
 `tree.html` from the published roster snapshot on every push to `main`, and on
-the hourly schedule when something changed (see [deployment](DEPLOYMENT.md)).
+the scheduled refresh when something changed (see [deployment](DEPLOYMENT.md)).
 The recruit form needs no build step beyond publishing its scripts.
 
 ---
