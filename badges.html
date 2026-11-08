@@ -554,25 +554,31 @@ function stamp(){
     ". Reload to try the roster again, or paste the export JSON below.");
 }
 
-// The Worker sends Access-Control-Allow-Origin: *, so GitHub Pages can
-// fetch it directly; its own Cache-Control keeps this to one hit per 5 min.
-const ROSTER_URL = "https://bkg-public-roster.cool-cake-fac1.workers.dev/api/roster/export";
+// The roster this site published with its last build (same origin, no CORS).
+// v2 is production; v1 is published only while the site is rolled back.
+const ROSTER_URLS = ["data/v2/roster.json", "data/v1/roster.json"];
 let liveNote = "";
 async function pullLive(){
-  try {
-    const r = await fetch(ROSTER_URL);
-    if(!r.ok) throw new Error("roster endpoint returned " + r.status);
-    const d = await r.json();
-    if(!Array.isArray(d.members)) throw new Error("unexpected roster shape");
-    ROSTER = {
-      at: d.generated_at || "",
-      members: d.members.map(m => ({n:m.bkg_number, c:m.callsign, nm:m.name, q:m.qth})),
-      og: Object.fromEntries((d.og_assignments||[]).map(a => [a.bkg_number, a.region_label]))
-    };
-    liveNote = "Roster is live from the export endpoint, refreshed on every load.";
-  } catch(e){
-    liveNote = "Couldn't reach the roster endpoint: " + e.message;
+  let problem = "";
+  for (const url of ROSTER_URLS) {
+    try {
+      const r = await fetch(url);
+      if(!r.ok) throw new Error("returned " + r.status);
+      const d = await r.json();
+      if(!Array.isArray(d.members)) throw new Error("unexpected roster shape");
+      ROSTER = {
+        at: d.generated_at || "",
+        members: d.members.map(m => ({n:m.bkg_number, c:m.callsign, nm:m.name, q:m.qth})),
+        og: Object.fromEntries((d.og_assignments||[]).map(a => [a.bkg_number, a.region_label]))
+      };
+      liveNote = "Roster is the one this site published with its last build.";
+      problem = "";
+      break;
+    } catch(e){
+      problem = problem || e.message;
+    }
   }
+  if (problem) liveNote = "Couldn't load the site's roster: " + problem;
   stamp();
   const founder = ROSTER.members.find(m => m.n === 1);
   founder ? choose(founder) : render();
