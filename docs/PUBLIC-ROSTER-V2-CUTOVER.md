@@ -159,6 +159,6 @@ manifest until the v2 publication and rollback checkpoint is verified. Remove
 those compatibility paths in a follow-up retirement change. Retiring them is
 separate from the recruitment form's direct-intake migration (already complete)
 and from static presentation dependencies such as Leaflet, map tiles, and
-location geocoding. Before retiring the v1 feed, move the badge press
-(`badges.html`) off it: the page fetches the v1 export live in the browser (see
+location geocoding. No page reads the v1 feed directly: the badge press and
+recruit form read the site's own published roster (see
 [the data ownership audit](PUBLISHER-DATA-INVENTORY.md#browser-requests)).

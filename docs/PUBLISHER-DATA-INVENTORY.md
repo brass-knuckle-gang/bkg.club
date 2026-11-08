@@ -69,17 +69,15 @@ cutover; the [live review](PUBLIC-ROSTER-V2-REVIEW.md) records its coverage gate
 ## Browser requests
 
 Nearby loads OpenStreetMap tiles and optionally asks Nominatim to geocode the
-visitor's location search. Browser geolocation supplies the visitor's location.
-These requests do not enrich or modify member data. Member maps, downline,
-outbreak, notes, and roster cards consume static generated data.
+address or place the visitor types; a typed grid square needs no lookup. It
+does not use browser geolocation. These requests do not enrich or modify member
+data. Member maps, downline, outbreak, notes, and roster cards consume static
+generated data.
 
-The badge press (`badges.html`) is the exception: on every load it fetches the
-**v1** export directly from the public roster Worker
-(`https://bkg-public-roster.cool-cake-fac1.workers.dev/api/roster/export`) and
-reads number, callsign, name, QTH, and OG labels from it. If that fails, the
-roster stays empty until the visitor pastes or uploads export JSON. It never
-writes member data. It does not read this site's `data/v2/roster.json`, so
-retiring the v1 feed would break its live roster.
+The badge press (`badges.html`) reads this site's published
+`data/v2/roster.json` (falling back to `data/v1/roster.json`) for number,
+callsign, name, QTH, and OG labels. If neither loads, the roster stays empty
+until the visitor pastes or uploads export JSON. It never writes member data.
 
 The recruit form posts applications directly to the membership intake API
 (`https://bkg-membership-intake.cool-cake-fac1.workers.dev/v1/applications`),
@@ -102,5 +100,5 @@ artifact. Invalid input/assets fail before replacing the previous output.
 The repository variable `ROSTER_EXPORT_VERSION=2` selected v2 on October 21,
 2026, after backend deployment, enrichment and override reconciliation,
 comparison of a saved v2 snapshot, and publication verification. The workflow's
-built-in default remains v1, so removing that variable reverts to the v1
+built-in default is also v2; only setting the variable to `1` selects the v1
 rollback path.

@@ -11,10 +11,10 @@ it copies verified immutable administration photos and publishes the saved V2
 snapshot.
 
 V1 remains in the workflow only as a rollback path. The workflow's built-in
-default is still `1`, so deleting the `ROSTER_EXPORT_VERSION` variable (or
-setting it to `1`) switches the next build back to the V1 feed in the
-`ROSTER_EXPORT_URL` repository secret, with the website's own QRZ enrichment.
-Both paths keep fixed-revision validation and artifact rollback.
+default is also `2`, so a missing variable cannot silently select V1. Setting
+`ROSTER_EXPORT_VERSION` to `1` deliberately switches the next build back to the
+V1 feed in the `ROSTER_EXPORT_URL` repository secret, with the website's own
+QRZ enrichment. Both paths keep fixed-revision validation and artifact rollback.
 
 GitHub Pages, `www.bkg.club`, and CNAME/DNS are unchanged by either path. Production triggers are pushes to `main`, manual dispatch on `main`, and the schedule `23 * * * *`. The cron asks for hourly runs, but GitHub runs scheduled workflows on a best-effort basis: in October and November 2026 this one started only 3–7 times a day, with gaps of up to about 8 hours. A newly approved member can therefore take that long to appear unless someone dispatches the workflow. A scheduled run that would publish the same site as the last deploy stops after validation; pushes and manual dispatches always deploy, unless a dispatch sets `skip_unchanged`. The `deploy` concurrency group serializes runs without cancelling active deployment. Pull requests run only the offline Node and Python checks, with read-only permissions and no production environment/secrets. Creating or updating a draft PR cannot deploy this site.
 
