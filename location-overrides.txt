@@ -1,5 +1,10 @@
 # BKG location overrides — manually maintained (NOT auto-generated).
 #
+# LEGACY: production ignores this file. The live site publishes the
+# administration-owned roster (docs/JSON-INPUT.md), whose reviewed QTHs
+# are authoritative; correct them in bkg-automation instead. Entries here
+# apply only to an explicit `scripts/build-roster.py --source sheets` build.
+#
 # Override the location bkg.club places a member at, replacing what the QRZ
 # XML lookup reports. Use this when a member's QRZ QTH is stale (they moved
 # but never updated their QRZ address). QRZ stays the source of truth for
