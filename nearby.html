@@ -197,7 +197,7 @@
     <main class="main-wrapper">
         <a href="index.html" class="back-link">⟵ BACK 2 HQ</a>
         <h2 class="section-title">NEARBY GANG</h2>
-        <div class="section-subtitle">🤜 Type an address or drop a pin — find brass in range!! 🤜</div>
+        <div class="section-subtitle">🤜 Type a callsign, address or state, or drop a pin — find brass in range!! 🤜</div>
 
         <div class="nearby-demo-banner" id="demoBanner" style="display:none;">
             ⚠️ DEMO DATA!! Real member locations land at build time.
@@ -206,7 +206,7 @@
         <div class="nearby-controls">
             <form class="nearby-form" id="searchForm">
                 <input class="nearby-input" id="addressInput" type="text"
-                       placeholder="Enter address, city, or grid square…" autocomplete="off">
+                       placeholder="Callsign, address, city, state or grid square…" autocomplete="off" aria-label="Callsign, address, city, state or grid square">
                 <button class="nearby-btn" type="submit">🔎 SEARCH</button>
                 <select class="nearby-radius" id="radiusSelect" aria-label="Search radius">
                     <option value="25">Within 25 mi</option>
@@ -229,8 +229,9 @@
             <div id="resultsList"><div class="nearby-empty">Drop a pin to rank the gang by distance!!</div></div>
             <div class="nearby-privacy">
                 📍 Member spots are approximate (published grid square centers) — close
-                enough for a sked, useless for a stakeout. Address searches go to
-                OpenStreetMap's Nominatim and are not stored by us.
+                enough for a sked, useless for a stakeout. Callsign and grid searches
+                stay in ur browser; address and state searches go to OpenStreetMap's
+                Nominatim and are not stored by us.
             </div>
         </div>
     </main>
@@ -291,6 +292,7 @@
         // ---- Map setup (page still works if Leaflet is down) ----
         const hasMap = typeof L !== 'undefined';
         let map = null;
+        const markerByCall = {};
         if (hasMap) {
             map = L.map('nearbyMap', { worldCopyJump: true });
             L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -298,24 +300,39 @@
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             }).addTo(map);
 
-            const memberPts = [];
+            // One marker per published spot. Members in the same grid square
+            // share it, so nobody is hidden underneath someone else's dot.
+            const spots = new Map();
             members.forEach(m => {
                 if (typeof m.lat !== 'number' || typeof m.lon !== 'number') return;
-                const marker = L.circleMarker([m.lat, m.lon], {
-                    radius: 8,
+                const key = m.lat + ',' + m.lon;
+                if (!spots.has(key)) spots.set(key, { lat: m.lat, lon: m.lon, members: [] });
+                spots.get(key).members.push(m);
+            });
+            const memberPts = [];
+            spots.forEach(spot => {
+                const many = spot.members.length > 1;
+                const marker = L.circleMarker([spot.lat, spot.lon], {
+                    radius: many ? 10 : 8,
                     color: '#000',
-                    weight: 2,
+                    weight: many ? 3 : 2,
                     fillColor: '#D4AF37',
                     fillOpacity: 0.9,
                 }).addTo(map);
+                const grid = spot.members[0].grid;
                 marker.bindPopup(
                     '<div class="nearby-popup">' +
-                    '<a href="https://www.qrz.com/db/' + esc(m.call) + '" target="_blank" rel="noopener">' + esc(m.call) + '</a>' +
-                    ' · ' + esc(m.name) + '<br>BKG #' + esc(m.num) +
-                    (m.grid ? ' · ' + esc(m.grid) : '') +
-                    '</div>'
+                    (many ? '<b>' + spot.members.length + ' ops in this square</b><br>' : '') +
+                    spot.members.map(m =>
+                        '<a href="https://www.qrz.com/db/' + esc(m.call) + '" target="_blank" rel="noopener">' + esc(m.call) + '</a>' +
+                        ' · ' + esc(m.name) + (many ? ' · BKG #' + esc(m.num) : '<br>BKG #' + esc(m.num))
+                    ).join('<br>') +
+                    (grid ? (many ? '<br>' : ' · ') + esc(grid) : '') +
+                    '</div>',
+                    { maxHeight: 240 }
                 );
-                memberPts.push([m.lat, m.lon]);
+                spot.members.forEach(m => { markerByCall[String(m.call).toUpperCase()] = marker; });
+                memberPts.push([spot.lat, spot.lon]);
             });
             if (memberPts.length) map.fitBounds(memberPts, { padding: [30, 30] });
             else map.setView([39.8, -98.6], 4);
@@ -441,12 +458,67 @@
             return [lat, lon];
         }
 
+        // ---- Member lookup: a callsign, or a BKG number written "BKG 777" / "#777"
+        // (a bare number could be a ZIP code, so it is left for the geocoder) ----
+        function findMember(q) {
+            const t = q.toUpperCase().replace(/\s+/g, '');
+            const num = /^(?:BKG#?|#)(\d+)$/.exec(t);
+            return members.find(m => typeof m.lat === 'number' && typeof m.lon === 'number' &&
+                (num ? Number(m.num) === Number(num[1]) : String(m.call).toUpperCase() === t));
+        }
+        function focusMember(m) {
+            // Rank from the member's own spot; no pin, so their dot stays visible.
+            if (pin) { map.removeLayer(pin); pin = null; }
+            lastPoint = [m.lat, m.lon];
+            if (hasMap) map.setView([m.lat, m.lon], 9);
+            update(m.lat, m.lon);
+            setStatus('Found ' + m.call + ' (BKG #' + m.num + ')' + (m.grid ? ' in ' + m.grid : '') + '. Ranking the gang from there.');
+            const marker = markerByCall[String(m.call).toUpperCase()];
+            if (marker) marker.openPopup();
+        }
+
+        // ---- US states and Canadian provinces, by code or name. A free-text
+        // geocode of "WA" finds Western Australia; a structured one does not. ----
+        const REGIONS = {
+            'United States': {
+                AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado',
+                CT: 'Connecticut', DE: 'Delaware', DC: 'District of Columbia', FL: 'Florida', GA: 'Georgia',
+                HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa', KS: 'Kansas',
+                KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland', MA: 'Massachusetts',
+                MI: 'Michigan', MN: 'Minnesota', MS: 'Mississippi', MO: 'Missouri', MT: 'Montana',
+                NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey', NM: 'New Mexico',
+                NY: 'New York', NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio', OK: 'Oklahoma',
+                OR: 'Oregon', PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina',
+                SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah', VT: 'Vermont',
+                VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
+            },
+            'Canada': {
+                AB: 'Alberta', BC: 'British Columbia', MB: 'Manitoba', NB: 'New Brunswick',
+                NL: 'Newfoundland and Labrador', NS: 'Nova Scotia', NT: 'Northwest Territories',
+                NU: 'Nunavut', ON: 'Ontario', PE: 'Prince Edward Island', QC: 'Quebec',
+                SK: 'Saskatchewan', YT: 'Yukon',
+            },
+        };
+        function regionFor(q) {
+            const t = q.trim().toUpperCase().replace(/\.$/, '');
+            for (const country of Object.keys(REGIONS)) {
+                for (const [code, name] of Object.entries(REGIONS[country])) {
+                    if (t === code || t === name.toUpperCase()) return { state: name, country };
+                }
+            }
+            return null;
+        }
+
         // ---- Address search via Nominatim ----
-        const NOMINATIM = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=';
+        const NOMINATIM = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&';
         document.getElementById('searchForm').addEventListener('submit', async e => {
             e.preventDefault();
             const q = document.getElementById('addressInput').value.trim();
             if (!q) return;
+
+            const member = findMember(q);
+            if (member) { focusMember(member); return; }
+            if (hasMap) map.closePopup();
 
             const gridPt = gridToLatLon(q);
             if (gridPt) {
@@ -455,18 +527,26 @@
                 return;
             }
 
+            const region = regionFor(q);
+            const params = region
+                ? 'state=' + encodeURIComponent(region.state) + '&country=' + encodeURIComponent(region.country)
+                : 'q=' + encodeURIComponent(q);
             setStatus('Searching…');
             try {
-                const resp = await fetch(NOMINATIM + encodeURIComponent(q));
+                const resp = await fetch(NOMINATIM + params);
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 const hits = await resp.json();
                 if (!hits.length) {
-                    setStatus('No match found. Try again!!', true);
+                    setStatus('No match found. Looking for a member? Type their callsign; only members with a published grid are on the map.', true);
                     return;
                 }
                 const hit = hits[0];
                 const lat = Number(hit.lat), lon = Number(hit.lon);
-                if (hasMap) map.setView([lat, lon], 9);
+                const box = (hit.boundingbox || []).map(Number);
+                if (hasMap) {
+                    if (box.length === 4 && box.every(Number.isFinite)) map.fitBounds([[box[0], box[2]], [box[1], box[3]]], { maxZoom: 11 });
+                    else map.setView([lat, lon], 9);
+                }
                 setPin(lat, lon, hit.display_name);
             } catch (err) {
                 setStatus('Search failed. Try again!!', true);

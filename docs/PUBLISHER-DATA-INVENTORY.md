@@ -69,8 +69,10 @@ cutover; the [live review](PUBLIC-ROSTER-V2-REVIEW.md) records its coverage gate
 ## Browser requests
 
 Nearby loads OpenStreetMap tiles and optionally asks Nominatim to geocode the
-address or place the visitor types; a typed grid square needs no lookup. It
-does not use browser geolocation. These requests do not enrich or modify member
+address, place, US state or Canadian province the visitor types (states and
+provinces as a structured query, so "WA" is Washington). A typed member
+callsign or grid square is resolved in the browser with no lookup. It does not
+use browser geolocation. These requests do not enrich or modify member
 data. Member maps, downline, outbreak, notes, and roster cards consume static
 generated data.
 
