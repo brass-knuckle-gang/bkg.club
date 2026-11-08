@@ -30,8 +30,9 @@ permissions:
   id-token: write
 
 env:
-  # Change only after the administration v2 deployment/backfill is verified.
-  ROSTER_EXPORT_VERSION: ${{ vars.ROSTER_EXPORT_VERSION || '1' }}
+  # Production publishes v2. Set the repository variable to 1 only to roll
+  # back deliberately; an unset variable must not silently select v1.
+  ROSTER_EXPORT_VERSION: ${{ vars.ROSTER_EXPORT_VERSION || '2' }}
 
 jobs:
   build:
@@ -65,6 +66,12 @@ jobs:
 
       - name: Check offline fixtures
         run: python3 -m unittest discover -s tests -v
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Check recruit form rules and recovery
+        run: node --test tests/recruit.test.cjs
 
       - name: Restore the selected roster snapshot cache
         id: roster-cache
