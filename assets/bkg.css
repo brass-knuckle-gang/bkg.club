@@ -592,8 +592,17 @@ body {
     .form-grid { grid-template-columns: 1fr; }
     .section-title { font-size: 1.8rem; }
     .logo-text { font-size: 1.9rem; }
-    /* tighten the tree so deep generations still fit a phone without side-scroll */
-    .tree-children { margin-left: 12px; padding-left: 10px; }
+    /* tighten the tree so deep generations still fit a phone without side-scroll:
+       15px per generation, and past the sixth only the dotted line steps in */
+    .tree-children { margin-left: 6px; padding-left: 6px; }
+    .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children {
+        margin-left: 0; padding-left: 4px;
+    }
+    .node-body { min-width: 0; }
+    .node-name { overflow-wrap: anywhere; }
+    /* let a long "N direct · +N indirect" badge drop below the name */
+    .kingpin-row { flex-wrap: wrap; }
+    .kingpin-count { margin-left: auto; }
     .node-card { padding: 7px 9px; gap: 8px; }
     .node-call { font-size: 1.1rem; }
     .tree-legend { font-size: 0.62rem; }

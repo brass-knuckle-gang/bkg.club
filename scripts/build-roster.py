@@ -646,6 +646,29 @@ def qth_location(qth: str) -> tuple[str | None, str | None]:
     return None, text
 
 
+def canonicalize_countries(members: list[dict]) -> None:
+    """Spell each country one way, so "POLAND" and "Poland" share a territory.
+
+    Reviewed QTH text is kept as published; only the derived country used for
+    map, roster and outbreak grouping is unified. The most common spelling
+    wins, then one that is not all capitals or all lowercase, then the first
+    alphabetically, so the choice is deterministic.
+    """
+    spellings: dict[str, dict[str, int]] = {}
+    for member in members:
+        country = member.get("country")
+        if country:
+            counts = spellings.setdefault(country.casefold(), {})
+            counts[country] = counts.get(country, 0) + 1
+    canonical = {
+        key: min(counts, key=lambda name: (-counts[name], name.isupper() or name.islower(), name))
+        for key, counts in spellings.items()
+    }
+    for member in members:
+        if member.get("country"):
+            member["country"] = canonical[member["country"].casefold()]
+
+
 def mark_territory_ogs(members: list[dict]) -> None:
     """Badge the earliest member (lowest BKG #) in each map territory, in place.
 
@@ -1638,6 +1661,7 @@ def build(output_dir: Path, *, source: str = "sheets", roster_json: Path | None 
         # After QRZ so updated sheet callsigns resolve.
         resolve_sponsors(members)
         stage_public_files(output_dir)
+    canonicalize_countries(members)
     update_index(members, output_dir)
     print(f"Updated {INDEX_PATH.name}")
 

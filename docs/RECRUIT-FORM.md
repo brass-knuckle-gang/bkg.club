@@ -1,21 +1,24 @@
 # Recruit form
 
-These are website-only improvements using the existing application intake
-contract. The public endpoint and submitted fields stay the same. Sponsor lookup,
-membership confirmation, unmatched-sponsor acknowledgement, and future-QSO checks
-run in the browser. The website can be published with the current automation API;
-it requires no backend changes or deployment coordination.
+`recruit.html` posts applications directly to the membership intake API at
+`https://bkg-membership-intake.cool-cake-fac1.workers.dev/v1/applications`,
+behind a Cloudflare Turnstile challenge. The page logic is in `assets/recruit.js`;
+the shared rules in `assets/recruit-core.js` also run under Node for the offline
+tests. Sponsor lookup, membership confirmation, unmatched-sponsor acknowledgement,
+and future-QSO checks run in the browser. They are website-only: the API contract
+and submitted fields are unchanged from the direct-intake cutover, so form changes
+need no backend deployment.
 
 Sponsor lookup reads this site's published `data/v2/roster.json`, falling back
-to v1. Only public member identity fields are used. It matches exact callsigns
+to `data/v1/roster.json` (published only while production is rolled back to v1).
+GitHub runs the scheduled rebuild only a few times a day, so the roster can lag recent approvals by several hours. Only public member identity fields are used. It matches exact callsigns
 or membership numbers, shows the member's name/current call/number, and offers
-O/0 corrections only as explicit suggestions. The snapshot can lag approvals;
-a missing match permits an explicit officer-review request using a callsign.
+O/0 corrections only as explicit suggestions. A missing match permits an explicit officer-review request using a callsign.
 Matching a call does not authenticate the submitter. Officers continue reviewing
 applications through the existing automation flow, including its duplicate
 membership guards at approval. The form does not inspect the pending queue.
 
-The form keeps the existing Canadian province and U.S. state/entity selectors.
+The form has Canadian province and U.S. state/entity selectors.
 UTC time accepts `HHMM` or `HH:MM`, normalizes to `HH:MM`, and checks the combined
 UTC date/time for a future value with five minutes of clock tolerance. The
 current-UTC button sets both date and time, including across local midnight.

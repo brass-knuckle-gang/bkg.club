@@ -1,5 +1,11 @@
 # Public roster cutover instructions
 
+> **Status: completed (historical record).** This runbook moved production from
+> the Google Sheet to the v1 JSON feed on October 2, 2026. Production has since
+> moved to the administration-owned v2 feed (October 21, 2026); see
+> [deployment](DEPLOYMENT.md) for current operation. The "every six hours"
+> schedule below became hourly on October 3, 2026.
+
 This draft implements the website source switch. The public backend is already deployed; do not change Cloudflare Workers, Access, D1, DNS, CNAME, or GitHub Pages hosting. The preparation described below is for the repository operator. No merge, website deployment, secret/settings change, or backend mutation was performed while preparing this PR.
 
 ## Prepare before approving the source switch

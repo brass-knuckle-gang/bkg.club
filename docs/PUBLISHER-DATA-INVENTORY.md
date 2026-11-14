@@ -1,16 +1,19 @@
 # Website data ownership
 
 Audit baseline: `cb1d5f14389ae1ac424f37798bb4adf9c325aebb` (October 5, 2026).
+Status updated November 8, 2026.
 
 The administration application owns member data and its enrichment. The website
 turns a validated snapshot and its immutable public assets into static pages.
-The v1 publication path remains available during the coordinated v2 rollout.
+Production has published the v2 snapshot since October 21, 2026. The v1
+publication path, with the website's own QRZ enrichment, remains available only
+for rollback until its retirement.
 
 ## Build-time inputs
 
-| Input | Current use | v2 owner |
+| Input | Website use (v1 rollback path, except the first row) | v2 owner |
 | --- | --- | --- |
-| Anonymous roster JSON | Reviewed active number, callsign, name, QTH, QSO date, sponsor reference, stored OG assignments | Administration |
+| Anonymous roster JSON | Reviewed active number, callsign, name, QTH, QSO date, sponsor reference, stored OG assignments; in v2 (production) also accepted map locations and photo descriptors | Administration |
 | QRZ XML login and callsign lookup | Canonical call for alias detection; public grid/coordinates; country/state agreement; profile image URL | Administration |
 | QRZ profile image download | Sanitized public roster photo | Administration |
 | `images/photo-overrides.json` and 11 source photos | Explicit number-and-callsign-bound photo replacement, preferred over QRZ | Administration |
@@ -19,8 +22,10 @@ The v1 publication path remains available during the coordinated v2 rollout.
 | Legacy callsign/mugshot caches | Used only by the explicit Sheets path | Retired by v2 publication |
 
 No other builder script fetches member data. `fetch-roster.py` fetches exactly one
-snapshot; refresh, rendering, validation, and artifact retention use those saved
-bytes. QRZ enrichment is a separate command. Rendering itself does not refresh
+snapshot; photo fetching, refresh, rendering, validation, and artifact retention
+use those saved bytes. In v2, `fetch-public-assets.py` downloads only the photos
+that snapshot names and verifies them against it. In v1, QRZ enrichment is a
+separate command. Rendering itself does not refresh
 QRZ. `fit-outbreak-projection.py` uses embedded development data, not a remote
 member lookup.
 
@@ -56,21 +61,35 @@ credentials, email, addresses, and image source URLs are excluded.
 The website's V1 scheduled refresh checks the least-recently-checked slice each hour so the
 roster is revisited within 24 hours. New/moved members and explicit `recheck`
 callsigns are checked immediately. Unchanged image URLs avoid another download.
-Administration's V2 refresh runs at most six members every five minutes; initial
-population can take hours and a due time is not a full-roster completion promise.
-The [live review](PUBLIC-ROSTER-V2-REVIEW.md) records coverage/backfill gates.
+Administration's V2 refresh runs in small batches (at most six members every
+five minutes at the October 2026 review), so a due time is not a full-roster
+completion promise. The initial population finished before the October 21
+cutover; the [live review](PUBLIC-ROSTER-V2-REVIEW.md) records its coverage gates.
 
 ## Browser requests
 
 Nearby loads OpenStreetMap tiles and optionally asks Nominatim to geocode the
-visitor's location search. Browser geolocation supplies the visitor's location.
-These requests do not enrich or modify member data. Member maps, downline,
-outbreak, notes, and roster cards consume static generated data.
+address, place, US state or Canadian province the visitor types (states and
+provinces as a structured query, so "WA" is Washington). A typed member
+callsign or grid square is resolved in the browser with no lookup. It does not
+use browser geolocation. These requests do not enrich or modify member
+data. Member maps, downline, outbreak, notes, and roster cards consume static
+generated data.
 
-The recruit form posts to the existing FormSubmit relay; that is an intake
-workflow, not a roster read. It remains separately scoped to the direct-intake
-cutover. Google Fonts and the pinned Leaflet CDN provide presentation assets.
-QRZ profile, Discord, YouTube, and other outbound links are navigation.
+The badge press (`badges.html`) reads this site's published
+`data/v2/roster.json` (falling back to `data/v1/roster.json`) for number,
+callsign, name, QTH, and OG labels. If neither loads, the roster stays empty
+until the visitor pastes or uploads export JSON. It never writes member data.
+
+The recruit form posts applications directly to the membership intake API
+(`https://bkg-membership-intake.cool-cake-fac1.workers.dev/v1/applications`),
+guarded by a Cloudflare Turnstile challenge. For sponsor lookup it reads this
+site's published `data/v2/roster.json`, falling back to `data/v1/roster.json`.
+That is an intake workflow, not a backend roster read; see
+[the recruit form guide](RECRUIT-FORM.md). The former FormSubmit relay is no
+longer used. Google Fonts and the pinned Leaflet CDN provide presentation
+assets. QRZ profile, Discord, YouTube, `programmer.bkg.club`, and other outbound
+links are navigation.
 
 ## Publication boundary
 
@@ -80,7 +99,8 @@ entire administration snapshot before accepting its public photos, then verifies
 immutable photo bytes against the snapshot before copying them into the static
 artifact. Invalid input/assets fail before replacing the previous output.
 
-An explicit schema setting selects v2 only after backend deployment, enrichment
-and override reconciliation, comparison of a saved v2 snapshot, and publication
-verification. Keeping v1 as the default preserves the running site until that
-checkpoint.
+The repository variable `ROSTER_EXPORT_VERSION=2` selected v2 on October 21,
+2026, after backend deployment, enrichment and override reconciliation,
+comparison of a saved v2 snapshot, and publication verification. The workflow's
+built-in default is also v2; only setting the variable to `1` selects the v1
+rollback path.

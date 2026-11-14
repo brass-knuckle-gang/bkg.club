@@ -1,5 +1,10 @@
 # Live public roster review
 
+> **Historical record** of the comparison made before the October 2026 switch
+> to the v1 JSON feed. Production now publishes v2; see
+> [deployment](DEPLOYMENT.md). The site has nine pages today. The 317 null
+> sponsor links recorded below have since been filled in upstream.
+
 Comparison captured October 2, 2026, against the currently published `www.bkg.club` pages. The source was fetched **once anonymously** and validated against the complete v1 contract. Backend PR #10 merge revision `060a8334f13a5995065bf942fd83f94340268b76` has unchanged schema and fixtures, verified byte-for-byte against the vendored test files.
 
 Snapshot: `generated_at` **2026-10-02T17:26:41.605Z**; `content_hash` **`sha256:5a97382075c41fa1074f9887f8488f7921e9268e3805741952c96d826255dc0c`**. All artifacts in the local preview were built from this saved snapshot. No Sheets fetch, private backend read, or relationship inference contributed to the build. Published pages were downloaded solely for comparison.

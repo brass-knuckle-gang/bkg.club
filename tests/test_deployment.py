@@ -31,6 +31,21 @@ def load_builder():
     return builder
 
 
+class CountrySpellingTests(unittest.TestCase):
+    def test_countries_differing_only_in_case_share_one_spelling(self):
+        builder = load_builder()
+        members = [{"country": c} for c in ("Poland", "POLAND", "Poland", "japan", "JAPAN", None, "United States")]
+        builder.canonicalize_countries(members)
+        self.assertEqual([m["country"] for m in members],
+                         ["Poland", "Poland", "Poland", "JAPAN", "JAPAN", None, "United States"])
+
+    def test_mixed_case_wins_a_tie(self):
+        builder = load_builder()
+        members = [{"country": "POLAND"}, {"country": "Poland"}]
+        builder.canonicalize_countries(members)
+        self.assertEqual({m["country"] for m in members}, {"Poland"})
+
+
 class DeploymentTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()

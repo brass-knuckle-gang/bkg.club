@@ -275,6 +275,14 @@
         const DAY_MS = 86400000;
         const FRESH_DAYS = 14;     // a case counts as "new" on the map for this long
         const CLUSTER_DAYS = 30;   // N cases in one state inside this window = cluster
+        const R0_DAYS = 30;        // R₀ counts recruits a case brings in during this many days
+        // A round gridline step giving about `target` lines up to `max` (1, 2 or 5 × 10^k).
+        function niceStep(max, target) {
+            const raw = Math.max(1, max) / target;
+            const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+            const f = raw / mag;
+            return Math.max(1, (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * mag);
+        }
         const CLUSTER_SIZE = 3;
 
         function esc(s) {
@@ -345,11 +353,17 @@
                 }
                 cases[i].interpolated = true;
             }
-            // Never let a later member number precede an earlier one in time.
+            // Keep each member's own join date for display (c.shown). Only the
+            // replay clock (c.day / c.t) never lets a later member number
+            // precede an earlier one in time.
+            cases.forEach(c => { c.shown = c.day; });
             for (let i = 1; i < cases.length; i++) {
                 if (cases[i].day < cases[i - 1].day) cases[i].day = new Date(cases[i - 1].day);
             }
         }
+        cases.forEach(c => { if (!c.shown) c.shown = c.day; });
+        // Days between two members' own join dates (never negative).
+        function joinGap(later, earlier) { return Math.max(0, Math.round((later.shown - earlier.shown) / DAY_MS)); }
 
         const day0 = cases[0].day;
         const lastCaseDay = cases[cases.length - 1].day;
@@ -547,7 +561,7 @@
             const core = document.createElementNS(SVG_NS, 'circle');
             core.setAttribute('class', 'ob-core'); core.setAttribute('r', i === 0 ? 7 : 5.5);
             const title = document.createElementNS(SVG_NS, 'title');
-            title.textContent = c.call + ' · BKG #' + c.num + ' · ' + placeOf(c) + ' · ' + fmtDate(c.day);
+            title.textContent = c.call + ' · BKG #' + c.num + ' · ' + placeOf(c) + ' · ' + fmtDate(c.shown);
             g.appendChild(ring); g.appendChild(core); g.appendChild(title);
             g.addEventListener('click', e => { e.stopPropagation(); selectedCase = selectedCase === c ? null : c; selectedTurf = null; render(cur, true); });
             dotsEl.appendChild(g);
@@ -595,7 +609,7 @@
                 s += '<rect class="ob-bar" x="' + (x0 + 1) + '" y="' + yBar(m.n) + '" width="' + Math.max(1, x1 - x0 - 2) + '" height="' + (CH - PB - yBar(m.n)) + '"/>';
             });
             // y gridlines
-            const step = total > 40 ? 10 : total > 12 ? 5 : 1;
+            const step = niceStep(total, 6);
             for (let n = step; n <= total; n += step) {
                 s += '<line class="ob-grid" x1="' + PL + '" y1="' + yOf(n) + '" x2="' + (CW - PR) + '" y2="' + yOf(n) + '"/>';
                 s += '<text class="ob-axis" x="' + (PL - 6) + '" y="' + (yOf(n) + 4) + '" text-anchor="end">' + n + '</text>';
@@ -698,8 +712,13 @@
 
             // stats
             const territories = Object.keys(stateCount).length + Object.keys(dxCount).length;
-            const direct = inf.reduce((s, c) => s + c.recruits.filter(r => r.t <= cur).length, 0);
-            const r0 = haveSponsors && n ? (direct / n) : null;
+            // R₀: recruits each case brought in during its first R0_DAYS, averaged
+            // over cases at least that old. Every recruit has exactly one sponsor,
+            // so dividing all recruits by all cases would always give about 1.
+            const mature = inf.filter(c => cur - c.t >= R0_DAYS);
+            const r0 = haveSponsors && mature.length
+                ? mature.reduce((s, c) => s + c.recruits.filter(r => r.t - c.t <= R0_DAYS).length, 0) / mature.length
+                : null;
             let doubling = null;
             if (n >= 2) {
                 const half = inf[Math.ceil(n / 2) - 1];
@@ -708,7 +727,7 @@
             const tiles = [
                 { num: n, label: 'Infected' },
                 { num: territories, label: territories === 1 ? 'Territory' : 'Territories' },
-                { num: r0 == null ? '?' : r0.toFixed(2), label: 'R₀ (per case)' },
+                { num: r0 == null ? '?' : r0.toFixed(2), label: 'R₀ (1st ' + R0_DAYS + ' days)' },
                 { num: doubling == null ? '—' : doubling + 'd', label: 'Doubling time' },
                 { num: cur, label: 'Days since P0', id: 'obDaysTile' },
                 { num: '0%', label: 'Cure progress', cls: 'ob-tile-cure' },
@@ -723,9 +742,9 @@
                 '<div class="ob-case-call">' + qrz(latest.call) + ' <span class="ob-case-num">BKG #' + latest.num + '</span></div>' +
                 '<div class="ob-case-name">' + esc(latest.name || '') + '</div>' +
                 '<div class="ob-case-row">📍 ' + esc(placeOf(latest)) + '</div>' +
-                '<div class="ob-case-row">📅 ' + esc(fmtDate(latest.day)) + (latest.interpolated ? ' <span class="ob-muted">(est.)</span>' : '') + '</div>' +
+                '<div class="ob-case-row">📅 ' + esc(fmtDate(latest.shown)) + (latest.interpolated ? ' <span class="ob-muted">(est.)</span>' : '') + '</div>' +
                 '<div class="ob-case-row">🦠 Vector: ' + (latest.sponsor ? qrz(latest.sponsor) : '<span class="ob-muted">unknown / spontaneous</span>') + '</div>' +
-                (latest.sponsor && byCall[latest.sponsor] ? '<div class="ob-case-row">⏱ Incubation: ' + plural(Math.max(0, latest.t - byCall[latest.sponsor].t), 'day') + '</div>' : '')
+                (latest.sponsor && byCall[latest.sponsor] ? '<div class="ob-case-row">⏱ Incubation: ' + plural(joinGap(latest, byCall[latest.sponsor]), 'day') + '</div>' : '')
             ) : 'No cases on file.';
 
             // most virulent carriers: ranked by total downstream, direct as tiebreak
@@ -746,7 +765,7 @@
                 : '<span class="ob-muted">' + (haveSponsors ? 'Nobody has infected anybody yet. Patient zero is working on it.' : 'No contact tracing data on the roster yet.') + '</span>';
 
             // profile
-            const incubations = inf.filter(c => c.sponsor && byCall[c.sponsor]).map(c => Math.max(0, c.t - byCall[c.sponsor].t));
+            const incubations = inf.filter(c => c.sponsor && byCall[c.sponsor]).map(c => joinGap(c, byCall[c.sponsor]));
             const avgInc = incubations.length ? Math.round(incubations.reduce((a, b) => a + b, 0) / incubations.length) : null;
             const lastGap = n >= 2 ? inf[n - 1].t - inf[n - 2].t : null;
             const sinceLast = latest ? cur - latest.t : null;
@@ -795,7 +814,7 @@
             for (const r of kids) {
                 if (budget.n-- <= 0) { out += '<li class="ob-muted">… and more. Tap a name to dig in.</li>'; break; }
                 const sub = descendantsOf(r, asOf);
-                out += '<li>' + pick(r.call) + ' <span class="ob-muted">' + esc(fmtDate(r.day)) + (sub ? ' · ' + sub + ' downstream' : '') + '</span>' + treeHtml(r, asOf, depth + 1, budget) + '</li>';
+                out += '<li>' + pick(r.call) + ' <span class="ob-muted">' + esc(fmtDate(r.shown)) + (sub ? ' · ' + sub + ' downstream' : '') + '</span>' + treeHtml(r, asOf, depth + 1, budget) + '</li>';
             }
             return out + '</ul>';
         }
@@ -836,7 +855,7 @@
                     '<div class="ob-case-call">' + qrz(c.call) + ' <span class="ob-case-num">BKG #' + c.num + '</span></div>' +
                     '<div class="ob-case-name">' + esc(c.name || '') + '</div>' +
                     '<div class="ob-case-row">📍 ' + esc(placeOf(c)) + (c.approx ? ' <span class="ob-muted">(approx.)</span>' : '') + '</div>' +
-                    '<div class="ob-case-row">📅 ' + (on ? esc(fmtDate(c.day)) + (c.interpolated ? ' <span class="ob-muted">(est.)</span>' : '') : '<span class="ob-muted">not infected yet (day ' + c.t + ')</span>') + '</div>' +
+                    '<div class="ob-case-row">📅 ' + (on ? esc(fmtDate(c.shown)) + (c.interpolated ? ' <span class="ob-muted">(est.)</span>' : '') : '<span class="ob-muted">not infected yet (day ' + c.t + ')</span>') + '</div>' +
                     '<div class="ob-case-row">🦠 Infected by: ' + (s ? pick(s.call) + ' <span class="ob-muted">' + esc(placeOf(s)) + '</span>' : (c === cases[0] ? '<b>nobody. Patient zero.</b>' : '<span class="ob-muted">unknown / spontaneous</span>')) + '</div>' +
                     (chain.length > 1 ? '<div class="ob-case-row ob-chain">🧬 ' + chain.map(x => x === c ? '<b>' + esc(x.call) + '</b>' : pick(x.call)).join(' <span class="ob-chain-arrow">→</span> ') + '</div>' : '') +
                     (rank ? '<div class="ob-case-row">☣ Virulence: <b>#' + rank.rank + '</b> carrier, ' + rank.total + ' downstream (' + rank.direct + ' direct)</div>' :
@@ -857,13 +876,13 @@
             if (selectedTurf === 'DX') {
                 const list = inf.filter(c => c.dx);
                 body.innerHTML = '<div class="ob-turf-name">🌍 WORLDWIDE DX</div><div class="ob-turf-count">' + plural(list.length, 'case') + ' outside the US</div>' +
-                    (list.length ? '<ul class="ob-turf-list">' + list.map(c => '<li>' + esc(c.flag || '🌍') + ' ' + qrz(c.call) + ' <span class="ob-muted">' + esc(c.dx) + ' · ' + esc(fmtDate(c.day)) + '</span></li>').join('') + '</ul>' : '<div class="ob-muted">Not yet infected.</div>');
+                    (list.length ? '<ul class="ob-turf-list">' + list.map(c => '<li>' + esc(c.flag || '🌍') + ' ' + qrz(c.call) + ' <span class="ob-muted">' + esc(c.dx) + ' · ' + esc(fmtDate(c.shown)) + '</span></li>').join('') + '</ul>' : '<div class="ob-muted">Not yet infected.</div>');
                 return;
             }
             const list = inf.filter(c => c.state === selectedTurf);
             body.innerHTML = '<div class="ob-turf-name">' + esc(STATE_NAMES[selectedTurf] || selectedTurf) + '</div><div class="ob-turf-count">' +
-                plural(list.length, 'case') + (list.length ? ' — first: ' + esc(fmtDate(list[0].day)) : '') + '</div>' +
-                (list.length ? '<ul class="ob-turf-list">' + list.map(c => '<li>' + qrz(c.call) + ' <span class="ob-muted">#' + c.num + ' · ' + esc(fmtDate(c.day)) + '</span></li>').join('') + '</ul>' : '<div class="ob-muted">Not yet infected. Give it time.</div>');
+                plural(list.length, 'case') + (list.length ? ' — first: ' + esc(fmtDate(list[0].shown)) : '') + '</div>' +
+                (list.length ? '<ul class="ob-turf-list">' + list.map(c => '<li>' + qrz(c.call) + ' <span class="ob-muted">#' + c.num + ' · ' + esc(fmtDate(c.shown)) + '</span></li>').join('') + '</ul>' : '<div class="ob-muted">Not yet infected. Give it time.</div>');
         }
 
         Object.keys(stateEls).forEach(abbr => {
