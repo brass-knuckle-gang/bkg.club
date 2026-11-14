@@ -63,6 +63,10 @@ jobs:
       - name: Install image validation dependency
         run: python3 -m pip install -r requirements-build.txt
 
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
       - name: Check offline fixtures
         run: python3 -m unittest discover -s tests -v
 
