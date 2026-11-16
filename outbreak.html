@@ -294,6 +294,9 @@
             const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
             return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
         }
+        function calendarDay(d) {
+            return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS;
+        }
         function today() {
             const n = new Date();
             return new Date(n.getFullYear(), n.getMonth(), n.getDate());
@@ -317,7 +320,11 @@
         // ---- Normalize the roster into cases ---------------------------------
         const cases = raw
             .filter(m => m && m.call && m.num)
-            .map(m => ({ ...m, call: String(m.call).toUpperCase(), sponsor: m.sponsor ? String(m.sponsor).toUpperCase() : null, day: parseDay(m.date) }))
+            .map(m => {
+                const day = parseDay(m.date);
+                return { ...m, call: String(m.call).toUpperCase(), sponsor: m.sponsor ? String(m.sponsor).toUpperCase() : null,
+                    day, joinDay: day ? calendarDay(day) : null };
+            })
             .sort((a, b) => a.num - b.num);
 
         const emptyMsg = document.getElementById('obBreakingText');
@@ -370,6 +377,11 @@
         const endDay = today() > lastCaseDay ? today() : lastCaseDay;
         const T = Math.max(1, Math.round((endDay - day0) / DAY_MS));
         cases.forEach(c => { c.t = Math.round((c.day - day0) / DAY_MS); });
+        function replayDate(day) {
+            const date = new Date(day0);
+            date.setDate(date.getDate() + day);
+            return date;
+        }
 
         const byCall = {};
         cases.forEach(c => { byCall[c.call] = c; c.recruits = []; });
@@ -378,6 +390,22 @@
             else c.sponsor = null;
         });
         const haveSponsors = cases.some(c => c.sponsor);
+
+        function reproductionNumber(infected, replayDay, cutoff) {
+            if (!haveSponsors) return '?';
+            let mature = 0;
+            let recruits = 0;
+            for (const c of infected) {
+                if (c.joinDay == null || cutoff - c.joinDay < R0_DAYS) continue;
+                mature++;
+                for (const r of c.recruits) {
+                    if (r.t > replayDay || r.joinDay == null) continue;
+                    const age = r.joinDay - c.joinDay;
+                    if (age >= 0 && age <= R0_DAYS) recruits++;
+                }
+            }
+            return mature ? (recruits / mature).toFixed(2) : '?';
+        }
 
         // Days on which something happened, for frame-by-frame stepping.
         const caseDays = [...new Set(cases.map(c => c.t))].sort((a, b) => a - b);
@@ -654,12 +682,13 @@
         // case appears, the selection changes, or playback stops. Rebuilding
         // them every frame is what made the replay crawl on phones.
         let lastHeavyN = -1;
+        let lastR0Day = -1;
         let carrierRank = {};
         function render(t, force) {
             cur = Math.max(0, Math.min(T, Math.round(t)));
             const inf = infectedAt(cur);
             const n = inf.length;
-            const date = new Date(day0.getTime() + cur * DAY_MS);
+            const date = replayDate(cur);
             const heavy = force || n !== lastHeavyN;
             lastHeavyN = n;
 
@@ -708,17 +737,19 @@
             const dot = document.getElementById('obDot');
             dot.setAttribute('cx', cx); dot.setAttribute('cy', cy);
 
-            if (!heavy) return;
+            if (!heavy) {
+                // A case can finish its first 30 days even when nobody joins.
+                if (cur !== lastR0Day) {
+                    document.getElementById('obR0Tile').textContent = reproductionNumber(inf, cur, calendarDay(date));
+                    lastR0Day = cur;
+                }
+                return;
+            }
 
             // stats
             const territories = Object.keys(stateCount).length + Object.keys(dxCount).length;
-            // R₀: recruits each case brought in during its first R0_DAYS, averaged
-            // over cases at least that old. Every recruit has exactly one sponsor,
-            // so dividing all recruits by all cases would always give about 1.
-            const mature = inf.filter(c => cur - c.t >= R0_DAYS);
-            const r0 = haveSponsors && mature.length
-                ? mature.reduce((s, c) => s + c.recruits.filter(r => r.t - c.t <= R0_DAYS).length, 0) / mature.length
-                : null;
+            const r0 = reproductionNumber(inf, cur, calendarDay(date));
+            lastR0Day = cur;
             let doubling = null;
             if (n >= 2) {
                 const half = inf[Math.ceil(n / 2) - 1];
@@ -727,7 +758,7 @@
             const tiles = [
                 { num: n, label: 'Infected' },
                 { num: territories, label: territories === 1 ? 'Territory' : 'Territories' },
-                { num: r0 == null ? '?' : r0.toFixed(2), label: 'R₀ (1st ' + R0_DAYS + ' days)' },
+                { num: r0, label: 'R₀ (1st ' + R0_DAYS + ' days)', id: 'obR0Tile' },
                 { num: doubling == null ? '—' : doubling + 'd', label: 'Doubling time' },
                 { num: cur, label: 'Days since P0', id: 'obDaysTile' },
                 { num: '0%', label: 'Cure progress', cls: 'ob-tile-cure' },
@@ -789,7 +820,7 @@
             const logEl = document.getElementById('obLog');
             logEl.innerHTML = shown.slice().reverse().map(e =>
                 '<div class="ob-log-row ob-log-' + e.kind + '"><span class="ob-log-day">DAY ' + e.t + '<small>' +
-                esc(fmtDate(new Date(day0.getTime() + e.t * DAY_MS))) + '</small></span><span class="ob-log-text">' + e.html + '</span></div>').join('')
+                esc(fmtDate(replayDate(e.t))) + '</small></span><span class="ob-log-text">' + e.html + '</span></div>').join('')
                 || '<div class="ob-muted" style="padding:10px;">Nothing yet. Patient zero is about to pick up a mic.</div>';
             const head = shown[shown.length - 1];
             const bt = document.getElementById('obBreakingText');
@@ -880,8 +911,12 @@
                 return;
             }
             const list = inf.filter(c => c.state === selectedTurf);
+            let first = null;
+            for (const c of list) {
+                if (c.joinDay != null && (!first || c.joinDay < first.joinDay)) first = c;
+            }
             body.innerHTML = '<div class="ob-turf-name">' + esc(STATE_NAMES[selectedTurf] || selectedTurf) + '</div><div class="ob-turf-count">' +
-                plural(list.length, 'case') + (list.length ? ' — first: ' + esc(fmtDate(list[0].shown)) : '') + '</div>' +
+                plural(list.length, 'case') + (first ? ' — first: ' + esc(fmtDate(first.shown)) : '') + '</div>' +
                 (list.length ? '<ul class="ob-turf-list">' + list.map(c => '<li>' + qrz(c.call) + ' <span class="ob-muted">#' + c.num + ' · ' + esc(fmtDate(c.shown)) + '</span></li>').join('') + '</ul>' : '<div class="ob-muted">Not yet infected. Give it time.</div>');
         }
 
