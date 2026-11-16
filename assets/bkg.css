@@ -598,7 +598,6 @@ body {
     .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children .tree-children {
         margin-left: 0; padding-left: 4px;
     }
-    .node-body { min-width: 0; }
     .node-name { overflow-wrap: anywhere; }
     /* let a long "N direct · +N indirect" badge drop below the name */
     .kingpin-row { flex-wrap: wrap; }

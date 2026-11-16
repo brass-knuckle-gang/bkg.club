@@ -70,16 +70,18 @@ cutover; the [live review](PUBLIC-ROSTER-V2-REVIEW.md) records its coverage gate
 
 Nearby loads OpenStreetMap tiles and optionally asks Nominatim to geocode the
 address, place, US state or Canadian province the visitor types (states and
-provinces as a structured query, so "WA" is Washington). A typed member
-callsign or grid square is resolved in the browser with no lookup. It does not
+provinces as a structured query, so "WA" is Washington). Member lookups by
+callsign or explicit BKG number and grid searches stay in the browser. Nearby does not
 use browser geolocation. These requests do not enrich or modify member
 data. Member maps, downline, outbreak, notes, and roster cards consume static
 generated data.
 
 The badge press (`badges.html`) reads this site's published
 `data/v2/roster.json` (falling back to `data/v1/roster.json`) for number,
-callsign, name, QTH, and OG labels. If neither loads, the roster stays empty
-until the visitor pastes or uploads export JSON. It never writes member data.
+callsign, name, QTH, and OG labels. Members with multiple OG titles have a badge
+option for each assignment, and the bulk ZIP includes every assignment. If
+neither snapshot loads, a visitor can paste or upload an export. The badge
+press never writes member data.
 
 The recruit form posts applications directly to the membership intake API
 (`https://bkg-membership-intake.cool-cake-fac1.workers.dev/v1/applications`),

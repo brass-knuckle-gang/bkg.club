@@ -390,7 +390,7 @@ class JsonBuildTests(unittest.TestCase):
         self.assertIn('--require-usable', workflow)
         self.assertIn("ROSTER_LAYOUT: ${{ vars.ROSTER_LAYOUT || 'list' }}", workflow)
         self.assertIn("ROSTER_EXPORT_VERSION: ${{ vars.ROSTER_EXPORT_VERSION || '2' }}", workflow)
-        self.assertIn("node --test tests/recruit.test.cjs", workflow)
+        self.assertIn("node --test tests/*.test.cjs", workflow)
         self.assertNotIn('Commit refreshed QRZ cache', workflow)
         self.assertNotIn('CF_ACCESS_CLIENT', workflow)
         self.assertNotIn('images/mugshots\n', workflow)
