@@ -21,9 +21,12 @@ function fixture() {
 function harness() {
   const elements = new Map();
   function element() {
-    return {value: '', textContent: '', innerHTML: '', hidden: false, dataset: {}, children: [], listeners: {},
+    const attributes = new Map();
+    return {value: '', textContent: '', innerHTML: '', hidden: false, disabled: false, dataset: {}, children: [], listeners: {},
       classList: {add() {}, remove() {}, toggle() {}},
-      setAttribute() {}, removeAttribute() {},
+      getAttribute(name) { return attributes.get(name) ?? null; },
+      setAttribute(name, value) { attributes.set(name, String(value)); },
+      removeAttribute(name) { attributes.delete(name); },
       append(...children) { this.children.push(...children); },
       replaceChildren(...children) { this.children = children; },
       addEventListener(name, callback) { this.listeners[name] = callback; }};
@@ -38,7 +41,9 @@ function harness() {
   };
   const context = vm.createContext({document, Blob, TextEncoder, Uint8Array, Date,
     setTimeout() {}, clearTimeout() {},
-    badge(options) { return `<svg><title>${options.callsign} — ${options.tab}</title></svg>`; },
+    badge(options) {
+      return `<svg><title>${options.callsign} — ${options.tab}</title><desc>${options.freq ?? '144.025 MHZ'}</desc></svg>`;
+    },
   });
   // Exercise the shipped controller without starting font/network bootstrapping.
   vm.runInContext(controller.slice(0, controller.lastIndexOf('unpackFaces()')), context);
@@ -113,6 +118,95 @@ async function readZip(blob) {
   }
   return files;
 }
+
+const exportButtons = ['#dlSvg', '#dlPng', '#copySvg', '#dlZip'];
+
+function captureExports(context) {
+  const downloads = new Map(), rasterized = [], copied = [];
+  context.save = async (name, contents) => { downloads.set(path.extname(name), contents); return true; };
+  context.svgToPng = async svg => { rasterized.push(svg); return new Blob(); };
+  context.navigator = {clipboard: {writeText: async svg => { copied.push(svg); }}};
+  return {downloads, rasterized, copied};
+}
+
+function setFrequency(elements, value) {
+  const field = elements.get('#frequency');
+  field.value = value;
+  field.listeners.input({target: field, currentTarget: field});
+}
+
+test('a custom frequency is normalized in the preview and all exports and persists across member selection', async () => {
+  const {context, run, elements} = harness();
+  const {downloads, rasterized, copied} = captureExports(context);
+  run('choose(ROSTER.members[0])');
+  setFrequency(elements, ' 144,050 ');
+  run('choose(ROSTER.members[1])');
+  const preview = elements.get('#preview').innerHTML;
+  assert.match(preview, /N0SYN/);
+  assert.match(preview, /144\.050 MHZ/);
+
+  for (const id of exportButtons) await elements.get(id).listeners.click();
+  assert.equal(downloads.get('.svg'), preview);
+  assert.ok(downloads.has('.png'));
+  assert.deepEqual(rasterized, [preview]);
+  assert.deepEqual(copied, [preview]);
+  const zip = await readZip(downloads.get('.zip'));
+  assert.equal(zip.size, 2);
+  for (const svg of zip.values()) assert.match(svg, /144\.050 MHZ/);
+
+  setFrequency(elements, '  ');
+  assert.match(elements.get('#preview').innerHTML, /144\.025 MHZ/);
+  setFrequency(elements, ',5');
+  assert.match(elements.get('#preview').innerHTML, /0\.5 MHZ/);
+});
+
+test('invalid frequencies keep the last valid preview and block every export until corrected', async () => {
+  const {context, run, elements} = harness();
+  const {downloads, rasterized, copied} = captureExports(context);
+  run('choose(ROSTER.members[0])');
+  setFrequency(elements, '146.520');
+  const preview = elements.get('#preview').innerHTML;
+  assert.match(preview, /146\.520 MHZ/);
+  const field = elements.get('#frequency'), error = elements.get('#frequencyError');
+
+  for (const invalid of ['144..050', '144.050 MHz', '1e3', '0', '-144.050']) {
+    setFrequency(elements, invalid);
+    assert.equal(elements.get('#preview').innerHTML, preview, invalid);
+    assert.equal(field.getAttribute('aria-invalid'), 'true', invalid);
+    assert.equal(error.hidden, false, invalid);
+    assert.ok(error.textContent.trim(), invalid);
+    for (const id of exportButtons) {
+      assert.equal(elements.get(id).disabled, true, `${invalid} ${id}`);
+      await elements.get(id).listeners.click();
+    }
+  }
+  assert.equal(downloads.size, 0);
+  assert.deepEqual(rasterized, []);
+  assert.deepEqual(copied, []);
+
+  setFrequency(elements, '433.500');
+  assert.match(elements.get('#preview').innerHTML, /433\.500 MHZ/);
+  assert.notEqual(field.getAttribute('aria-invalid'), 'true');
+  assert.equal(error.hidden, true);
+  for (const id of exportButtons) assert.equal(elements.get(id).disabled, false, id);
+});
+
+test('ZIP stays disabled during export and after an invalid edit', async () => {
+  const {context, elements} = harness();
+  let finishSave;
+  context.save = () => new Promise(resolve => { finishSave = resolve; });
+  const zipButton = elements.get('#dlZip');
+  const pending = zipButton.listeners.click();
+
+  setFrequency(elements, '144.050');
+  assert.equal(zipButton.disabled, true);
+  setFrequency(elements, '144..050');
+  finishSave(true);
+  await pending;
+  assert.equal(zipButton.disabled, true);
+  setFrequency(elements, '144.050');
+  assert.equal(zipButton.disabled, false);
+});
 
 test('the bulk download contains one distinct SVG per title, independent of the selected badge', async () => {
   const {context, run, elements} = harness();

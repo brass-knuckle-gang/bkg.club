@@ -96,6 +96,11 @@
                         <input type="text" id="tab" autocomplete="off" spellcheck="false" placeholder="Leave empty for no tab">
                     </div>
                     <div class="form-row">
+                        <label for="frequency">Frequency (MHz)</label>
+                        <input type="text" id="frequency" value="144.025" inputmode="decimal" autocomplete="off" spellcheck="false" aria-describedby="frequencyError">
+                        <p id="frequencyError" class="press-frequency-error" role="status" hidden></p>
+                    </div>
+                    <div class="form-row">
                         <label>Finish</label>
                         <div class="seg" role="group" aria-label="Finish">
                             <button data-style="emboss" aria-pressed="true">Embossed</button>
@@ -346,7 +351,7 @@ const US = {Alabama:"AL",Alaska:"AK",Arizona:"AZ",Arkansas:"AR",California:"CA",
  Texas:"TX",Utah:"UT",Vermont:"VT",Virginia:"VA",Washington:"WA","West Virginia":"WV",
  Wisconsin:"WI",Wyoming:"WY"};
 
-let sel = null, finish = "emboss", lastSvg = "";
+let sel = null, finish = "emboss", lastSvg = "", buildingZip = false;
 
 function titlesFor(m){
   return ROSTER.og[m.n] || [];
@@ -389,14 +394,27 @@ function ogBadges(){
 }
 
 function opts(){
-  const o = {callsign:$("#callsign").value.trim(), tab:$("#tab").value.trim()};
+  const frequency = $("#frequency").value.trim().replace(",", ".") || "144.025";
+  const mhz = Number(frequency);
+  if(!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(frequency) || !Number.isFinite(mhz) || mhz <= 0) return null;
+  const label = frequency.startsWith(".") ? "0" + frequency : frequency;
+  const o = {callsign:$("#callsign").value.trim(), tab:$("#tab").value.trim(), freq:label + " MHZ"};
   if(finish === "flat") o.flat = true;
   if(finish === "mono"){ o.mono = "#111111"; o.flat = true; }
   return o;
 }
 
 function render(){
-  lastSvg = badge(opts());
+  const options = opts(), invalid = options === null;
+  const field = $("#frequency"), error = $("#frequencyError");
+  field.setAttribute("aria-invalid", String(invalid));
+  field.classList.toggle("field-error", invalid);
+  error.hidden = !invalid;
+  error.textContent = invalid ? "Enter a positive frequency in MHz, such as 144.050." : "";
+  for(const id of ["dlSvg", "dlPng", "copySvg"]) $("#" + id).disabled = invalid;
+  $("#dlZip").disabled = invalid || buildingZip;
+  if(invalid) return;
+  lastSvg = badge(options);
   $("#preview").innerHTML = lastSvg;
   const svg = $("#preview svg");
   if(svg){ svg.removeAttribute("width"); svg.removeAttribute("height"); }
@@ -533,7 +551,7 @@ function toast(msg){
 }
 
 /* ---- wiring ---- */
-for(const id of ["callsign","tab"]) $("#" + id).addEventListener("input", render);
+for(const id of ["callsign","tab","frequency"]) $("#" + id).addEventListener("input", render);
 $("#ogTitle").addEventListener("change", () => {
   const title = sel && titlesFor(sel).find(title => title.key === $("#ogTitle").value);
   $("#tab").value = title?.tab || "";
@@ -546,29 +564,39 @@ document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click"
 }));
 
 $("#dlSvg").addEventListener("click", async () => {
+  if(!opts() || !lastSvg) return;
   if(await save(slug() + ".svg", lastSvg)) toast("Saved " + slug() + ".svg");
 });
 $("#dlPng").addEventListener("click", async () => {
+  if(!opts() || !lastSvg) return;
   try {
     const blob = await svgToPng(lastSvg, 4096);
     if(await save(slug() + ".png", blob)) toast("Saved " + slug() + ".png");
   } catch(e){ toast(e.message); }
 });
 $("#copySvg").addEventListener("click", async () => {
+  if(!opts() || !lastSvg) return;
   try { await navigator.clipboard.writeText(lastSvg); toast("SVG copied"); }
   catch { toast("Clipboard blocked here \u2014 use Download SVG"); }
 });
 $("#dlZip").addEventListener("click", async () => {
+  const base = opts();
+  if(!base || buildingZip) return;
+  buildingZip = true;
   const btn = $("#dlZip"); btn.disabled = true; btn.textContent = "Building\u2026";
   try {
-    const base = opts(), files = [];
+    const files = [];
     for(const entry of ogBadges()){
       files.push([entry.filename, badge({...base, callsign:entry.callsign, tab:entry.tab})]);
     }
     if(await save("bkg-og-badges.zip", zip(files)))
       toast(files.length + " OG badges saved");
   } catch(e){ toast(e.message); }
-  btn.disabled = false; btn.textContent = "Download all OG badges";
+  finally {
+    buildingZip = false;
+    btn.disabled = opts() === null;
+    btn.textContent = "Download all OG badges";
+  }
 });
 
 function loadRoster(text){
