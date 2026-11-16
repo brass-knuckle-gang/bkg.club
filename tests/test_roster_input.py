@@ -217,6 +217,28 @@ class RosterContractTests(unittest.TestCase):
                 invalid["og_assignments"].reverse()
             self.assert_invalid(invalid, "unique ascending region_key")
 
+    def test_map_locations_must_be_their_grid_center(self):
+        located = {row["bkg_number"]: row["map_location"] for row in self.envelope["members"] if row["map_location"]}
+        self.assertEqual({location["grid"] for location in located.values()}, {"EN61AB", "FN03", "FN33AA"})
+        for location in located.values():
+            # The upstream fixture's JavaScript centers match exactly.
+            self.assertEqual(roster_input.grid_center(location["grid"]), (location["lat"], location["lon"]))
+        rounded = copy.deepcopy(self.envelope)
+        rounded["members"][0]["map_location"].update(lat=41.0625, lon=-87.9583)
+        roster_input.parse_roster_json(rehash(rounded))
+        changes = (
+            (1, {"lat": 41.0625 + 0.0002}),  # 22 m from the center
+            (1, {"lon": -87.9}),  # inside EN61, outside EN61AB
+            (1, {"grid": "EN61AC"}),  # a neighbour's grid with this center
+            (21, dict(zip(("lat", "lon"), roster_input.grid_center("FN03AA")))),  # subsquare inside FN03
+        )
+        for number, change in changes:
+            with self.subTest(number=number, change=change):
+                invalid = copy.deepcopy(self.envelope)
+                location = next(row for row in invalid["members"] if row["bkg_number"] == number)["map_location"]
+                location.update(change)
+                self.assert_invalid(invalid, rf"not the center of {location['grid']} \(BKG #{number}\)")
+
     def test_hash_corruption_rejected_without_returning_members(self):
         invalid = copy.deepcopy(self.envelope)
         invalid["members"][0]["name"] = "A different reviewed identity"
