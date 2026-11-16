@@ -820,6 +820,7 @@ def annotate_qrz(members: list[dict]) -> None:
     print(f"  Mugshot resolved for {mugshots}/{len(members)} members (local overrides preferred)", file=sys.stderr)
 
     apply_location_overrides(members, load_location_overrides())
+    canonicalize_countries(members)
     mark_territory_ogs(members)
 
 
@@ -1307,20 +1308,21 @@ def member_latlon(member: dict) -> tuple[float, float] | None:
     return latlon
 
 
-def render_geo_data(members: list[dict]) -> str:
-    """Build the JSON geo data consumed by nearby.html (#bkg-geo-data):
+def render_nearby_data(members: list[dict]) -> tuple[str, str]:
+    """Build the coordinates and unmapped member identities for nearby.html.
 
-    [{"call", "name", "num", "lat", "lon", "grid"}, ...] — one entry per
-    member with a usable location. Coordinates are grid-square centers
-    (QRZ-public and deliberately coarse); a member with QRZ lat/lon but no
-    grid gets those coords rounded to 2 decimals (~1 km) instead. Members
-    with a location override are excluded — their QRZ coords are stale.
+    Map entries include call, name, number, coordinates, and an optional
+    grid. Coordinates are grid-square centers or coarse legacy QRZ locations.
+    Members without a usable location contribute only a callsign and member
+    number to the local search index.
     """
     entries = []
+    unmapped = []
     for member in sorted(members, key=lambda m: m["number"]):
         grid = member.get("grid")
         latlon = member_latlon(member)
         if latlon is None:
+            unmapped.append({"call": member["callsign"], "num": member["number"]})
             continue
         entry = {
             "call": member["callsign"],
@@ -1333,18 +1335,15 @@ def render_geo_data(members: list[dict]) -> str:
             entry["grid"] = grid
         entries.append(entry)
     print(f"  Geo coords for {len(entries)}/{len(members)} members", file=sys.stderr)
-    return embedded_json(entries)
+    return embedded_json(entries), embedded_json(unmapped)
 
 
 def update_nearby(members: list[dict], output_dir: Path) -> None:
-    """Inject the geo JSON from the source template into the public build."""
+    """Inject both roster datasets into the Nearby page."""
     html = NEARBY_PATH.read_text()
-    html = replace_between(
-        html,
-        "<!-- GEO_DATA:START -->",
-        "<!-- GEO_DATA:END -->",
-        render_geo_data(members),
-    )
+    geo, unmapped = render_nearby_data(members)
+    html = replace_between(html, "<!-- GEO_DATA:START -->", "<!-- GEO_DATA:END -->", geo)
+    html = replace_between(html, "<!-- UNMAPPED_MEMBERS:START -->", "<!-- UNMAPPED_MEMBERS:END -->", unmapped)
     (output_dir / "nearby.html").write_text(html)
 
 
@@ -1625,6 +1624,7 @@ def build(output_dir: Path, *, source: str = "sheets", roster_json: Path | None 
             print(f"WARNING: Excluding BKG #{exclusion['bkg_number']}: {exclusion['reason']}", file=sys.stderr)
         for member in members:
             member["state"], member["country"] = qth_location(member["qth"])
+        canonicalize_countries(members)
         if schema_version == "2":
             if enrichment_dir is not None:
                 raise ValueError("v2 uses only administration-owned member data and public assets")
@@ -1661,7 +1661,6 @@ def build(output_dir: Path, *, source: str = "sheets", roster_json: Path | None 
         # After QRZ so updated sheet callsigns resolve.
         resolve_sponsors(members)
         stage_public_files(output_dir)
-    canonicalize_countries(members)
     update_index(members, output_dir)
     print(f"Updated {INDEX_PATH.name}")
 

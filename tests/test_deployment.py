@@ -197,6 +197,19 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(self.downloads, ["https://fixture.invalid/new.png", "https://fixture.invalid/unavailable.jpg"])
         self.assertEqual(json.loads((self.source / "qrz-cache.json").read_text())["W1OLD"], "W1NEW")
 
+    def test_legacy_country_og_is_awarded_once_across_spelling_variants(self):
+        self.csv += "5,SP1TST,Eve Example,2025-01-06,POLAND,W1OLD\n"
+        self.csv += "6,SP2TST,Fay Example,2025-01-07,Poland,W1OLD\n"
+        self.qrz.update({"SP1TST": None, "SP2TST": None})
+
+        self.assertEqual(self.build(), 0)
+        site_contract.validate_dist(self.dist)
+        countries = self.data("index.html", "MAP_DATA")["dx"]
+        self.assertEqual([m["call"] for m in countries["Poland"]["members"]], ["SP1TST", "SP2TST"])
+        notes = (self.dist / "members.txt").read_text()
+        self.assertIn("SP1TST 🤜 Eve E BKG #5 (Poland OG)", notes)
+        self.assertIn("SP2TST 🤜 Fay E BKG #6\n", notes)
+
     def test_roster_layout_switch_restores_classic_card_wall(self):
         with patch.dict(os.environ, {"ROSTER_LAYOUT": "classic"}):
             self.assertEqual(self.build(), 0)
