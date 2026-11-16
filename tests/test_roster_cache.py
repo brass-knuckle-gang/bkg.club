@@ -17,7 +17,7 @@ class RosterCacheTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.cache = Path(temporary.name) / "cache"
         self.url = "https://public.fixture.invalid/api/roster/export/v2"
-        self.text = (FIXTURES / "fixtures/roster-v2.json").read_text()
+        self.text = (FIXTURES / "fixtures/roster-v2.json").read_text(encoding="utf-8")
         self.etag = f'W/"{json.loads(self.text)["content_hash"]}"'
 
     def response(self, text=None, etag=None):
@@ -62,18 +62,18 @@ class RosterCacheTests(unittest.TestCase):
         self.assertNotEqual(projected["content_hash"], original["content_hash"])
         self.assertEqual(self.read(self.not_modified(), exclude_invalid_callsigns=True), self.text)
         self.assertEqual(self.request.get_header("If-none-match"), self.etag)
-        self.assertEqual(json.loads((self.cache / "v2.json").read_text())["snapshot"], self.text)
+        self.assertEqual(json.loads((self.cache / "v2.json").read_text(encoding="utf-8"))["snapshot"], self.text)
 
     def test_corrupt_or_wrong_version_cache_forces_unconditional_fetch(self):
         self.read(self.response())
-        original = json.loads((self.cache / "v2.json").read_text())
+        original = json.loads((self.cache / "v2.json").read_text(encoding="utf-8"))
         wrong_version = json.loads(self.text)
         wrong_version["schema_version"] = "1"
         wrong_version["content_hash"] = roster_input.roster_content_hash(wrong_version)
         for text in ("broken", original["snapshot"].replace("Synthetic First", "Corrupted"),
                      json.dumps(wrong_version)):
             cached = dict(original, snapshot=text)
-            (self.cache / "v2.json").write_text(json.dumps(cached))
+            (self.cache / "v2.json").write_text(json.dumps(cached), encoding="utf-8")
             self.assertEqual(self.read(self.response()), self.text)
             self.assertIsNone(self.request.get_header("If-none-match"))
 
@@ -94,9 +94,9 @@ class RosterCacheTests(unittest.TestCase):
                 del response.headers["ETag"]
             with self.assertRaisesRegex(ValueError, "matching validated cache"):
                 self.read(response)
-        cached = json.loads((self.cache / "v2.json").read_text())
+        cached = json.loads((self.cache / "v2.json").read_text(encoding="utf-8"))
         cached["snapshot"] = cached["snapshot"].replace("Synthetic First", "Corrupted")
-        (self.cache / "v2.json").write_text(json.dumps(cached))
+        (self.cache / "v2.json").write_text(json.dumps(cached), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "matching validated cache"):
             self.read(self.not_modified())
 

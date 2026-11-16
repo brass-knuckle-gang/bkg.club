@@ -35,7 +35,7 @@ class PublisherV2Tests(PublicationBuildFixture):
             {"call": row["callsign"], "num": row["bkg_number"]}
             for row in self.envelope["members"] if row["map_location"] is None
         ])
-        self.assertEqual(json.loads((self.dist / "data/v2/roster.json").read_text()), self.envelope)
+        self.assertEqual(json.loads((self.dist / "data/v2/roster.json").read_text(encoding="utf-8")), self.envelope)
         self.assertFalse((self.dist / "data/v1").exists())
         public_photo = self.dist / f"images/mugshots/{self.photo['sha256']}.webp"
         self.assertEqual(public_photo.read_bytes(), self.photo_bytes)
@@ -47,7 +47,7 @@ class PublisherV2Tests(PublicationBuildFixture):
         self.write_roster()
         self.assertEqual(self.build(), 0)
         validate_dist(self.dist)
-        published = json.loads((self.dist / "data/v2/roster.json").read_text())
+        published = json.loads((self.dist / "data/v2/roster.json").read_text(encoding="utf-8"))
         self.assertNotEqual(published["content_hash"], self.envelope["content_hash"])
         self.assertEqual(len(published["members"]), len(self.envelope["members"]) - 1)
         self.assertNotIn(1, [m["bkg_number"] for m in published["members"]])
@@ -55,11 +55,11 @@ class PublisherV2Tests(PublicationBuildFixture):
         self.assertEqual(self.data("nearby.html", "GEO_DATA"), [])
         self.assertEqual(list((self.dist / "images/mugshots").glob("*.webp")), [])
         for relative in ("index.html", "tree.html", "nearby.html", "outbreak.html", "members.txt"):
-            self.assertNotIn("KCØDWZ", (self.dist / relative).read_text())
+            self.assertNotIn("KCØDWZ", (self.dist / relative).read_text(encoding="utf-8"))
 
     def test_upstream_v2_fixture_hash_and_full_precision_centers_publish_unchanged(self):
         fixtures = FIXTURES / "fixtures"
-        text = (fixtures / "roster-v2.json").read_text()
+        text = (fixtures / "roster-v2.json").read_text(encoding="utf-8")
         envelope, members = roster_input.parse_roster_json(text)
         self.assertEqual(envelope["content_hash"], "sha256:8857d8d9cfd7b57c22918780e189fea1139257817456607fbff6de089490e6a7")
         self.envelope = envelope
@@ -70,7 +70,7 @@ class PublisherV2Tests(PublicationBuildFixture):
             for member in members if member["map_location"] is not None
         ])
         with self.assertRaisesRegex(ValueError, "no active members"):
-            roster_input.parse_roster_json((fixtures / "empty-v2.json").read_text())
+            roster_input.parse_roster_json((fixtures / "empty-v2.json").read_text(encoding="utf-8"))
 
     def test_null_location_removes_previous_coordinates(self):
         self.assertEqual(self.build(), 0)
@@ -88,7 +88,7 @@ class PublisherV2Tests(PublicationBuildFixture):
         self.assertEqual(self.build(), 0)
         tree = self.data("tree.html", "DOWNLINE_DATA")
         self.assertEqual(next(m for m in tree if m["num"] == 7)["sponsor"], "N0CURRENT")
-        self.assertEqual(json.loads((self.dist / "data/v2/roster.json").read_text())["og_assignments"],
+        self.assertEqual(json.loads((self.dist / "data/v2/roster.json").read_text(encoding="utf-8"))["og_assignments"],
                          self.envelope["og_assignments"])
 
     def test_reused_callsign_does_not_restore_inactive_sponsorship_or_og(self):
@@ -103,7 +103,7 @@ class PublisherV2Tests(PublicationBuildFixture):
         self.assertNotIn(7, tree)
         self.assertIsNone(tree[21]["sponsor"])
         self.assertEqual(tree[40]["call"], "N0SYN7")
-        self.assertNotIn("IL OG", (self.dist / "members.txt").read_text())
+        self.assertNotIn("IL OG", (self.dist / "members.txt").read_text(encoding="utf-8"))
 
     def test_canadian_province_groups_under_canada_and_keeps_admin_coordinates(self):
         member = next(row for row in self.envelope["members"] if row["bkg_number"] == 21)
@@ -117,7 +117,7 @@ class PublisherV2Tests(PublicationBuildFixture):
         self.assertEqual((located["grid"], located["lat"], located["lon"]), ("FN03", 43.5, -79))
         outbreak = next(entry for entry in self.data("outbreak.html", "OUTBREAK_DATA") if entry["num"] == 21)
         self.assertEqual((outbreak["state"], outbreak["dx"]), (None, "Canada"))
-        self.assertIn("BKG #21 (Canada OG)", (self.dist / "members.txt").read_text())
+        self.assertIn("BKG #21 (Canada OG)", (self.dist / "members.txt").read_text(encoding="utf-8"))
 
     def test_null_photo_removes_old_assets_and_offline_origin_is_checked(self):
         self.assertEqual(self.build(), 0)
@@ -146,11 +146,11 @@ class PublisherV2Tests(PublicationBuildFixture):
     def test_validator_checks_location_and_photo_against_admin_snapshot(self):
         self.assertEqual(self.build(), 0)
         nearby = self.dist / "nearby.html"
-        original = nearby.read_text()
-        nearby.write_text(original.replace('"grid":"EN61AB"', '"grid":"EN61AC"'))
+        original = nearby.read_text(encoding="utf-8")
+        nearby.write_text(original.replace('"grid":"EN61AB"', '"grid":"EN61AC"'), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "administration map locations"):
             validate_dist(self.dist)
-        nearby.write_text(original)
+        nearby.write_text(original, encoding="utf-8")
         photo = self.dist / f"images/mugshots/{self.photo['sha256']}.webp"
         photo.write_bytes(self.photo_bytes + b"extra")
         with self.assertRaisesRegex(ValueError, "photo bytes"):

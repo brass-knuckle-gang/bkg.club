@@ -28,7 +28,7 @@ def rehash(envelope):
 
 class RosterContractTests(unittest.TestCase):
     def setUp(self):
-        self.text = (FIXTURES / "fixtures/roster-v2.json").read_text()
+        self.text = (FIXTURES / "fixtures/roster-v2.json").read_text(encoding="utf-8")
         self.envelope = json.loads(self.text)
 
     def assert_invalid(self, envelope, message):
@@ -53,7 +53,7 @@ class RosterContractTests(unittest.TestCase):
 
     def test_empty_upstream_fixture_fails_closed(self):
         with self.assertRaisesRegex(ValueError, "no active members"):
-            roster_input.parse_roster_json((FIXTURES / "fixtures/empty-v2.json").read_text())
+            roster_input.parse_roster_json((FIXTURES / "fixtures/empty-v2.json").read_text(encoding="utf-8"))
 
     def test_reviewed_values_are_preserved_without_identity_normalization(self):
         row = self.envelope["members"][1]

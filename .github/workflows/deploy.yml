@@ -114,7 +114,7 @@ jobs:
           import json, os
           from pathlib import Path
           snapshot = Path(os.environ["RUNNER_TEMP"]) / "bkg-build/roster.json"
-          assert json.loads(snapshot.read_text()) == json.loads(Path("dist/data/v2/roster.json").read_text())
+          assert json.loads(snapshot.read_text(encoding="utf-8")) == json.loads(Path("dist/data/v2/roster.json").read_text(encoding="utf-8"))
           PY_CHECK
 
       - name: Fingerprint the public build

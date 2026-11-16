@@ -49,7 +49,7 @@ class SnapshotTests(unittest.TestCase):
                 patch.dict(roster_input.os.environ, {"GITHUB_STEP_SUMMARY": str(summary), "GITHUB_OUTPUT": str(output)}):
             opener.return_value.open.return_value = FakeResponse(self.body)
             self.assertEqual(self.fetch(), 0)
-        published, members = roster_input.parse_roster_json(self.snapshot.read_text())
+        published, members = roster_input.parse_roster_json(self.snapshot.read_text(encoding="utf-8"))
         self.assertEqual(len(members), len(source["members"]) - 1)
         self.assertEqual(self.snapshot.with_name("roster-source.json").read_bytes(), self.body)
         record = json.loads(self.record)
@@ -58,8 +58,8 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn("BKG #1", self.errors)
         self.assertIn("::warning", self.errors)
         self.assertNotIn("KCØDWZ", self.errors)
-        self.assertIn("1 excluded", summary.read_text())
-        self.assertIn("excluded_members=1", output.read_text())
+        self.assertIn("1 excluded", summary.read_text(encoding="utf-8"))
+        self.assertIn("excluded_members=1", output.read_text(encoding="utf-8"))
 
     def test_one_anonymous_fetch_builds_all_artifacts_from_saved_file(self):
         photo_bytes, photo = photo_fixture()
@@ -93,7 +93,7 @@ class SnapshotTests(unittest.TestCase):
             self.assertEqual(builder.main(["--roster-json", str(self.snapshot), "--asset-dir", str(assets),
                                            "--output-dir", str(site)]), 0)
             validate_dist(site)
-        self.assertEqual(json.loads((site / "data/v2/roster.json").read_text()), source)
+        self.assertEqual(json.loads((site / "data/v2/roster.json").read_text(encoding="utf-8")), source)
         self.assertFalse((site / "input").exists())
         self.assertFalse((site / "roster.json").exists())
         self.assertEqual((site / "images/mugshots" / f"{photo['sha256']}.webp").read_bytes(), photo_bytes)

@@ -66,7 +66,7 @@ class CountrySpellingTests(unittest.TestCase):
 
 class WorkflowTests(unittest.TestCase):
     def test_validates_one_saved_snapshot_before_uploading_the_site(self):
-        workflow = (ROOT / ".github/workflows/deploy.yml").read_text()
+        workflow = (ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8")
         snapshot = '"$RUNNER_TEMP/bkg-build/roster.json"'
         steps = (
             "scripts/fetch-roster.py", "scripts/fetch-public-assets.py",
@@ -98,7 +98,7 @@ class PublicationBuildFixture(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
         shutil.copytree(ROOT / site_contract.GAME_DIR, self.source / site_contract.GAME_DIR)
-        (self.source / "private.txt").write_text("must never be published")
+        (self.source / "private.txt").write_text("must never be published", encoding="utf-8")
 
         paths = {
             "REPO_ROOT": self.source,
@@ -116,7 +116,7 @@ class PublicationBuildFixture(unittest.TestCase):
             replacement.start()
             self.addCleanup(replacement.stop)
 
-        self.envelope = json.loads((FIXTURES / "fixtures/roster-v2.json").read_text())
+        self.envelope = json.loads((FIXTURES / "fixtures/roster-v2.json").read_text(encoding="utf-8"))
         self.photo_bytes, self.photo = photo_fixture()
         self.envelope["members"][0]["photo"] = self.photo
         self.asset = self.assets / f"{self.photo['sha256']}.webp"
@@ -124,7 +124,7 @@ class PublicationBuildFixture(unittest.TestCase):
         self.write_roster()
 
     def write_roster(self):
-        self.roster.write_text(rehash(self.envelope))
+        self.roster.write_text(rehash(self.envelope), encoding="utf-8")
 
     def build(self, *, output=None, extra=()):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -134,15 +134,15 @@ class PublicationBuildFixture(unittest.TestCase):
             ])
 
     def data(self, page, marker):
-        text = (self.dist / page).read_text()
+        text = (self.dist / page).read_text(encoding="utf-8")
         pattern = rf"<!-- {marker}:START -->(.*?)<!-- {marker}:END -->"
         return json.loads(re.search(pattern, text, re.DOTALL)[1])
 
     def replace_data(self, page, marker, data):
         target = self.dist / page
         target.write_text(self.builder.replace_between(
-            target.read_text(), f"<!-- {marker}:START -->", f"<!-- {marker}:END -->", json.dumps(data)
-        ))
+            target.read_text(encoding="utf-8"), f"<!-- {marker}:START -->", f"<!-- {marker}:END -->", json.dumps(data)
+        ), encoding="utf-8")
 
     def output_files(self, directory):
         return {file.relative_to(directory): file.read_bytes() for file in directory.rglob("*") if file.is_file()}
@@ -159,7 +159,7 @@ class DeploymentTests(PublicationBuildFixture):
         for private in ("private.txt", "roster.json", "scripts", ".github"):
             self.assertFalse((self.dist / private).exists(), private)
 
-        index = (self.dist / "index.html").read_text()
+        index = (self.dist / "index.html").read_text(encoding="utf-8")
         self.assertIn("<!-- MEMBER_COUNT:START -->6<!-- MEMBER_COUNT:END -->", index)
         self.assertIn('<div class="rl" data-view="list">', index)
         self.assertNotIn('class="member-card', index)
@@ -177,13 +177,13 @@ class DeploymentTests(PublicationBuildFixture):
         outbreak = self.data("outbreak.html", "OUTBREAK_DATA")
         self.assertEqual([entry["date"] for entry in outbreak],
                          ["2026-08-21", "2026-08-31", None, "2026-08-21", "2026-08-25", "2026-07-02"])
-        self.assertIn("BKG #88 (VT OG)", (self.dist / "members.txt").read_text())
+        self.assertIn("BKG #88 (VT OG)", (self.dist / "members.txt").read_text(encoding="utf-8"))
 
     def test_roster_layout_switch_restores_classic_card_wall(self):
         with patch.dict(os.environ, {"ROSTER_LAYOUT": "classic"}):
             self.assertEqual(self.build(), 0)
         site_contract.validate_dist(self.dist)
-        index = (self.dist / "index.html").read_text()
+        index = (self.dist / "index.html").read_text(encoding="utf-8")
         self.assertIn('class="member-card founder-card"', index)
         self.assertIn('href="https://www.qrz.com/db/N0SYN1"', index)
         self.assertNotIn('class="rl"', index)
@@ -201,7 +201,7 @@ class DeploymentTests(PublicationBuildFixture):
         # An unset repository variable can reach the build as an empty string.
         with patch.dict(os.environ, {"ROSTER_LAYOUT": ""}):
             self.assertEqual(self.build(), 0)
-        self.assertIn('class="rl"', (self.dist / "index.html").read_text())
+        self.assertIn('class="rl"', (self.dist / "index.html").read_text(encoding="utf-8"))
 
     def test_join_dates_use_portable_iso_formatting(self):
         # Match Linux's unpadded strftime behavior even when tests run on macOS.
@@ -256,23 +256,23 @@ class DeploymentTests(PublicationBuildFixture):
     def test_missing_required_template_or_marker_fails_generation(self):
         self.dist.mkdir()
         sentinel = self.dist / "index.html"
-        sentinel.write_text("previous validated build")
+        sentinel.write_text("previous validated build", encoding="utf-8")
         for relative, marker in (("tree.html", None), ("nearby.html", "<!-- GEO_DATA:END -->")):
             with self.subTest(relative=relative):
                 target = self.source / relative
-                original = target.read_text()
+                original = target.read_text(encoding="utf-8")
                 if marker:
-                    target.write_text(original.replace(marker, ""))
+                    target.write_text(original.replace(marker, ""), encoding="utf-8")
                 else:
                     target.unlink()
                 self.assertNotEqual(self.build(), 0)
-                self.assertEqual(sentinel.read_text(), "previous validated build")
-                target.write_text(original)
+                self.assertEqual(sentinel.read_text(encoding="utf-8"), "previous validated build")
+                target.write_text(original, encoding="utf-8")
 
     def test_failed_output_swap_restores_previous_build(self):
         self.dist.mkdir()
         sentinel = self.dist / "index.html"
-        sentinel.write_text("previous validated build")
+        sentinel.write_text("previous validated build", encoding="utf-8")
         rename = Path.rename
 
         def fail_publish(path, target):
@@ -282,7 +282,7 @@ class DeploymentTests(PublicationBuildFixture):
 
         with patch.object(Path, "rename", autospec=True, side_effect=fail_publish):
             self.assertNotEqual(self.build(), 0)
-        self.assertEqual(sentinel.read_text(), "previous validated build")
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "previous validated build")
 
     def test_validator_rejects_missing_assets_photos_and_internal_files(self):
         self.assertEqual(self.build(), 0)
@@ -296,7 +296,7 @@ class DeploymentTests(PublicationBuildFixture):
                     site_contract.validate_dist(self.dist)
                 target.write_bytes(original)
         leaked = self.dist / "private.txt"
-        leaked.write_text("{}")
+        leaked.write_text("{}", encoding="utf-8")
         with self.assertRaises(ValueError):
             site_contract.validate_dist(self.dist)
 
@@ -324,19 +324,19 @@ class DeploymentTests(PublicationBuildFixture):
     def test_validator_rejects_malformed_json_and_generated_data_drift(self):
         self.assertEqual(self.build(), 0)
         index = self.dist / "index.html"
-        original_index = index.read_text()
+        original_index = index.read_text(encoding="utf-8")
         tree = self.dist / "tree.html"
-        original_tree = tree.read_text()
-        tree.write_text(original_tree.replace('"call":"N0SYN1"', '"call":', 1))
+        original_tree = tree.read_text(encoding="utf-8")
+        tree.write_text(original_tree.replace('"call":"N0SYN1"', '"call":', 1), encoding="utf-8")
         with self.assertRaises(ValueError):
             site_contract.validate_dist(self.dist)
-        tree.write_text(original_tree)
-        index.write_text(original_index.replace("<!-- MEMBER_COUNT:START -->6", "<!-- MEMBER_COUNT:START -->7"))
+        tree.write_text(original_tree, encoding="utf-8")
+        index.write_text(original_index.replace("<!-- MEMBER_COUNT:START -->6", "<!-- MEMBER_COUNT:START -->7"), encoding="utf-8")
         with self.assertRaises(ValueError):
             site_contract.validate_dist(self.dist)
-        index.write_text(original_index)
+        index.write_text(original_index, encoding="utf-8")
         notes = self.dist / "members.txt"
-        notes.write_text(notes.read_text().replace("BKG #88", "BKG #99"))
+        notes.write_text(notes.read_text(encoding="utf-8").replace("BKG #88", "BKG #99"), encoding="utf-8")
         with self.assertRaises(ValueError):
             site_contract.validate_dist(self.dist)
 
@@ -371,14 +371,14 @@ class DeploymentTests(PublicationBuildFixture):
             "missing sponsor": rehash(missing_sponsor),
             "private field": rehash(leaked_private),
             "mismatched hash": json.dumps(wrong_hash),
-            "empty roster": (FIXTURES / "fixtures/empty-v2.json").read_text(),
+            "empty roster": (FIXTURES / "fixtures/empty-v2.json").read_text(encoding="utf-8"),
         }
         for case, raw in invalid.items():
             with self.subTest(case=case):
                 if raw is None:
                     self.roster.unlink()
                 else:
-                    self.roster.write_text(raw)
+                    self.roster.write_text(raw, encoding="utf-8")
                 self.assertNotEqual(self.build(), 0)
                 self.assertEqual(self.output_files(self.dist), previous)
 
@@ -425,11 +425,11 @@ class DeploymentTests(PublicationBuildFixture):
         site_contract.validate_dist(self.dist)
         self.assertEqual(self.data("tree.html", "DOWNLINE_DATA")[2]["name"], "Zoë " + payload)
         self.assertIn(qth, self.data("index.html", "MAP_DATA")["dx"])
-        self.assertIn("&lt;/script&gt;", (self.dist / "index.html").read_text())
+        self.assertIn("&lt;/script&gt;", (self.dist / "index.html").read_text(encoding="utf-8"))
         for page in ("index.html", "tree.html", "nearby.html", "outbreak.html"):
-            html = (self.dist / page).read_text()
+            html = (self.dist / page).read_text(encoding="utf-8")
             self.assertNotIn('<script>alert("synthetic")', html)
-        self.assertEqual(json.loads((self.dist / "data/v2/roster.json").read_text()), self.envelope)
+        self.assertEqual(json.loads((self.dist / "data/v2/roster.json").read_text(encoding="utf-8")), self.envelope)
 
     def test_validator_rejects_unreferenced_photos(self):
         self.assertEqual(self.build(), 0)
