@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - name: Check recruit form rules and recovery
-        run: node --test tests/recruit.test.cjs
+      - name: Check offline browser scripts
+        run: node --test tests/*.test.cjs
       - name: Check offline fixtures
         run: python3 -m unittest discover -s tests -v

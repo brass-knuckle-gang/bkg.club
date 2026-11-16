@@ -1,5 +1,10 @@
 # Deployed V2 consumer review
 
+> **Historical record.** The October 21 recommendation below was carried out:
+> v2 went live that day in Deploy run
+> [39615920834](https://github.com/brass-knuckle-gang/bkg.club/actions/runs/39615920834).
+> See [deployment](DEPLOYMENT.md) for current operation.
+
 ## October 21 cutover recheck
 
 Final activation preflight at `2026-10-21T14:06:19.997Z` publishes **882 members,

@@ -2530,7 +2530,7 @@
         <!-- Member Map -->
         <section class="map-section" id="map">
             <h2 class="section-title">GANG TERRITORY</h2>
-            <div class="map-subtitle">Where the brass gets pounded 🤜 <span id="mapStatesCount" class="map-count-num">0</span> states<span id="mapDxNote"></span> on lockdown!!</div>
+            <div class="map-subtitle">Where the brass gets pounded 🤜 <span id="mapStatesCount" class="map-count-num">0</span> states<span id="mapDcNote"></span><span id="mapDxNote"></span> on lockdown!!</div>
             <div class="map-wrapper">
                 <div class="map-container">
                     <svg class="us-map-svg" viewBox="0 0 960 600" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Map of US states, plus a DX box for international BKG members">
@@ -2835,7 +2835,10 @@
 
             const occupiedStates = Object.keys(byState).filter(k =>
                 Array.isArray(byState[k]) && byState[k].length && document.getElementById('state-' + k));
-            if (countEl) countEl.textContent = occupiedStates.length;
+            // DC is on the map but is not a state: count it separately.
+            if (countEl) countEl.textContent = occupiedStates.filter(k => k !== 'DC').length;
+            const dcNoteEl = document.getElementById('mapDcNote');
+            if (dcNoteEl) dcNoteEl.textContent = occupiedStates.includes('DC') ? ' + DC' : '';
 
             occupiedStates.forEach(abbr => {
                 wireRegion(document.getElementById('state-' + abbr), abbr, byState[abbr].length);

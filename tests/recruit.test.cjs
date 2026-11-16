@@ -1,5 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 const rules = require('../assets/recruit-core.js');
 
 test('UTC entry accepts ham notation, midnight and 24-hour times without AM/PM', () => {
@@ -71,4 +74,51 @@ test('a definitively rejected attempt reuses its key until meaningful details ch
     assert.equal(retry.key, 'original-key');
     assert.equal(retry.state, undefined); // Persist as uncertain before attempting the retry.
     assert.equal(rules.attempt({ ...payload, notes: 'Corrected' }, rejected, 'replacement-key').key, 'replacement-key');
+});
+
+test('recovering an attempt before Turnstile loads still starts the roster fetch', () => {
+    const nodes = new Map();
+    const makeNode = () => {
+        const classes = new Set();
+        const listeners = new Map();
+        return {
+            classes, listeners, value: '', style: {},
+            classList: { add: c => classes.add(c), contains: c => classes.has(c) },
+            addEventListener: (event, callback) => listeners.set(event, callback),
+            replaceChildren() {}, append() {}, scrollIntoView() {},
+        };
+    };
+    const document = {
+        getElementById(id) {
+            if (!nodes.has(id)) nodes.set(id, makeNode());
+            return nodes.get(id);
+        },
+        createElement: makeNode,
+        querySelector: makeNode,
+    };
+    const attempt = rules.attempt({ callsign: 'F4TEST' }, null, '8d746124-0a7d-4a34-b229-5a85a65aa843');
+    const window = {
+        BkgRecruit: rules,
+        sessionStorage: { getItem: key => key === 'bkg-recruit-pending-v1' ? JSON.stringify(attempt) : null },
+        localStorage: { getItem: () => null },
+        turnstile: makeNode(), // Simulate a named element before the real API arrives.
+    };
+    const requests = [];
+    const controller = fs.readFileSync(path.join(__dirname, '../assets/recruit.js'), 'utf8');
+    vm.runInNewContext(controller, {
+        document, window,
+        fetch: async url => {
+            requests.push(url);
+            return { ok: true, json: async () => ({ schema_version: '2', members: [] }) };
+        },
+    });
+    assert.deepEqual(requests, ['data/v2/roster.json']);
+    assert.ok(nodes.get('formConfirm').classes.has('show'));
+    assert.equal(nodes.get('confirmBack').disabled, true);
+
+    const targets = [];
+    window.turnstile = { render: target => targets.push(target) };
+    nodes.get('turnstileScript').listeners.get('load')();
+    assert.deepEqual(targets, ['#turnstileWidget']);
+    assert.match(fs.readFileSync(path.join(__dirname, '../recruit.html'), 'utf8'), /id="turnstileWidget"/);
 });

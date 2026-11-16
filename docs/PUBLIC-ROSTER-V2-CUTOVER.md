@@ -1,5 +1,12 @@
 # Administration-owned member publication
 
+> **Status: activated October 21, 2026.** The `github-pages` environment secret
+> `ROSTER_EXPORT_V2_URL` and repository variable `ROSTER_EXPORT_VERSION=2` are
+> configured, PR #46 is merged, and production has published v2 since Deploy run
+> [39615920834](https://github.com/brass-knuckle-gang/bkg.club/actions/runs/39615920834).
+> "Prepare and compare" and "Activate once" are the historical record of that
+> cutover. [Rollback and retirement](#rollback-and-retirement) still applies.
+
 Backend [PR #13](https://github.com/brass-knuckle-gang/bkg-automation/pull/13)
 is merged and deployed. The anonymous V2 endpoint is:
 
@@ -11,10 +18,10 @@ preflight verifies all 882 members, 880 sponsor links, 61 OG assignments,
 871 locations, and 687 photos against the current feeds. Administration also carries WA7SPY's newer contribution
 before activation, preserving all eleven contributed portraits.
 
-This is an explicit production cutover. The website PR prepares v2
-consumption; it does not deploy the backend, change GitHub configuration, import
+This was an explicit production cutover. The website PR prepared v2
+consumption; it did not deploy the backend, change GitHub configuration, import
 member data, or activate the new publication source. Missing configuration fails
-closed. The current v1 endpoint and production behavior remain intact.
+closed. The v1 endpoint remains live as the rollback source.
 
 ## Prepare and compare
 
@@ -132,8 +139,26 @@ artifact when rolling back. Neither V2's roster cache nor its public-asset cache
 can replace the V1 snapshot/enrichment cache. The live review also validates a
 V1 rebuild from the saved production input/cache with the updated consumer.
 
+**V1 rollback state as of November 8, 2026.** No V1 build has run since the
+cutover, and GitHub evicts caches that go unused for seven days. The
+`bkg-enrichment-v1-*` and `bkg-roster-v1-*` caches are gone. A V1 build must
+therefore bootstrap QRZ enrichment from scratch: with an empty cache, every
+member is due for lookup. It needs `QRZ_USERNAME`/`QRZ_PASSWORD` in the
+`github-pages` environment (not rechecked since the cutover). Because of
+`--require-usable`, it fails closed and keeps the live site if QRZ is down or
+returns unusable data. The v1 feed still answers. The last V1 Pages and input
+artifacts in GitHub are `github-pages-39547079039-1` and
+`bkg-build-inputs-39547079039-1` from run
+[39547079039](https://github.com/brass-knuckle-gang/bkg.club/actions/runs/39547079039),
+and they expire on November 20, 2026. The [V2 review](PUBLIC-ROSTER-V2-REVIEW.md)
+records that they were also saved locally. For most bad releases, re-deploying a
+known-good V2 Pages artifact is the faster rollback.
+
 Keep the v1 feed, website QRZ secrets, legacy cache, and website contributed-photo
 manifest until the v2 publication and rollback checkpoint is verified. Remove
 those compatibility paths in a follow-up retirement change. Retiring them is
-separate from the recruitment form's direct-intake migration and from static
-presentation dependencies such as Leaflet, map tiles, and location geocoding.
+separate from the recruitment form's direct-intake migration (already complete)
+and from static presentation dependencies such as Leaflet, map tiles, and
+location geocoding. No page reads the v1 feed directly: the badge press and
+recruit form read the site's own published roster (see
+[the data ownership audit](PUBLISHER-DATA-INVENTORY.md#browser-requests)).

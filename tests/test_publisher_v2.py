@@ -68,6 +68,10 @@ class PublisherV2Tests(unittest.TestCase):
             {"call": "N0SYN1", "name": "Synthetic First", "num": 1,
              "grid": "EN61AB", "lat": 41.0625, "lon": -87.9583},
         ])
+        self.assertEqual(self.data("nearby.html", "UNMAPPED_MEMBERS"), [
+            {"call": row["callsign"], "num": row["bkg_number"]}
+            for row in self.envelope["members"] if row["map_location"] is None
+        ])
         self.assertEqual(json.loads((self.dist / "data/v2/roster.json").read_text()), self.envelope)
         self.assertFalse((self.dist / "data/v1").exists())
         public_photo = self.dist / f"images/mugshots/{self.photo['sha256']}.webp"

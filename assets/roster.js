@@ -45,6 +45,12 @@
         var s = byCall[m.sponsor.toUpperCase()];
         if (s) s.recruits.push(m);
     });
+    // Two-letter territories ("WA", "ME") also occur inside callsigns and names,
+    // so a query that is exactly one of them means that territory only.
+    var shortPlaces = {};
+    members.forEach(function (m) {
+        if (m.place.length === 2) shortPlaces[m.place.toUpperCase()] = true;
+    });
     var now = Date.now();
     members.forEach(function (m) {
         var t = m.joined ? Date.parse(m.joined + "T00:00:00Z") : NaN;
@@ -68,11 +74,19 @@
         var q = state.q;
         if (!q) return true;
         if (/^#?\d+$/.test(q)) return m.n === Number(q.replace("#", ""));
+        if (shortPlaces[q]) return m.place.toUpperCase() === q;
         return m.hay.indexOf(q) >= 0;
     }
 
     function ordered(list) {
-        if (state.sort === "newest") return list.slice().sort(function (a, b) { return b.n - a.n; });
+        if (state.sort === "newest") {
+            // By join (QSO) date, which does not always follow BKG # order, so
+            // each month appears once; same-day members newest number first.
+            return list.slice().sort(function (a, b) {
+                if (!a.joined !== !b.joined) return a.joined ? -1 : 1;
+                return a.joined < b.joined ? 1 : a.joined > b.joined ? -1 : b.n - a.n;
+            });
+        }
         if (state.sort === "call") return list.slice().sort(function (a, b) { return a.call < b.call ? -1 : a.call > b.call ? 1 : 0; });
         if (state.sort === "place") {
             return list.slice().sort(function (a, b) {

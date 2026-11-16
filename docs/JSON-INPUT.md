@@ -1,14 +1,16 @@
 # Reviewed public JSON roster
 
-The administration-owned **v2 publisher is implemented but opt-in**. Production
-continues to use v1 until `ROSTER_EXPORT_VERSION=2` is deliberately configured
-after backend deployment and comparison. See [the data ownership audit](PUBLISHER-DATA-INVENTORY.md)
-and [the v2 cutover procedure](PUBLIC-ROSTER-V2-CUTOVER.md). The following v1
-instructions describe the current production compatibility path.
+Production publishes the administration-owned **v2** snapshot, and has since
+October 21, 2026. See [Administration-owned v2 publishing](#administration-owned-v2-publishing)
+below, [the data ownership audit](PUBLISHER-DATA-INVENTORY.md), and
+[the v2 cutover record](PUBLIC-ROSTER-V2-CUTOVER.md). The one-snapshot,
+membership, and exclusion rules apply to both versions. The sections on
+separate enrichment and the first local-preview recipe describe **v1**, which
+remains only as the rollback path until its retirement.
 
-Production uses the public feed from merged [bkg-automation PR #10](https://github.com/brass-knuckle-gang/bkg-automation/pull/10). The v1 schema and fixtures remain byte-for-byte identical to the copies introduced in [#36](https://github.com/brass-knuckle-gang/bkg.club/pull/36). They were rechecked against backend merge revision `060a8334f13a5995065bf942fd83f94340268b76` at `docs/public-roster/schema-v1.json`, `docs/public-roster/fixtures/roster-v1.json`, and `docs/public-roster/fixtures/empty-v1.json`.
+The v1 feed comes from merged [bkg-automation PR #10](https://github.com/brass-knuckle-gang/bkg-automation/pull/10). The v1 schema and fixtures remain byte-for-byte identical to the copies introduced in [#36](https://github.com/brass-knuckle-gang/bkg.club/pull/36). They were rechecked against backend merge revision `060a8334f13a5995065bf942fd83f94340268b76` at `docs/public-roster/schema-v1.json`, `docs/public-roster/fixtures/roster-v1.json`, and `docs/public-roster/fixtures/empty-v1.json`.
 
-The production workflow explicitly selects `--source json` for both builder and site validator. The URL comes from the **Actions secret** `ROSTER_EXPORT_URL`, not an Actions variable. See [exact cutover instructions](PUBLIC-ROSTER-CUTOVER.md) and [live comparison results](PUBLIC-ROSTER-REVIEW.md). The command-line default remains Sheets for compatibility with explicitly requested legacy/offline comparisons; production never invokes it or falls back to it.
+The production workflow explicitly selects `--source json` for both builder and site validator. The v2 URL comes from the `github-pages` **environment secret** `ROSTER_EXPORT_V2_URL`, and the v1 rollback URL from the **repository secret** `ROSTER_EXPORT_URL`; neither is an Actions variable. See [deployment](DEPLOYMENT.md) for how `ROSTER_EXPORT_VERSION` selects between them. The command-line default remains Sheets for compatibility with explicitly requested legacy/offline comparisons; production never invokes it or falls back to it.
 
 ## One snapshot per run
 
@@ -47,9 +49,9 @@ artifact retains the exact source and publication files and this record even
 when the accepted site is unchanged. Conditional GET caches always retain the
 source bytes and source ETag; they never send a projection hash upstream.
 
-## Separate photo and geographic enrichment
+## Separate photo and geographic enrichment (v1 rollback only)
 
-The workflow restores a sanitized cache outside the checkout, runs `refresh-qrz.py` as a separate command with the **same saved roster**, then renders without networking. QRZ credentials retain their existing `github-pages` environment scope. Missing credentials fail configuration. QRZ outages retain usable prior fields/photos for matching active exported identities; they do not select another roster. A fresh or expired cache needs a successful refresh with usable geography and photos (`--require-usable`); an unusable bootstrap fails before cache replacement and retains the published site.
+Production v2 skips this whole section: administration owns enrichment, and the website neither logs in to QRZ nor applies its own photo manifest. When v1 is selected, the workflow restores a sanitized cache outside the checkout, runs `refresh-qrz.py` as a separate command with the **same saved roster**, then renders without networking. QRZ credentials retain their existing `github-pages` environment scope. Missing credentials fail configuration. QRZ outages retain usable prior fields/photos for matching active exported identities; they do not select another roster. A fresh or expired cache needs a successful refresh with usable geography and photos (`--require-usable`); an unusable bootstrap fails before cache replacement and retains the published site.
 
 Cache entries require the current active BKG number and exact reviewed callsign. Geography additionally requires a hash of the current reviewed QTH. A callsign change rejects the old binding; a QTH change suppresses stale geography while keeping an identity-bound photo. Refresh rejects QRZ geography unless its state/country agrees with the reviewed location. A reviewed Canadian province name (`Alberta`, `Ontario`, …) parses as that province within Canada, so it is compared with QRZ's `Canada` plus the province code QRZ reports in `<state>`; because QRZ documents that field as US-only, a blank QRZ province still agrees, while a US state must always match. QRZ aliases never rename an exported member: when QRZ answers a retired or vanity-replaced callsign with the operator's current record, the refresh uses that record's geography and photo (as the Sheets build did) but the reviewed callsign stays, and the current call is not stored. Coordinates are rounded to two decimals; grids keep at most six characters (the sub-square center, as the Sheets build published). Nearby omits members without accepted geography; the territory map and outbreak territory fallback always use reviewed QTH.
 
@@ -59,7 +61,9 @@ The validated input and sanitized cache are retained together in a separate immu
 
 ## Reproduce an inspectable local preview
 
-Supply `ROSTER_EXPORT_URL` securely in the environment, without printing it. The URL secret hides the URL in Actions logs; it does not authenticate the request.
+This recipe builds the **v1** rollback path and needs QRZ credentials. To preview what production publishes, use the [v2 commands](#administration-owned-v2-publishing), which need none.
+
+Supply the v1 `ROSTER_EXPORT_URL` securely in the environment, without printing it. The URL secret hides the URL in Actions logs; it does not authenticate the request.
 
 ```sh
 preview_dir="$(mktemp -d "${TMPDIR:-/tmp}/bkg-public-roster.XXXXXX")"
@@ -99,11 +103,11 @@ Run `python3 -m unittest discover -s tests -v` without production credentials. T
 
 The intentional OG differences are explicit: Sheets infers IL for #1 and NY for moved holder #88, while JSON renders stored IL for #7 and VT for #88. Both retain Canada for #21; JSON does not add the hardcoded founder/number OG note. Additional tests remove inactive #7 and its IL assignment, leave IL member #1 without an OG, and reuse #7's callsign on #40 while #21's suppressed sponsor stays null. Tests also exercise reviewed callsign changes, moved QTH suppressing stale coordinates while keeping a photo/stored OG, missing/corrupt enrichment, filtered inactive cache/photos, escaped HTML/script text, and malformed/empty exports preserving the previous output. Separate enrichment tests cover failed refresh retaining sanitized geography and photos.
 
-These are synthetic comparisons. The additional [live review](PUBLIC-ROSTER-REVIEW.md) records actual production differences and local enrichment limitations; the source switch requires the operator steps in [the cutover runbook](PUBLIC-ROSTER-CUTOVER.md).
+These are synthetic comparisons. The additional [live review](PUBLIC-ROSTER-REVIEW.md) records the actual production differences and local enrichment limitations at the October 2026 switch to v1, which followed [the v1 cutover runbook](PUBLIC-ROSTER-CUTOVER.md).
 
 ## Administration-owned v2 publishing
 
-The v2 export retains every reviewed membership/OG rule and adds mandatory
+This is the production path. The v2 export retains every reviewed membership/OG rule and adds mandatory
 nullable `map_location` and `photo` fields to each member. A location contains
 the accepted four- or six-character public grid and its center coordinates.
 Null suppresses the member's geographic dot; the website never fills it from
@@ -132,7 +136,13 @@ renderer is entirely offline. The output includes only selected active photos
 and the publication envelope at `data/v2/roster.json`. The content hash covers accepted
 locations and photo metadata along with the existing membership/OG fields.
 
+To reproduce the production build locally, no credentials are needed:
+
 ```sh
+preview_dir="$(mktemp -d "${TMPDIR:-/tmp}/bkg-public-roster.XXXXXX")"
+python3 -m venv "$preview_dir/venv"
+. "$preview_dir/venv/bin/activate"
+python3 -m pip install -r requirements-build.txt
 export ROSTER_EXPORT_URL=https://bkg-public-roster.cool-cake-fac1.workers.dev/api/roster/export/v2
 python3 scripts/fetch-roster.py --schema-version 2 \
   --cache-dir "$preview_dir/roster-cache-v2" --output "$preview_dir/roster.json"
@@ -143,6 +153,7 @@ python3 scripts/build-roster.py --source json --schema-version 2 \
   --asset-origin "$ROSTER_EXPORT_URL" \
   --output-dir "$preview_dir/site"
 python3 scripts/validate-site.py --source json "$preview_dir/site"
+python3 -m http.server 8765 --bind 127.0.0.1 --directory "$preview_dir/site"
 ```
 
 The asset directory must be outside the repository and separate from snapshot
@@ -155,6 +166,7 @@ cache replacement are atomic.
 `--asset-origin` defaults to `ROSTER_EXPORT_URL`; provide a trusted source URL
 when rendering saved V2 photos offline. Snapshot caches are version-specific and
 bound to the exact endpoint. A valid matching ETag/304 reuses the saved JSON;
-fetch or validation failure cannot fall back to stale membership. See the
-[live V2 review](PUBLIC-ROSTER-V2-REVIEW.md) and
-[activation gates](PUBLIC-ROSTER-V2-CUTOVER.md) before production selection.
+fetch or validation failure cannot fall back to stale membership. The
+[live V2 review](PUBLIC-ROSTER-V2-REVIEW.md) records the pre-activation
+comparison, and [the v2 cutover record](PUBLIC-ROSTER-V2-CUTOVER.md#rollback-and-retirement)
+covers rolling back to v1 and retiring it.

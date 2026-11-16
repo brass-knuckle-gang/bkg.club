@@ -1,5 +1,10 @@
 # BKG name overrides — manually maintained (NOT auto-generated).
 #
+# LEGACY: production ignores this file. The live site publishes the
+# administration-owned roster (docs/JSON-INPUT.md), whose reviewed names
+# are authoritative; correct them in bkg-automation instead. Entries here
+# apply only to an explicit `scripts/build-roster.py --source sheets` build.
+#
 # Override the display name a member is shown with, replacing the name that
 # comes from the roster Google Sheet. The sheet stays the source of truth; the
 # override just wins at build time. This is the text-name counterpart of the

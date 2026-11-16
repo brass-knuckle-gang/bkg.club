@@ -152,6 +152,7 @@ def validate_dist(output_dir, *, source="sheets"):
     downline = data_payload(pages["tree.html"], "bkg-downline-data", "DOWNLINE_DATA")
     outbreak = data_payload(pages["outbreak.html"], "bkg-outbreak-data", "OUTBREAK_DATA")
     nearby = data_payload(pages["nearby.html"], "bkg-geo-data", "GEO_DATA")
+    unmapped_nearby = data_payload(pages["nearby.html"], "bkg-unmapped-members", "UNMAPPED_MEMBERS")
     territory = data_payload(pages["index.html"], "bkg-map-data", "MAP_DATA")
     require(isinstance(downline, list) and downline, "Empty/invalid downline roster")
     identities = [identity(entry) for entry in downline]
@@ -211,8 +212,11 @@ def validate_dist(output_dir, *, source="sheets"):
         located.append(entry["call"])
         ob = outbreak[calls.index(entry["call"])]
         require((entry["lat"], entry["lon"]) == (ob.get("lat"), ob.get("lon")), "Nearby coordinates differ from outbreak")
-    require(len(set(located)) == len(located), "Duplicate nearby member")
-    require(set(located) == {entry["call"] for entry in outbreak if "lat" in entry}, "Nearby members differ from outbreak")
+    located_calls = set(located)
+    require(len(located_calls) == len(located), "Duplicate nearby member")
+    require(located_calls == {entry["call"] for entry in outbreak if "lat" in entry}, "Nearby members differ from outbreak")
+    require(unmapped_nearby == [{"call": call, "num": num} for call, _, num in identities if call not in located_calls],
+            "Unmapped Nearby members differ from roster")
     require(isinstance(territory, dict) and set(territory) == {"states", "dx"}, "Invalid territory data")
     mapped = []
     for kind in ("states", "dx"):
