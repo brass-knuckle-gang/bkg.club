@@ -91,6 +91,7 @@ function loadRecruit({ attempt = null, respond }) {
             reportValidity() { return [...nodes.values()].every(node => !node.validationMessage); },
             setCustomValidity(message) { this.validationMessage = message; },
             scrollIntoView() {},
+            focus() {},
         };
     };
     const document = {
@@ -158,4 +159,120 @@ test('an unavailable V2 roster leaves sponsor officer review available without f
         assert.equal(nodes.get('formConfirm').classes.has('show'), true);
         assert.ok(nodes.get('confirmSummary').children.some(node => node.textContent === 'Officer review requested'));
     }
+});
+
+// Field order on the page, for the first-invalid-field lookup.
+const DOM_ORDER = ['sponsorCall', 'email', 'recruitCall', 'recruitName', 'recruitUsRegion', 'recruitProvince',
+    'recruitQth', 'recruitEmail', 'qsoDate', 'qsoTime', 'qsoBand', 'notes'];
+
+function recruitPage({ stored = null, intake } = {}) {
+    const nodes = new Map();
+    const document = { activeElement: null };
+    const makeNode = id => {
+        const classes = new Set();
+        const listeners = new Map();
+        const attributes = new Map();
+        return {
+            id, classes, listeners, attributes, value: '', style: {}, dataset: {}, options: [],
+            classList: { add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c) },
+            addEventListener: (event, callback) => listeners.set(event, callback),
+            setAttribute: (name, value) => attributes.set(name, String(value)),
+            removeAttribute: name => attributes.delete(name),
+            setCustomValidity() {}, replaceChildren() {}, append() {}, appendChild() {}, scrollIntoView() {}, reset() {},
+            focus() { document.activeElement = this; },
+        };
+    };
+    document.getElementById = id => {
+        if (!nodes.has(id)) nodes.set(id, makeNode(id));
+        return nodes.get(id);
+    };
+    document.createElement = () => makeNode();
+    document.querySelector = () => makeNode();
+    const form = document.getElementById('recruitForm');
+    form.reportValidity = () => true;
+    form.querySelectorAll = selector => selector === '[aria-invalid]'
+        ? [...nodes.values()].filter(n => n.attributes.has('aria-invalid')) : [];
+    form.querySelector = selector => {
+        assert.equal(selector, '[aria-invalid="true"]');
+        return DOM_ORDER.map(id => nodes.get(id)).find(n => n && n.attributes.get('aria-invalid') === 'true') || null;
+    };
+    const confirmPanel = document.getElementById('formConfirm');
+    confirmPanel.contains = target => ['confirmHeading', 'confirmBack', 'confirmSend'].includes(target && target.id);
+    const session = new Map(stored ? [['bkg-recruit-pending-v1', JSON.stringify(stored)]] : []);
+    const storage = map => ({ getItem: k => map.get(k) || null, setItem: (k, v) => map.set(k, v), removeItem: k => map.delete(k) });
+    const window = {
+        BkgRecruit: rules,
+        sessionStorage: storage(session),
+        localStorage: storage(new Map()),
+        turnstile: { render: () => 'widget', getResponse: () => 'token', reset() {} },
+    };
+    const controller = fs.readFileSync(path.join(__dirname, '../assets/recruit.js'), 'utf8');
+    vm.runInNewContext(controller, {
+        document, window, AbortController, setTimeout, clearTimeout,
+        crypto: { randomUUID: () => '8d746124-0a7d-4a34-b229-5a85a65aa843' },
+        fetch: async url => url.startsWith('data/')
+            ? { ok: true, json: async () => ({ schema_version: '2', members: [] }) }
+            : intake(),
+    });
+    const el = id => document.getElementById(id);
+    return {
+        document, el,
+        review() {
+            el('sponsorCall').value = 'VE6TEST';
+            el('recruitCall').value = 'N0NEW';
+            el('sponsorReviewRequested').checked = true;
+            el('recruitForm').listeners.get('submit')({ preventDefault() {} });
+        },
+        send: () => el('confirmSend').listeners.get('click')(),
+    };
+}
+
+const reply = (status, data) => async () => ({ status, json: async () => data, headers: { get: () => null } });
+
+test('focus moves to the review panel and back to the form with the user', () => {
+    const page = recruitPage();
+    page.review();
+    assert.ok(page.el('formConfirm').classes.has('show'));
+    assert.equal(page.document.activeElement, page.el('confirmHeading'));
+    page.el('confirmBack').listeners.get('click')();
+    assert.equal(page.el('formConfirm').classes.has('show'), false);
+    assert.equal(page.document.activeElement, page.el('sponsorCall'));
+});
+
+test('a receipt focuses the success panel heading', async () => {
+    const page = recruitPage({ intake: reply(202, { receipt: 'BKG-R-1', receivedAt: '2026-11-16T00:00:00Z' }) });
+    page.review();
+    await page.send();
+    assert.ok(page.el('formSuccess').classes.has('show'));
+    assert.equal(page.document.activeElement, page.el('successHeading'));
+});
+
+test('a rejected intake focuses the first highlighted field, or the review button', async () => {
+    let page = recruitPage({ intake: reply(400, { error: { code: 'invalid_request', fields: ['qsoTime', 'callsign'] } }) });
+    page.review();
+    await page.send();
+    assert.equal(page.el('recruitCall').attributes.get('aria-invalid'), 'true');
+    assert.equal(page.el('qsoTime').attributes.get('aria-invalid'), 'true');
+    assert.equal(page.document.activeElement, page.el('recruitCall'));
+
+    page = recruitPage({ intake: reply(422, { error: { code: 'turnstile_failed' } }) });
+    page.review();
+    await page.send();
+    assert.equal(page.document.activeElement, page.el('submitBtn'));
+});
+
+test('an uncertain send keeps focus on the send button for a safe retry', async () => {
+    const page = recruitPage({ intake: reply(503, {}) });
+    page.review();
+    page.document.activeElement = null; // The disabled button dropped focus.
+    await page.send();
+    assert.ok(page.el('formConfirm').classes.has('show'));
+    assert.equal(page.document.activeElement, page.el('confirmSend'));
+});
+
+test('restoring a saved attempt on page load does not move focus', () => {
+    const attempt = rules.attempt({ callsign: 'F4TEST' }, null, '8d746124-0a7d-4a34-b229-5a85a65aa843');
+    const page = recruitPage({ stored: attempt });
+    assert.ok(page.el('formConfirm').classes.has('show'));
+    assert.equal(page.document.activeElement, null);
 });

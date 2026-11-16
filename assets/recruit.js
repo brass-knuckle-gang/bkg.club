@@ -57,6 +57,16 @@
         errorBox.classList.add('show');
         errorBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
+    // Focus follows the user's actions: the panel that replaces the form, or
+    // the field the intake rejected. Restoring a saved state on page load
+    // scrolls to it but leaves focus at the start of the page.
+    function focusHeading(id) {
+        el(id).focus({ preventScroll: true });
+    }
+    function focusAfterRejection() {
+        const invalid = form.querySelector('[aria-invalid="true"]');
+        (invalid || el('submitBtn')).focus();
+    }
     function clearError() {
         errorBox.classList.remove('show');
         form.querySelectorAll('[aria-invalid]').forEach(function (node) { node.removeAttribute('aria-invalid'); });
@@ -271,6 +281,7 @@
             const data = await response.json().catch(function () { return {}; });
             if (response.status === 202 && typeof data.receipt === 'string' && typeof data.receivedAt === 'string') {
                 showReceipt(data);
+                focusHeading('successHeading');
                 return;
             }
             const code = data.error && data.error.code || '';
@@ -283,6 +294,7 @@
                 inFlight = false;
                 showForm();
                 markFields(data.error && data.error.fields);
+                focusAfterRejection();
             }
             let message;
             if (code === 'invalid_request') message = 'Check the highlighted fields, including callsigns and UTC date/time.';
@@ -303,6 +315,8 @@
             confirmSend.textContent = sendLabel;
             lockRecovery();
             if (widgetId !== null && turnstileApi()) turnstileApi().reset(widgetId);
+            // Disabling the send button during the request can drop focus.
+            if (confirmPanel.classList.contains('show') && !confirmPanel.contains(document.activeElement)) confirmSend.focus();
         }
     }
     form.addEventListener('submit', function (event) {
@@ -320,8 +334,12 @@
         validateQso();
         if (!form.reportValidity()) return;
         review(payloadFromForm(), formChecks());
+        focusHeading('confirmHeading');
     });
-    confirmBack.addEventListener('click', showForm);
+    confirmBack.addEventListener('click', function () {
+        showForm();
+        el('sponsorCall').focus();
+    });
     confirmSend.addEventListener('click', send);
     el('sponsorCall').addEventListener('input', function () {
         el('sponsorCall').setCustomValidity('');
