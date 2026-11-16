@@ -1448,6 +1448,7 @@ body {
 }
 .press-btn.key:hover { background: linear-gradient(180deg, #b00000 0%, #6a0000 100%); box-shadow: 0 0 20px var(--brass); }
 .press-btn:disabled { opacity: 0.45; box-shadow: none; }
+.press-frequency-error { margin-top: 6px; color: var(--brass-light); font-size: 0.85rem; }
 .press-btn:focus-visible, .seg button:focus-visible, .press-results li:focus-visible {
     outline: 2px solid var(--brass-light);
     outline-offset: 1px;
