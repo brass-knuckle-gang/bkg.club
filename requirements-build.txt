@@ -1,2 +1,2 @@
-# Validate and remove metadata from optional JSON-roster profile photos.
+# Verify the administration-owned WebP profile photos copied into the site.
 Pillow==12.3.0

@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Build the public site from Google Sheets (default) or an explicit JSON export.
-
-Production selects --source json and an explicit V1/V2 contract. JSON builds
-use dist/ or an external preview directory. V1 may use separate sanitized
-enrichment; V2 uses only exported map locations and verified public photos.
-Rendering never refreshes QRZ. See docs/JSON-INPUT.md.
+"""Build the static site from the administration's V2 roster and verified photos.
 
 The roster section of index.html is rebuilt between <!-- ROSTER:START --> and
 <!-- ROSTER:END --> markers. The members count is updated between
@@ -13,76 +8,39 @@ Ham2K PoLo callsign notes file (auto-generated, not manually edited).
 
 tree.html, nearby.html and outbreak.html each get a JSON payload injected
 between their own START/END markers (downline, geo, and outbreak data).
-
-The optional legacy Sheets path uses qrz-cache.json (see QRZ_CACHE_* below).
-Production does not read that cache or commit enrichment back to main.
 """
 
 import argparse
-import csv
-import http.client
-import io
 import json
 import os
 import re
 import shutil
 import sys
 import tempfile
-import time
-import urllib.error
-import urllib.parse
-import urllib.request
-import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 
-from site_contract import GAME_DIR, PHOTO_DIRS, PUBLIC_FILES, validate_dist
-
-SHEET_ID = "1GPNjke3fDf18amh3KbUpUAJUqMu4nOuFLm1F8CDzbrY"
-SHEET_CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
+from roster_assets import annotate_public_assets
+from roster_input import parse_roster_json, read_roster_json
+from site_contract import GAME_DIR, PUBLIC_FILES, PUBLIC_ROSTER_PATH, ROSTER_START, validate_dist
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INDEX_PATH = REPO_ROOT / "index.html"
 TREE_PATH = REPO_ROOT / "tree.html"
 NEARBY_PATH = REPO_ROOT / "nearby.html"
 OUTBREAK_PATH = REPO_ROOT / "outbreak.html"
-NAME_OVERRIDES_PATH = REPO_ROOT / "name-overrides.txt"
-LOCATION_OVERRIDES_PATH = REPO_ROOT / "location-overrides.txt"
-MUGSHOT_DIR = REPO_ROOT / "images" / "mugshots"
-MUGSHOT_REL_DIR = "images/mugshots"
-MUGSHOT_OVERRIDE_DIR = REPO_ROOT / "images" / "mugshots-override"
-MUGSHOT_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
-# Callsign -> QRZ image URL of each file
-MUGSHOT_SOURCES_PATH = MUGSHOT_DIR / ".sources.json"
-
-# QRZ lookup cache for the explicit legacy Sheets path.
-# A full roster is one QRZ request per member; almost all of them repeat the
-# Every build looks up every member live. The
-# cache holds only changed callsigns, as the
-# fallback when lookups fail.
-QRZ_CACHE_PATH = REPO_ROOT / "qrz-cache.json"
-QRZ_MAX_CONSECUTIVE_FAILURES = 5  # then use cache only
-QRZ_CACHE_ABOUT = (
-    "Current callsign per sheet callsign, from QRZ. Used only when a QRZ "
-    "lookup fails. Auto-refreshed by scripts/build-roster.py; safe to delete."
-)
-
 NEW_BADGE_LIMIT = 3  # last N members get the "NEW!!" badge
-OG_BADGE_NUMBERS = {2}  # member numbers that get the "OG" badge (founder #1 has its own treatment)
 
 # Roster layout on index.html: "list" is the searchable list/mugshot wall;
 # "classic" is the original card wall, kept as a rollback. The deploy workflow
 # sets ROSTER_LAYOUT from the repository variable of the same name, so the old
 # roster can return without a code change. This is display only and separate
-# from the roster data contract version (--schema-version).
+# from the roster data contract.
 ROSTER_LAYOUTS = ("list", "classic")
 DEFAULT_ROSTER_LAYOUT = "list"
 ROSTER_BLOCK_SIZE = 100  # members per numbered block in the list layout
 FAME_RECRUITERS = 4  # top recruiters in the list layout's "Most Wanted" strip
 FAME_NEWEST = 5  # newest members in the list layout's "Most Wanted" strip
-
-QRZ_XML_URL = "https://xmldata.qrz.com/xml/current/"
-QRZ_NS = {"q": "http://xmldata.qrz.com"}
 
 # The 50 states + DC drawn in the index.html SVG map.
 US_MAP_STATES = frozenset(
@@ -93,11 +51,11 @@ US_MAP_STATES = frozenset(
     """.split()
 )
 
-# QRZ country values (DXCC-style entity names) that belong on the US map
+# Country values (DXCC-style entity names) that belong on the US map
 # rather than in the international DX box. Compared lowercase.
 US_DXCC_NAMES = {"united states", "united states of america", "usa", "alaska", "hawaii"}
 
-# DXCC entity name (as QRZ reports it, lowercased) -> flag emoji for the DX box.
+# Lowercase DXCC entity name -> flag emoji for the DX box.
 # Anything missing falls back to the 🌍 globe.
 COUNTRY_FLAGS = {
     "canada": "🇨🇦", "mexico": "🇲🇽", "england": "🏴󠁧󠁢󠁥󠁮󠁧󠁿", "scotland": "🏴󠁧󠁢󠁳󠁣󠁴󠁿",
@@ -129,9 +87,8 @@ def member_map_bucket(member: dict) -> tuple[str, str] | None:
     """Where a member lands on the territory map.
 
     Returns ("state", "UT") for members on the US map, ("dx", "Canada") for
-    international members, or None when there's nothing to plot. QRZ reports
-    Canadian provinces and other subdivisions in the same <state> field as US
-    states, so a bare two-letter code is only trusted when the country agrees.
+    international members, or None when there's nothing to plot. A subdivision
+    code belongs on the US map only when the country agrees.
     """
     state = member.get("state")
     country = (member.get("country") or "").strip()
@@ -152,485 +109,13 @@ def html_escape(text: str) -> str:
     )
 
 
-def fetch_csv() -> str:
-    req = urllib.request.Request(
-        SHEET_CSV_URL,
-        headers={"User-Agent": "BKG-Roster-Builder/1.0"},
-    )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return resp.read().decode("utf-8")
-
-
-def parse_member_number(raw: str) -> int:
-    """Extract integer from values like 'BKG1', 'BKG #1', '1'."""
-    match = re.search(r"\d+", raw or "")
-    return int(match.group(0)) if match else 0
-
-
-def _norm_header(name: str) -> str:
-    """Lowercase a header and collapse punctuation/whitespace to single spaces."""
-    return re.sub(r"[^a-z0-9]+", " ", (name or "").lower()).strip()
-
-
-# Header names (normalized) that mean "who recruited this member". The roster
-# sheet's column is expected to be "Sponsor"; these aliases keep the build
-# working if it's titled differently.
-SPONSOR_HEADER_ALIASES = {
-    "sponsor", "sponsored by", "sponsor callsign", "sponsor call",
-    "recruiter", "recruited by", "referred by", "brought in by",
-    "elmer", "upline",
-}
-
-
-def find_sponsor_header(fieldnames: list[str] | None) -> str | None:
-    """Pick the sponsor column from the CSV headers, tolerant of naming/case.
-
-    Matches a known alias first, then any header mentioning sponsor/recruit/
-    upline/elmer. Returns the original header string, or None if absent.
-    """
-    headers = [h for h in (fieldnames or []) if h]
-    norm_to_orig = {_norm_header(h): h for h in headers}
-    for alias in SPONSOR_HEADER_ALIASES:
-        if alias in norm_to_orig:
-            return norm_to_orig[alias]
-    for h in headers:
-        n = _norm_header(h)
-        if any(kw in n for kw in ("sponsor", "recruit", "upline", "elmer")):
-            return h
-    return None
-
-
-def parse_members(csv_text: str) -> list[dict]:
-    reader = csv.DictReader(io.StringIO(csv_text))
-    fieldnames = reader.fieldnames
-    sponsor_key = find_sponsor_header(fieldnames)
-    # Surface the sheet schema so a missing/renamed sponsor column (or the CSV
-    # export hitting the wrong tab) is obvious in the build log.
-    print(f"  CSV columns: {fieldnames}", file=sys.stderr)
-    print(f"  Sponsor column detected as: {sponsor_key!r}", file=sys.stderr)
-    if sponsor_key is None:
-        print(
-            "  WARNING: no sponsor column found — the downline tree will be flat. "
-            "Expected a 'Sponsor' column on the exported sheet tab.",
-            file=sys.stderr,
-        )
-    members = []
-    for row in reader:
-        callsign = (row.get("Callsign") or "").strip()
-        name = (row.get("Name") or "").strip()
-        join_date = (row.get("Join Date") or "").strip()
-        qth = (row.get("QTH") or "").strip()
-        number = parse_member_number(row.get("#") or row.get("BKG #") or "")
-        # "Sponsor" = who recruited this member, as a callsign or BKG number.
-        # Resolved to the sponsoring member in resolve_sponsors().
-        sponsor_raw = ((row.get(sponsor_key) if sponsor_key else "") or "").strip()
-        if callsign and number:
-            members.append(
-                {
-                    "callsign": callsign,
-                    "name": name,
-                    "join_date": join_date,
-                    "qth": qth,
-                    "number": number,
-                    "sponsor_raw": sponsor_raw,
-                    "sponsor_member": None,
-                }
-            )
-    members.sort(key=lambda m: m["number"])
-    return members
-
-
-def validate_members(members: list[dict]) -> None:
-    """Reject unusable rosters before they can replace the deployed site.
-
-    Check again after QRZ canonicalizes callsigns: two sheet rows mapping to
-    the same operator would otherwise overwrite each other in page lookups.
-    """
-    if not members:
-        raise ValueError("No members parsed from CSV")
-    numbers: set[int] = set()
-    callsigns: set[str] = set()
-    for member in members:
-        number = member["number"]
-        callsign = member["callsign"].upper()
-        if number in numbers:
-            raise ValueError(f"Duplicate member number: {number}")
-        if callsign in callsigns:
-            raise ValueError(f"Duplicate callsign: {callsign}")
-        numbers.add(number)
-        callsigns.add(callsign)
-
-
-def load_name_overrides() -> dict[str, str]:
-    """Load callsign -> display-name overrides from name-overrides.txt.
-
-    This file is manually maintained (unlike members.txt) and lets anyone
-    override the name a member is shown with — the roster sheet stays the
-    source of truth, but the override wins. It's the text-name analogue of the
-    images/mugshots-override/ directory. Format, one entry per line:
-
-        CALLSIGN = Display Name
-
-    Blank lines and lines starting with '#' are ignored. The separator may be
-    '=' or ':'. Callsigns are matched case-insensitively. Returns a dict keyed
-    by upper-cased callsign; empty if the file is absent.
-    """
-    if not NAME_OVERRIDES_PATH.is_file():
-        return {}
-    overrides: dict[str, str] = {}
-    for lineno, raw_line in enumerate(NAME_OVERRIDES_PATH.read_text().splitlines(), 1):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        match = re.match(r"([A-Za-z0-9/]+)\s*[=:]\s*(.+)$", line)
-        if not match:
-            print(
-                f"  Skipping unparseable name override ({NAME_OVERRIDES_PATH.name}:{lineno}): {raw_line!r}",
-                file=sys.stderr,
-            )
-            continue
-        callsign = match.group(1).strip().upper()
-        name = match.group(2).strip()
-        if name:
-            overrides[callsign] = name
-    return overrides
-
-
-def apply_name_overrides(members: list[dict], overrides: dict[str, str]) -> None:
-    """Replace member['name'] with a name-overrides.txt entry, in place.
-
-    Matches on the roster callsign (case-insensitive). Applied before the QRZ
-    lookup so it needs no network/credentials. Logs each applied override and
-    any override whose callsign isn't (yet) in the roster.
-    """
-    if not overrides:
-        return
-    used: set[str] = set()
-    for member in members:
-        key = member["callsign"].upper()
-        new_name = overrides.get(key)
-        if new_name and new_name != member["name"]:
-            print(
-                f"  Name override: {member['callsign']} {member['name']!r} -> {new_name!r}",
-                file=sys.stderr,
-            )
-            member["name"] = new_name
-        if new_name:
-            # Overrides are shown verbatim in members.txt
-            member["name_override"] = True
-            used.add(key)
-    for key in overrides.keys() - used:
-        print(
-            f"  Name override for {key} not applied (callsign not in roster)",
-            file=sys.stderr,
-        )
-
-
-def load_location_overrides() -> dict[str, tuple[str | None, str | None]]:
-    """Load callsign -> (state, country) overrides from location-overrides.txt.
-
-    Manually maintained, like name-overrides.txt. Overrides the QRZ-reported
-    location for members whose QRZ QTH is stale — this moves them on the
-    territory map, which also shifts state/country OG badges, since the OG is
-    simply the lowest-numbered member in each territory. Format, one entry per
-    line:
-
-        CALLSIGN = UT              (two-letter US state code)
-        CALLSIGN = Canada          (anything else: DXCC country name)
-
-    Blank lines and lines starting with '#' are ignored. The separator may be
-    '=' or ':'. Callsigns are matched case-insensitively. Returns a dict keyed
-    by upper-cased callsign mapping to (state, country) — a US-state entry
-    yields ("UT", "United States"), a country entry yields (None, name).
-    """
-    if not LOCATION_OVERRIDES_PATH.is_file():
-        return {}
-    overrides: dict[str, tuple[str | None, str | None]] = {}
-    for lineno, raw_line in enumerate(LOCATION_OVERRIDES_PATH.read_text().splitlines(), 1):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        match = re.match(r"([A-Za-z0-9/]+)\s*[=:]\s*(.+)$", line)
-        if not match:
-            print(
-                f"  Skipping unparseable location override ({LOCATION_OVERRIDES_PATH.name}:{lineno}): {raw_line!r}",
-                file=sys.stderr,
-            )
-            continue
-        callsign = match.group(1).strip().upper()
-        value = match.group(2).strip()
-        if not value:
-            continue
-        if value.upper() in US_MAP_STATES:
-            overrides[callsign] = (value.upper(), "United States")
-        else:
-            overrides[callsign] = (None, value)
-    return overrides
-
-
-def apply_location_overrides(
-    members: list[dict], overrides: dict[str, tuple[str | None, str | None]]
-) -> None:
-    """Replace member['state']/member['country'] with location-overrides.txt
-    entries, in place.
-
-    Matches on the (QRZ-canonicalized) callsign, case-insensitively. Must run
-    after the QRZ lookups and before mark_territory_ogs() so the OG badges are
-    computed from the overridden locations. Logs each applied override and any
-    override whose callsign isn't (yet) in the roster.
-    """
-    if not overrides:
-        return
-    used: set[str] = set()
-    for member in members:
-        key = member["callsign"].upper()
-        override = overrides.get(key)
-        if override is None:
-            continue
-        used.add(key)
-        state, country = override
-        if (state, country) != (member.get("state"), member.get("country")):
-            print(
-                f"  Location override: {member['callsign']} "
-                f"{member.get('state')!r}/{member.get('country')!r} -> {state!r}/{country!r}",
-                file=sys.stderr,
-            )
-            member["state"] = state
-            member["country"] = country
-            # overridden = QRZ QTH is stale, so its coords are too
-            member["grid"] = None
-            member["lat"] = None
-            member["lon"] = None
-    for key in overrides.keys() - used:
-        print(
-            f"  Location override for {key} not applied (callsign not in roster)",
-            file=sys.stderr,
-        )
-
-
-# A full build is one QRZ request per member (500+), and QRZ drops or times
-# out a handful of connections per day. Retry each request a few times with
-# a short backoff before giving up on it, so one hiccup neither kills the
-# deploy nor silently loses a member's location for that build.
-FETCH_ATTEMPTS = 3
-FETCH_BACKOFF_SECONDS = (2, 5)
-
-
-def _fetch_with_retry(req: urllib.request.Request, *, timeout: float, what: str) -> bytes | None:
-    """GET a URL, retrying transient network failures. Returns None if all attempts fail."""
-    for attempt in range(1, FETCH_ATTEMPTS + 1):
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                return resp.read()
-        except (OSError, http.client.HTTPException) as exc:
-            # OSError covers urllib.error.URLError, socket timeouts and
-            # connection resets; HTTPException covers RemoteDisconnected /
-            # BadStatusLine when the server hangs up mid-response.
-            if attempt < FETCH_ATTEMPTS:
-                delay = FETCH_BACKOFF_SECONDS[min(attempt - 1, len(FETCH_BACKOFF_SECONDS) - 1)]
-                print(f"  {what} failed (attempt {attempt}/{FETCH_ATTEMPTS}): {exc}; retrying in {delay}s", file=sys.stderr)
-                time.sleep(delay)
-            else:
-                print(f"  {what} failed after {FETCH_ATTEMPTS} attempts: {exc}", file=sys.stderr)
-    return None
-
-
-def _qrz_get_raw(params: dict[str, str]) -> bytes | None:
-    url = QRZ_XML_URL + "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={"User-Agent": "BKG-Roster-Builder/1.0"})
-    return _fetch_with_retry(req, timeout=15, what="QRZ request")
-
-
-def _qrz_get(params: dict[str, str]) -> ET.Element | None:
-    raw = _qrz_get_raw(params)
-    if raw is None:
-        return None
-    try:
-        return ET.fromstring(raw)
-    except ET.ParseError as exc:
-        print(f"  QRZ XML parse failed: {exc}", file=sys.stderr)
-        return None
-
-
-def qrz_login(username: str, password: str) -> str | None:
-    """Authenticate with QRZ XML API; returns a session key or None."""
-    root = _qrz_get({"username": username, "password": password, "agent": "bkg.club-1.0"})
-    if root is None:
-        return None
-    session = root.find("q:Session", QRZ_NS)
-    if session is None:
-        return None
-    error = session.find("q:Error", QRZ_NS)
-    if error is not None and error.text:
-        print(f"  QRZ login error: {error.text}", file=sys.stderr)
-        return None
-    key = session.find("q:Key", QRZ_NS)
-    return key.text if key is not None and key.text else None
-
-
-def qrz_fetch_callsign(session_key: str, callsign: str, *, debug: bool = False) -> dict | None:
-    """Look up a callsign. Returns {'current_call', 'image', 'grid', 'lat',
-    'lon'}, or None if the lookup itself failed (network, parse, or
-    session error) so the caller can fall back to the cached callsign.
-
-    'current_call' is QRZ's canonical <call> element, which differs from the
-    queried callsign for retired/aliased/vanity calls; callers use it to remap
-    roster entries to the operator's current callsign. State and country come
-    from the sheet's QTH column, not QRZ.
-    """
-    empty = {
-        "current_call": None, "image": None,
-        "grid": None, "lat": None, "lon": None,
-    }
-    raw = _qrz_get_raw({"s": session_key, "callsign": callsign})
-    if raw is None:
-        return None
-    if debug:
-        print(f"  QRZ response for {callsign}:", file=sys.stderr)
-        for line in raw.decode("utf-8", errors="replace").splitlines():
-            print(f"    {line}", file=sys.stderr)
-    try:
-        root = ET.fromstring(raw)
-    except ET.ParseError as exc:
-        print(f"  QRZ parse error for {callsign}: {exc}", file=sys.stderr)
-        return None
-    # Surface session-level errors (e.g. "Session Timeout", "Not subscribed").
-    session = root.find("q:Session", QRZ_NS)
-    session_error = None
-    if session is not None:
-        err = session.find("q:Error", QRZ_NS)
-        if err is not None and err.text:
-            session_error = err.text.strip()
-            print(f"  QRZ session error for {callsign}: {session_error}", file=sys.stderr)
-    call = root.find("q:Callsign", QRZ_NS)
-    if call is None:
-        # "Not found" is a real answer worth caching; anything else (session
-        # timeout, subscription lapse, empty reply) is a failed lookup.
-        if session_error and session_error.lower().startswith("not found"):
-            return empty
-        return None
-
-    # QRZ returns the operator's canonical <call>, which may differ from the
-    # queried callsign for retired/aliased/vanity calls. Use it as the
-    # authoritative current callsign.
-    current_call = None
-    call_elem = call.find("q:call", QRZ_NS)
-    if call_elem is not None and call_elem.text:
-        candidate = call_elem.text.strip().upper()
-        if re.fullmatch(r"[A-Z0-9/]+", candidate):
-            current_call = candidate
-
-    image = None
-    image_elem = call.find("q:image", QRZ_NS)
-    if image_elem is not None and image_elem.text:
-        candidate = image_elem.text.strip()
-        if candidate.startswith(("http://", "https://")):
-            image = candidate
-
-    # Maidenhead grid + coordinates, for the nearby-members map
-    grid = None
-    grid_elem = call.find("q:grid", QRZ_NS)
-    if grid_elem is not None and grid_elem.text:
-        text = grid_elem.text.strip().upper()
-        if re.fullmatch(r"[A-R]{2}[0-9]{2}(?:[A-X]{2})?([0-9]{2})?", text):
-            grid = text[:6]
-
-    lat = lon = None
-    lat_elem = call.find("q:lat", QRZ_NS)
-    lon_elem = call.find("q:lon", QRZ_NS)
-    if lat_elem is not None and lon_elem is not None and lat_elem.text and lon_elem.text:
-        try:
-            lat = float(lat_elem.text.strip())
-            lon = float(lon_elem.text.strip())
-        except ValueError:
-            lat = lon = None
-        if lat is not None and not (-90 <= lat <= 90 and -180 <= lon <= 180):
-            lat = lon = None
-
-    return {
-        "current_call": current_call, "image": image,
-        "grid": grid, "lat": lat, "lon": lon,
-        # Only the separate JSON enrichment command uses these to reject
-        # geography that disagrees with the reviewed current location.
-        "state": call.findtext("q:state", default="", namespaces=QRZ_NS),
-        "country": call.findtext("q:country", default="", namespaces=QRZ_NS),
-    }
-
-
-def local_override_mugshot(callsign: str) -> str | None:
-    """If images/mugshots-override/<callsign>.<ext> exists, copy it into the build
-    mugshot dir and return its repo-relative path. Otherwise return None."""
-    if not MUGSHOT_OVERRIDE_DIR.is_dir():
-        return None
-    for ext in MUGSHOT_EXTS:
-        src = MUGSHOT_OVERRIDE_DIR / f"{callsign}{ext}"
-        if src.is_file():
-            MUGSHOT_DIR.mkdir(parents=True, exist_ok=True)
-            dest = MUGSHOT_DIR / f"{callsign}{ext}"
-            dest.write_bytes(src.read_bytes())
-            return f"{MUGSHOT_REL_DIR}/{callsign}{ext}"
-    return None
-
-
-def load_mugshot_sources() -> dict[str, str]:
-    """Image URL behind each mugshot file on disk.
-
-    Lives beside the files in the workflow's mugshot cache (never
-    committed), so an unchanged QRZ image isn't downloaded again.
-    """
-    try:
-        data = json.loads(MUGSHOT_SOURCES_PATH.read_text())
-    except (OSError, ValueError):
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def save_mugshot_sources(sources: dict[str, str]) -> None:
-    MUGSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    MUGSHOT_SOURCES_PATH.write_text(json.dumps(sources, indent=0, sort_keys=True) + "\n")
-
-
-def download_mugshot(callsign: str, url: str, sources: dict[str, str]) -> str | None:
-    """Download a QRZ profile image, reusing the file on disk when its URL
-    hasn't changed. Returns the repo-relative path, or None on failure."""
-    if sources.get(callsign) == url:
-        existing = previous_mugshot(callsign)
-        if existing:
-            return existing
-    parsed = urllib.parse.urlparse(url)
-    suffix = Path(parsed.path).suffix.lower()
-    if suffix not in MUGSHOT_EXTS:
-        suffix = ".jpg"
-    req = urllib.request.Request(url, headers={"User-Agent": "BKG-Roster-Builder/1.0"})
-    data = _fetch_with_retry(req, timeout=20, what=f"QRZ image download for {callsign}")
-    if not data:
-        return None
-    MUGSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    for old in MUGSHOT_DIR.glob(f"{callsign}.*"):
-        old.unlink()
-    filename = f"{callsign}{suffix}"
-    (MUGSHOT_DIR / filename).write_bytes(data)
-    sources[callsign] = url
-    return f"{MUGSHOT_REL_DIR}/{filename}"
-
-
-def previous_mugshot(callsign: str) -> str | None:
-    """Last build's mugshot (restored by the workflow cache), if any."""
-    for ext in MUGSHOT_EXTS:
-        path = MUGSHOT_DIR / f"{callsign}{ext}"
-        if path.is_file() and path.stat().st_size > 0:
-            return f"{MUGSHOT_REL_DIR}/{callsign}{ext}"
-    return None
-
-
 def qth_location(qth: str) -> tuple[str | None, str | None]:
     """Reviewed QTH -> (subdivision code, country).
 
     US states give ("UT", "United States"). Canadian provinces are reviewed
     as bare names ("Alberta"), so they give ("AB", "Canada") rather than
-    treating the province as a country: the territory map then files them
-    under Canada, and the enrichment refresh can compare them with the
-    province QRZ reports in its <state> field. Anything else is a country.
+    treating the province as a country: the territory map files them under
+    Canada. Anything else is a country.
     """
     text = qth.strip()
     if not text:
@@ -669,238 +154,15 @@ def canonicalize_countries(members: list[dict]) -> None:
             member["country"] = canonical[member["country"].casefold()]
 
 
-def mark_territory_ogs(members: list[dict]) -> None:
-    """Badge the earliest member (lowest BKG #) in each map territory, in place.
-
-    The first member in each US map state gets member['state_og'], and the
-    first from each DX country gets member['country_og'] — the international
-    counterpart of the state OG badge.
-    """
-    earliest: dict[tuple[str, str], dict] = {}
-    for member in sorted(members, key=lambda m: m["number"]):
-        bucket = member_map_bucket(member)
-        if bucket and bucket not in earliest:
-            earliest[bucket] = member
-    for (kind, _territory), member in earliest.items():
-        member["state_og" if kind == "state" else "country_og"] = True
-
-
-def load_qrz_cache() -> dict[str, str]:
-    """Read qrz-cache.json -> {SHEET CALLSIGN: CURRENT CALLSIGN}.
-
-    Only callsigns that changed are stored.
-    """
-    if not QRZ_CACHE_PATH.is_file():
-        return {}
-    try:
-        data = json.loads(QRZ_CACHE_PATH.read_text())
-    except (OSError, ValueError) as exc:
-        print(f"  Ignoring unreadable {QRZ_CACHE_PATH.name}: {exc}", file=sys.stderr)
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    cache = {}
-    for key, value in data.items():
-        if key.startswith("_"):
-            continue
-        # Old format: {"current_call": ...}
-        if isinstance(value, dict):
-            value = value.get("current_call")
-        if isinstance(value, str) and value:
-            cache[key.upper()] = value.upper()
-    return cache
-
-
-def save_qrz_cache(cache: dict[str, str]) -> None:
-    """Write the cache one entry per line, sorted, so commits diff cleanly."""
-    lines = ["{", f'  "_about": {json.dumps(QRZ_CACHE_ABOUT)},']
-    for key in sorted(cache):
-        if cache[key] == key:
-            continue  # unchanged calls need no entry
-        lines.append(f"  {json.dumps(key)}: {json.dumps(cache[key])},")
-    lines[-1] = lines[-1].rstrip(",")
-    lines.append("}")
-    QRZ_CACHE_PATH.write_text("\n".join(lines) + "\n")
-
-
-def annotate_qrz(members: list[dict]) -> None:
-    """Set member['state'], member['country'], member['state_og'],
-    member['country_og'], member['grid'/'lat'/'lon'] and member['mugshot_path']
-    in place.
-
-    State and country come from the sheet's QTH column. Every member is
-    looked up live on QRZ for their current callsign, mugshot and
-    coordinates. qrz-cache.json stores only changed callsigns, used when a
-    lookup fails; that member then keeps last build's mugshot file but has
-    no coordinates this build. Mugshots download only when the QRZ image
-    URL changes. Requires env vars QRZ_USERNAME and
-    QRZ_PASSWORD (an XML-subscription QRZ account).
-    """
-    for member in members:
-        member["state"], member["country"] = qth_location(member.get("qth", ""))
-        member["state_og"] = False
-        member["country_og"] = False
-        member["mugshot_path"] = None
-        member["grid"] = None
-        member["lat"] = None
-        member["lon"] = None
-
-    cache = load_qrz_cache()
-    sources = load_mugshot_sources()
-    print(f"  QRZ cache: {len(cache)} callsigns; fetching {len(members)} live", file=sys.stderr)
-
-    session_key = None
-    if members:
-        username = os.environ.get("QRZ_USERNAME")
-        password = os.environ.get("QRZ_PASSWORD")
-        if not username or not password:
-            print("  QRZ_USERNAME/QRZ_PASSWORD not set; using cached callsigns only", file=sys.stderr)
-        else:
-            session_key = qrz_login(username, password)
-            if not session_key:
-                print("  QRZ login failed; using cached callsigns only", file=sys.stderr)
-
-    fetched = failed = streak = 0
-    debug_done = False
-    for member in members:
-        key = member["callsign"].upper()
-        info = None
-        if session_key:
-            info = qrz_fetch_callsign(session_key, key, debug=not debug_done)
-            debug_done = True
-            if info is None:
-                failed += 1
-                streak += 1
-                if streak >= QRZ_MAX_CONSECUTIVE_FAILURES:
-                    print(f"  QRZ failed {streak} times in a row; using cache", file=sys.stderr)
-                    session_key = None
-            else:
-                fetched += 1
-                streak = 0
-                cache[key] = info.get("current_call") or key
-
-        # Remap to the operator's current callsign if QRZ reports a different
-        # canonical <call> (e.g. after a vanity/retired-call change).
-        current_call = info.get("current_call") if info else cache.get(key)
-        if current_call and current_call != key:
-            print(f"  Callsign updated: {member['callsign']} -> {current_call}", file=sys.stderr)
-            # Keep the sheet call for sponsor matching.
-            member["sheet_callsign"] = member["callsign"]
-            member["callsign"] = current_call
-
-        if info:
-            member["grid"] = info.get("grid")
-            member["lat"] = info.get("lat")
-            member["lon"] = info.get("lon")
-        override = local_override_mugshot(member["callsign"])
-        if override:
-            member["mugshot_path"] = override
-        elif info is None:
-            member["mugshot_path"] = previous_mugshot(member["callsign"])
-        elif info.get("image"):
-            member["mugshot_path"] = download_mugshot(
-                member["callsign"], info["image"], sources
-            ) or previous_mugshot(member["callsign"])
-
-    if members:
-        print(f"  QRZ lookups: {fetched} fetched, {failed} failed", file=sys.stderr)
-    save_qrz_cache(cache)
-    save_mugshot_sources(sources)
-
-    resolved = sum(1 for m in members if member_map_bucket(m))
-    dx = sum(1 for m in members if (member_map_bucket(m) or ("",))[0] == "dx")
-    mugshots = sum(1 for m in members if m.get("mugshot_path"))
-    print(
-        f"  Sheet QTH placed {resolved}/{len(members)} members on the map ({dx} international)",
-        file=sys.stderr,
-    )
-    unknown = sorted({m["qth"] for m in members if m.get("qth") and not member_map_bucket(m)})
-    if unknown:
-        print(f"  Unrecognized QTH values: {unknown}", file=sys.stderr)
-    print(f"  Mugshot resolved for {mugshots}/{len(members)} members (local overrides preferred)", file=sys.stderr)
-
-    apply_location_overrides(members, load_location_overrides())
-    canonicalize_countries(members)
-    mark_territory_ogs(members)
-
-
-NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
-NAME_TITLES = {"dr", "mr", "mrs", "ms", "rev"}
-
-
-def normalize_name_case(name: str) -> str:
-    """Title-case a name typed in ALL CAPS or lowercase.
-
-    Mixed-case entries (McDonald, DeVon, QRS Forrest) are left alone.
-    Handles hyphens and apostrophes: MARY-JO O'BRIEN -> Mary-Jo O'Brien.
-    """
-    if name.isupper() or name.islower():
-        return re.sub(r"[A-Za-z]+", lambda m: m.group(0).capitalize(), name)
-    return name
-
-
-def first_name_initial(name: str) -> str:
-    """Return 'First L' from a roster name, normalizing sheet formatting.
-
-    Handles extra whitespace, ALL CAPS / lowercase, a quoted or parenthesized
-    nickname (Robert "Bob" Smith -> Bob S), 'Last, First', titles, and
-    suffixes like 'Jr'.
-    """
-    if not name:
-        return ""
-    name = normalize_name_case(" ".join(name.split()))
-    # Prefer a nickname: Robert "Bob" Smith / Robert (Bob) Smith -> Bob Smith
-    nick = re.search(r'["\u201c\u201d(]\s*([^"\u201c\u201d()]+?)\s*["\u201c\u201d)]', name)
-    if nick:
-        name = f"{nick.group(1)} {name[:nick.start()]} {name[nick.end():]}"
-    # 'Smith, John' -> 'John Smith' (but not 'John Smith, Jr')
-    if "," in name:
-        head, tail = (part.strip() for part in name.split(",", 1))
-        if tail and tail.rstrip(".").lower() not in NAME_SUFFIXES:
-            name = f"{tail} {head}"
-    parts = [p.strip(",. ") for p in name.split()]
-    parts = [p for p in parts if p]
-    parts = [p for p in parts if p.lower() not in NAME_TITLES]
-    if not parts:
-        return ""
-    first = parts[0]
-    if len(parts) == 1:
-        return first
-    last_candidates = [p for p in parts[1:] if p.lower() not in NAME_SUFFIXES]
-    if not last_candidates:
-        return first
-    initial = re.sub(r"[^A-Za-z]", "", last_candidates[-1])[:1].upper()
-    return f"{first} {initial}" if initial else first
-
-
 def territory_og_badge_html(member: dict) -> str:
-    """Corner ribbon for the first BKG member in a US state or DX country.
-
-    State ribbons show the state code ("UT OG"); country ribbons show the
-    country's flag emoji ("🇨🇦 OG") so long DXCC names don't blow out the
-    ribbon, with the full name in the hover title. JSON renders the stored
-    region labels independently of the holder's current location.
-    """
-    if "og_regions" in member:
-        # Stored assignments remain attached to their designated region when
-        # the holder moves. A holder may have more than one reviewed region.
-        regions = member["og_regions"]
-        if not regions:
-            return ""
-        labels = [region["region_label"] for region in regions]
-        title = html_escape(", ".join(f"{label} OG" for label in labels))
-        label = html_escape(" / ".join(labels))
-        return f'\n                    <div class="state-og-badge" title="{title}">{label} OG</div>'
-    if member.get("state_og"):
-        label = html_escape(member.get("state") or "")
-        title = label
-    elif member.get("country_og"):
-        country = (member.get("country") or "").strip()
-        label = COUNTRY_FLAGS.get(country.lower(), "🌍")
-        title = html_escape(country)
-    else:
+    """Render stored OG regions independently of the holder's current QTH."""
+    regions = member["og_regions"]
+    if not regions:
         return ""
-    return f'\n                    <div class="state-og-badge" title="{title} OG">{label} OG</div>'
+    labels = [region["region_label"] for region in regions]
+    title = html_escape(", ".join(f"{label} OG" for label in labels))
+    label = html_escape(" / ".join(labels))
+    return f'\n                    <div class="state-og-badge" title="{title}">{label} OG</div>'
 
 
 def mugshot_inner_html(member: dict) -> str:
@@ -944,14 +206,12 @@ def render_founder_card(member: dict) -> str:
                 </div>"""
 
 
-def render_member_card(member: dict, *, is_og: bool, is_new: bool) -> str:
+def render_member_card(member: dict, *, is_new: bool) -> str:
     callsign = html_escape(member["callsign"])
     name = html_escape(member["name"])
     number = f"BKG #{member['number']:03d}"
     badge_html = ""
-    if is_og:
-        badge_html = '\n                    <div class="og-badge">OG</div>'
-    elif is_new:
+    if is_new:
         badge_html = '\n                    <div class="new-badge">NEW!!</div>'
     badge_html += territory_og_badge_html(member)
     mugshot_inner = mugshot_inner_html(member)
@@ -1012,7 +272,6 @@ def render_roster_classic(members: list[dict]) -> str:
             cards.append(
                 render_member_card(
                     member,
-                    is_og="og_regions" not in member and member["number"] in OG_BADGE_NUMBERS,
                     is_new=member["number"] in new_numbers,
                 )
             )
@@ -1043,7 +302,7 @@ def roster_thumb_html(member: dict) -> str:
     return f'<span class="rl-ini">{html_escape(roster_initials(member["name"]))}</span>'
 
 
-def render_roster_row(member: dict, *, is_og: bool, is_new: bool) -> str:
+def render_roster_row(member: dict, *, is_new: bool) -> str:
     callsign = html_escape(member["callsign"])
     name = html_escape(member["name"])
     place, flag = roster_place(member)
@@ -1051,8 +310,6 @@ def render_roster_row(member: dict, *, is_og: bool, is_new: bool) -> str:
     badges = ""
     if member["number"] == 1:
         badges += '<span class="rl-b rl-boss">GODFATHER</span>'
-    if is_og:
-        badges += '<span class="rl-b rl-og">OG</span>'
     badges += territory_og_badge_html(member).strip()
     if is_new:
         badges += '<span class="rl-b rl-new">NEW</span>'
@@ -1134,8 +391,7 @@ def render_roster_list(members: list[dict]) -> str:
         group = by_block[index]
         low = index * ROSTER_BLOCK_SIZE + 1
         rows = [
-            render_roster_row(m, is_og="og_regions" not in m and m["number"] in OG_BADGE_NUMBERS,
-                              is_new=m["number"] in new_numbers)
+            render_roster_row(m, is_new=m["number"] in new_numbers)
             for m in group
         ]
         if index == last_block:
@@ -1179,47 +435,6 @@ def render_roster_list(members: list[dict]) -> str:
                 </div>"""
 
 
-def zero_for_o(call: str) -> str:
-    """Fold letter O into digit 0."""
-    return call.upper().replace("O", "0")
-
-
-def resolve_sponsors(members: list[dict]) -> None:
-    """Resolve each member's raw "Sponsor" value to the sponsoring member in place.
-
-    A sponsor may be recorded as a callsign ("KI7QCF") or a BKG number ("12",
-    "BKG12", "BKG #12"). Sets member['sponsor_member'] to the matched member's
-    dict, or None for a root / unrecognized sponsor. Runs after annotate_qrz()
-    so a sponsor cell may name either the sheet callsign or the QRZ-updated
-    one. A letter O typed for a digit 0 ("NBOE") still matches.
-    """
-    by_call = {}
-    for m in members:
-        for call in (m.get("sheet_callsign"), m["callsign"]):
-            if call:
-                by_call[call.upper()] = m
-                by_call.setdefault(zero_for_o(call), m)
-    by_num = {m["number"]: m for m in members}
-    for member in members:
-        raw = (member.get("sponsor_raw") or "").strip()
-        if not raw:
-            continue
-        # Prefer an exact callsign match before parsing a number, so a callsign
-        # like "K5OHY" isn't mistaken for member number 5.
-        sponsor = by_call.get(raw.upper()) or by_call.get(zero_for_o(raw))
-        if sponsor is None:
-            num = parse_member_number(raw)
-            sponsor = by_num.get(num) if num else None
-        if sponsor is None:
-            print(f"  Unrecognized sponsor for {member['callsign']}: {raw!r}", file=sys.stderr)
-        elif sponsor is member:
-            print(f"  Ignoring self-sponsor for {member['callsign']}", file=sys.stderr)
-        else:
-            member["sponsor_member"] = sponsor
-    resolved = sum(1 for m in members if m.get("sponsor_member"))
-    print(f"  Resolved sponsor for {resolved}/{len(members)} members", file=sys.stderr)
-
-
 def render_downline_data(members: list[dict]) -> str:
     """Build the JSON downline data: flat list of {call, name, num, sponsor}.
 
@@ -1244,8 +459,8 @@ def render_map_data(members: list[dict]) -> str:
     {"states": {state_abbr: [{"call", "name", "num"}, ...]},
      "dx": {country: {"flag": "🇨🇦", "members": [{"call", "name", "num"}, ...]}}}
 
-    US members land in "states" (keyed by QRZ state); international members
-    land in "dx" (keyed by QRZ country) and render in the map's DX inset box.
+    Reviewed QTH places US members in "states" and international members in
+    "dx", which renders in the map's inset box.
     """
     by_state: dict[str, list[dict]] = {}
     by_country: dict[str, list[dict]] = {}
@@ -1276,43 +491,16 @@ def render_map_data(members: list[dict]) -> str:
     return embedded_json(data)
 
 
-def grid_to_latlon(grid: str) -> tuple[float, float] | None:
-    """Center of a 4- or 6-char Maidenhead grid square."""
-    if not re.fullmatch(r"[A-R]{2}[0-9]{2}(?:[A-X]{2})?", grid or ""):
-        return None
-    lon = (ord(grid[0]) - ord("A")) * 20 - 180 + int(grid[2]) * 2
-    lat = (ord(grid[1]) - ord("A")) * 10 - 90 + int(grid[3])
-    if len(grid) == 6:
-        lon += (ord(grid[4]) - ord("A")) * (2 / 24) + 1 / 24
-        lat += (ord(grid[5]) - ord("A")) * (1 / 24) + 0.5 / 24
-    else:
-        lon += 1.0
-        lat += 0.5
-    return (round(lat, 4), round(lon, 4))
-
-
 def member_latlon(member: dict) -> tuple[float, float] | None:
-    """Coarse public coordinates for a member, or None.
-
-    Grid-square center when QRZ lists a grid (deliberately coarse), else the
-    QRZ lat/lon rounded to 2 decimals (~1 km). Members with a location
-    override have had their QRZ coords cleared, so they come back None.
-    """
-    if "map_location" in member:
-        location = member["map_location"]
-        return (location["lat"], location["lon"]) if location is not None else None
-    grid = member.get("grid")
-    latlon = grid_to_latlon(grid) if grid else None
-    if latlon is None and member.get("lat") is not None and member.get("lon") is not None:
-        latlon = (round(member["lat"], 2), round(member["lon"], 2))
-    return latlon
+    """Return the published coordinates exactly as supplied by administration."""
+    location = member["map_location"]
+    return (location["lat"], location["lon"]) if location is not None else None
 
 
 def render_nearby_data(members: list[dict]) -> tuple[str, str]:
     """Build the coordinates and unmapped member identities for nearby.html.
 
-    Map entries include call, name, number, coordinates, and an optional
-    grid. Coordinates are grid-square centers or coarse legacy QRZ locations.
+    Map entries include call, name, number, and the published grid and coordinates.
     Members without a usable location contribute only a callsign and member
     number to the local search index.
     """
@@ -1348,7 +536,7 @@ def update_nearby(members: list[dict], output_dir: Path) -> None:
 
 
 # Join Date cell formats seen (or plausible) on the roster sheet. Google
-# Sheets exports dates as typed, so a mix of these is expected.
+# Reviewed QSO dates retain the formats used when they were recorded.
 JOIN_DATE_FORMATS = (
     "%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%m/%d/%y", "%m-%d-%Y", "%m-%d-%y",
     "%b %d, %Y", "%B %d, %Y", "%b %d %Y", "%B %d %Y", "%d %b %Y", "%d %B %Y",
@@ -1395,8 +583,8 @@ def render_outbreak_data(members: list[dict]) -> str:
     "state" is the two-letter US state for members on the map, "dx" the
     country for international members (with "flag"), "sponsor" the
     recruiting member's callsign or null — the transmission chain — and
-    "lat"/"lon" the same coarse coordinates nearby.html gets (present only
-    when QRZ had a grid or lat/lon; the page falls back to the state).
+    "lat"/"lon" the same published coordinates nearby.html gets (present only
+    when administration supplies a map location; the page falls back to the state).
     """
     entries = []
     dated = 0
@@ -1465,7 +653,7 @@ US_STATE_NAMES = {
 STATE_CODES_BY_NAME = {name.lower(): code for code, name in US_STATE_NAMES.items()}
 STATE_CODES_BY_NAME.update({"washington dc": "DC", "washington, dc": "DC", "washington d.c.": "DC", "washington, d.c.": "DC"})
 
-# Canadian provinces and territories, by the code QRZ reports in <state>.
+# Canadian provinces and territories, by postal code.
 CANADIAN_PROVINCE_NAMES = {
     "AB": "Alberta", "BC": "British Columbia", "MB": "Manitoba", "NB": "New Brunswick",
     "NL": "Newfoundland and Labrador", "NS": "Nova Scotia", "NT": "Northwest Territories",
@@ -1506,7 +694,7 @@ def update_index(members: list[dict], output_dir: Path) -> None:
     roster = render_roster_block(members, layout)
     html = replace_between(
         html,
-        "<!-- ROSTER:START - auto-generated by scripts/build-roster.py from Google Sheet -->",
+        ROSTER_START,
         "<!-- ROSTER:END -->",
         "\n" + roster + "\n                ",
     )
@@ -1543,24 +731,6 @@ def update_tree(members: list[dict], output_dir: Path) -> None:
     (output_dir / "tree.html").write_text(html)
 
 
-def og_note_tags(member: dict) -> list[str]:
-    """OG labels for a callsign note, mirroring the roster badges.
-
-    Sheets retains its founder/early-member and earliest-territory labels.
-    JSON uses only the stored assignment labels, without deriving new OGs.
-    """
-    if "og_regions" in member:
-        return [f"{region['region_label']} OG" for region in member["og_regions"]]
-    tags = []
-    if member["number"] == 1 or member["number"] in OG_BADGE_NUMBERS:
-        tags.append("OG")
-    if member.get("state_og") and member.get("state"):
-        tags.append(f"{member['state']} OG")
-    elif member.get("country_og") and member.get("country"):
-        tags.append(f"{member['country'].strip()} OG")
-    return tags
-
-
 def render_members_txt(members: list[dict]) -> str:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     lines = [
@@ -1570,12 +740,8 @@ def render_members_txt(members: list[dict]) -> str:
         "",
     ]
     for member in sorted(members, key=lambda m: m["callsign"]):
-        if "og_regions" in member or member.get("name_override"):
-            label = member["name"]
-        else:
-            label = first_name_initial(member["name"])
-        line = f"{member['callsign']} 🤜 {label} BKG #{member['number']}"
-        tags = og_note_tags(member)
+        line = f"{member['callsign']} 🤜 {member['name']} BKG #{member['number']}"
+        tags = [f"{region['region_label']} OG" for region in member["og_regions"]]
         if tags:
             line += f" ({', '.join(tags)})"
         lines.append(line)
@@ -1583,8 +749,8 @@ def render_members_txt(members: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def stage_public_files(output_dir: Path, *, include_photos: bool = True) -> None:
-    """Copy only site files and image assets; cache metadata stays in the repo."""
+def stage_public_files(output_dir: Path) -> None:
+    """Copy the static site files and bundled arcade game."""
     for relative in PUBLIC_FILES:
         source = REPO_ROOT / relative
         destination = output_dir / relative
@@ -1598,69 +764,30 @@ def stage_public_files(output_dir: Path, *, include_photos: bool = True) -> None
             destination = output_dir / GAME_DIR / source.relative_to(game_root)
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
-    if not include_photos:
-        return
-    for relative in PHOTO_DIRS:
-        source_dir = REPO_ROOT / relative
-        if not source_dir.is_dir():
-            continue
-        for source in source_dir.iterdir():
-            if not source.is_file() or source.name.startswith(".") or source.suffix.lower() not in MUGSHOT_EXTS:
-                continue
-            destination = output_dir / relative / source.relative_to(source_dir)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, destination)
 
 
-def build(output_dir: Path, *, source: str = "sheets", roster_json: Path | None = None,
-          enrichment_dir: Path | None = None, schema_version: str = "1",
+def build(output_dir: Path, *, roster_json: Path | None = None,
           asset_dir: Path | None = None, asset_origin: str | None = None) -> None:
-    if source == "json":
-        from roster_input import parse_roster_json, read_roster_json
-        exclusions = []
-        envelope, members = parse_roster_json(read_roster_json(roster_json), expected_version=schema_version,
-                                               exclude_invalid_callsigns=True, exclusions=exclusions)
-        for exclusion in exclusions:
-            print(f"WARNING: Excluding BKG #{exclusion['bkg_number']}: {exclusion['reason']}", file=sys.stderr)
-        for member in members:
-            member["state"], member["country"] = qth_location(member["qth"])
-        canonicalize_countries(members)
-        if schema_version == "2":
-            if enrichment_dir is not None:
-                raise ValueError("v2 uses only administration-owned member data and public assets")
-            from roster_assets import annotate_public_assets
-            photos = annotate_public_assets(members, asset_dir, source_url=asset_origin, repo_root=REPO_ROOT)
-        else:
-            from roster_enrichment import annotate_json_enrichment
-            photos = annotate_json_enrichment(members, enrichment_dir, repo_root=REPO_ROOT)
-        stage_public_files(output_dir, include_photos=False)
-        for relative, photo in photos.items():
-            destination = output_dir / relative
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(photo, destination)
-        # The public snapshot contains the reviewed contract alone. Enrichment
-        # cannot restore inactive identities or overwrite membership fields.
-        snapshot = output_dir / f"data/v{schema_version}/roster.json"
-        snapshot.parent.mkdir(parents=True, exist_ok=True)
-        snapshot.write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(f"Validated JSON roster: {len(members)} members ({envelope['content_hash']})")
-    else:
-        print(f"Fetching roster from {SHEET_CSV_URL}")
-        members = parse_members(fetch_csv())
-        validate_members(members)
-        print(f"Parsed {len(members)} members (BKG #{members[0]['number']:03d}–#{members[-1]['number']:03d})")
+    exclusions = []
+    envelope, members = parse_roster_json(
+        read_roster_json(roster_json), exclude_invalid_callsigns=True, exclusions=exclusions
+    )
+    for exclusion in exclusions:
+        print(f"WARNING: Excluding BKG #{exclusion['bkg_number']}: {exclusion['reason']}", file=sys.stderr)
+    for member in members:
+        member["state"], member["country"] = qth_location(member["qth"])
+    canonicalize_countries(members)
+    photos = annotate_public_assets(members, asset_dir, source_url=asset_origin, repo_root=REPO_ROOT)
+    stage_public_files(output_dir)
+    for relative, photo in photos.items():
+        destination = output_dir / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(photo, destination)
+    snapshot = output_dir / PUBLIC_ROSTER_PATH
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    snapshot.write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"Validated JSON roster: {len(members)} members ({envelope['content_hash']})")
 
-        overrides = load_name_overrides()
-        if overrides:
-            print(f"Applying {len(overrides)} name override(s) from {NAME_OVERRIDES_PATH.name}")
-            apply_name_overrides(members, overrides)
-
-        print("Looking up location + mugshot for each member via QRZ XML API")
-        annotate_qrz(members)
-        validate_members(members)
-        # After QRZ so updated sheet callsigns resolve.
-        resolve_sponsors(members)
-        stage_public_files(output_dir)
     update_index(members, output_dir)
     print(f"Updated {INDEX_PATH.name}")
 
@@ -1683,14 +810,8 @@ def main(argv: list[str] | None = None) -> int:
         "--output-dir", type=Path, default=REPO_ROOT / "dist",
         help="public build directory (default: dist/)",
     )
-    parser.add_argument("--source", choices=("sheets", "json"), default="sheets",
-                        help="membership source (default: sheets; production workflow selects json)")
     parser.add_argument("--roster-json", type=Path,
-                        help="explicit local JSON export; otherwise JSON uses ROSTER_EXPORT_URL")
-    parser.add_argument("--enrichment-dir", type=Path,
-                        help="optional sanitized JSON enrichment cache; never refreshed during rendering")
-    parser.add_argument("--schema-version", choices=("1", "2"), default="1",
-                        help="explicit JSON contract version (default: 1 until coordinated cutover)")
+                        help="saved V2 roster export; otherwise fetch from ROSTER_EXPORT_URL")
     parser.add_argument("--asset-dir", type=Path,
                         help="immutable administration photo bytes for a v2 snapshot, outside the source tree")
     parser.add_argument("--asset-origin", default=os.environ.get("ROSTER_EXPORT_URL"),
@@ -1702,38 +823,22 @@ def main(argv: list[str] | None = None) -> int:
         if (output_dir == source_root or output_dir in source_root.parents
                 or (output_dir.is_relative_to(source_root) and output_dir != source_root / "dist")):
             raise ValueError("Output must be dist/ or a directory outside the source repository")
-        if args.source == "sheets" and (args.roster_json or args.enrichment_dir or args.asset_dir or args.schema_version != "1"):
-            raise ValueError("JSON options require explicit --source json")
-        if args.source == "json":
-            if args.schema_version == "2" and args.enrichment_dir is not None:
-                raise ValueError("v2 cannot use QRZ enrichment")
-            if args.schema_version == "1" and args.asset_dir is not None:
-                raise ValueError("Public asset options require explicit v2 selection")
-            if args.asset_dir:
-                assets = args.asset_dir.resolve()
-                if (assets.is_relative_to(source_root) or source_root.is_relative_to(assets)
-                        or assets.is_relative_to(output_dir) or output_dir.is_relative_to(assets)):
-                    raise ValueError("Public assets must be outside the repository and separate from output")
-            if args.enrichment_dir:
-                cache = args.enrichment_dir.resolve()
-                if (cache.is_relative_to(source_root) or source_root.is_relative_to(cache)
-                        or cache.is_relative_to(output_dir) or output_dir.is_relative_to(cache)):
-                    raise ValueError("JSON enrichment must be outside the repository and separate from output")
-            if args.roster_json and args.roster_json.resolve().is_relative_to(output_dir):
-                raise ValueError("JSON input must be outside its output directory")
+        if args.asset_dir:
+            assets = args.asset_dir.resolve()
+            if (assets.is_relative_to(source_root) or source_root.is_relative_to(assets)
+                    or assets.is_relative_to(output_dir) or output_dir.is_relative_to(assets)):
+                raise ValueError("Public assets must be outside the repository and separate from output")
+        if args.roster_json and args.roster_json.resolve().is_relative_to(output_dir):
+            raise ValueError("JSON input must be outside its output directory")
         # Never let a failed generation leave a half-built output directory.
-        # Source templates, QRZ fallback cache, and the mugshot cache remain
-        # in their existing locations; only public output is staged here.
         output_dir.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(
             prefix=f".{output_dir.name}-", dir=output_dir.parent
         ) as temporary:
             staged = Path(temporary) / "public"
             staged.mkdir()
-            build(staged, source=args.source, roster_json=args.roster_json,
-                  enrichment_dir=args.enrichment_dir, schema_version=args.schema_version,
-                  asset_dir=args.asset_dir, asset_origin=args.asset_origin)
-            validate_dist(staged, source=args.source)
+            build(staged, roster_json=args.roster_json, asset_dir=args.asset_dir, asset_origin=args.asset_origin)
+            validate_dist(staged)
             previous = Path(temporary) / "previous"
             if output_dir.exists():
                 if not output_dir.is_dir():

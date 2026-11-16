@@ -1,32 +1,24 @@
 # Reviewed public JSON roster
 
-Production publishes the administration-owned **v2** snapshot, and has since
-October 21, 2026. See [Administration-owned v2 publishing](#administration-owned-v2-publishing)
-below, [the data ownership audit](PUBLISHER-DATA-INVENTORY.md), and
-[the v2 cutover record](PUBLIC-ROSTER-V2-CUTOVER.md). The one-snapshot,
-membership, and exclusion rules apply to both versions. The sections on
-separate enrichment and the first local-preview recipe describe **v1**, which
-remains only as the rollback path until its retirement.
-
-The v1 feed comes from merged [bkg-automation PR #10](https://github.com/brass-knuckle-gang/bkg-automation/pull/10). The v1 schema and fixtures remain byte-for-byte identical to the copies introduced in [#36](https://github.com/brass-knuckle-gang/bkg.club/pull/36). They were rechecked against backend merge revision `060a8334f13a5995065bf942fd83f94340268b76` at `docs/public-roster/schema-v1.json`, `docs/public-roster/fixtures/roster-v1.json`, and `docs/public-roster/fixtures/empty-v1.json`.
-
-The production workflow explicitly selects `--source json` for both builder and site validator. The v2 URL comes from the `github-pages` **environment secret** `ROSTER_EXPORT_V2_URL`, and the v1 rollback URL from the **repository secret** `ROSTER_EXPORT_URL`; neither is an Actions variable. See [deployment](DEPLOYMENT.md) for how `ROSTER_EXPORT_VERSION` selects between them. The command-line default remains Sheets for compatibility with explicitly requested legacy/offline comparisons; production never invokes it or falls back to it.
+The website builds from the administration-owned **V2** snapshot. See the
+[data ownership inventory](PUBLISHER-DATA-INVENTORY.md) for the publishing
+boundary and the [cutover record](PUBLIC-ROSTER-V2-CUTOVER.md) for its history.
 
 ## One snapshot per run
 
-`fetch-roster.py` makes one anonymous HTTPS GET and validates the complete source contract and content hash. It saves the exact response as `$RUNNER_TEMP/bkg-build/roster-source.json` and the publication roster as `roster.json`, outside the checkout and published output. These match unless callsigns are excluded as described below. Refresh, build, and validation consume only the publication roster. Consumers independently revalidate the saved bytes; they never refetch the URL. The final validation compares the public JSON envelope with that saved publication input.
+`fetch-roster.py` makes one anonymous HTTPS GET and validates the complete source contract and content hash. It saves the exact response as `$RUNNER_TEMP/bkg-build/roster-source.json` and the publication roster as `roster.json`, outside the checkout and published output. These match unless callsigns are excluded as described below. Asset fetching, build, and validation consume only the publication roster. Consumers independently revalidate the saved bytes; they never refetch the URL. The final validation compares the public JSON envelope with that saved publication input.
 
 HTTPS, redirect rejection, the 30-second transport timeout, 8 MiB input limit, sanitized errors, schema/hash/reference checks, and empty-roster rejection are preserved. Optional Access headers are supported by the reader for other endpoints only when both credential fields are valid; an incomplete or empty pair fails before requesting. The deployed public feed needs neither header nor API token. Missing configuration or invalid input stops the workflow before artifact upload; the last published site remains available.
 
-The output guard deliberately permits JSON in `dist/` as well as external preview directories. It still rejects source/ancestor directories, arbitrary output inside the checkout, input under the output directory, and enrichment overlapping the checkout/output. Public output contains the existing pages/assets, selected sanitized photos, `members.txt`, and the validated reviewed envelope at `data/v1/roster.json`. The private input file, enrichment cache, scripts, fixtures, credentials, raw QRZ data, and photo-source metadata are excluded.
+Build to `dist/` or an external preview directory. The snapshot and verified photo cache must be separate from the output, and the cache must be outside the checkout. The build publishes the website, selected photos, `members.txt`, and the validated envelope at `data/v2/roster.json`.
 
 ## Reviewed membership rules
 
-`callsign`, `name`, and `qth` are authoritative reviewed values. JSON rendering does not apply legacy name/location overrides or allow QRZ to rename, relocate, or introduce a member. `members.txt` uses the full reviewed name; the legacy Sheets path still uses its abbreviated note labels.
+`callsign`, `name`, and `qth` are authoritative reviewed values. The build uses the reviewed values for the site and member notes.
 
 `sponsor_bkg_number` resolves through the stable exported membership number to the sponsor's current reviewed callsign. Null references stay null. Historical callsigns, stale cache records, or a later member reusing a callsign cannot recreate a suppressed sponsor edge.
 
-`qso_date` supplies the existing Join Date semantics. The original text remains intact in the public contract; outbreak uses the builder's existing date parser and leaves empty/unreadable dates null. Export generation time, approval time, and member issuance time never replace a QSO date.
+`qso_date` supplies the Join Date. The original text remains intact in the public contract. Outbreak uses the builder's date parser and leaves empty or unreadable dates null.
 
 OG badges and note labels come only from stored `og_assignments`. A holder who moves from Vermont to New York keeps `VT OG`; current QTH places that member on the New York map. JSON does not choose a new holder by current state, member number, or enrichment. Inactive members, inactive sponsors, and assignments with inactive holders are suppressed upstream; the builder validates all remaining references and never restores them from a cache.
 
@@ -49,92 +41,21 @@ artifact retains the exact source and publication files and this record even
 when the accepted site is unchanged. Conditional GET caches always retain the
 source bytes and source ETag; they never send a projection hash upstream.
 
-## Separate photo and geographic enrichment (v1 rollback only)
-
-Production v2 skips this whole section: administration owns enrichment, and the website neither logs in to QRZ nor applies its own photo manifest. When v1 is selected, the workflow restores a sanitized cache outside the checkout, runs `refresh-qrz.py` as a separate command with the **same saved roster**, then renders without networking. QRZ credentials retain their existing `github-pages` environment scope. Missing credentials fail configuration. QRZ outages retain usable prior fields/photos for matching active exported identities; they do not select another roster. A fresh or expired cache needs a successful refresh with usable geography and photos (`--require-usable`); an unusable bootstrap fails before cache replacement and retains the published site.
-
-Cache entries require the current active BKG number and exact reviewed callsign. Geography additionally requires a hash of the current reviewed QTH. A callsign change rejects the old binding; a QTH change suppresses stale geography while keeping an identity-bound photo. Refresh rejects QRZ geography unless its state/country agrees with the reviewed location. A reviewed Canadian province name (`Alberta`, `Ontario`, …) parses as that province within Canada, so it is compared with QRZ's `Canada` plus the province code QRZ reports in `<state>`; because QRZ documents that field as US-only, a blank QRZ province still agrees, while a US state must always match. QRZ aliases never rename an exported member: when QRZ answers a retired or vanity-replaced callsign with the operator's current record, the refresh uses that record's geography and photo (as the Sheets build did) but the reviewed callsign stays, and the current call is not stored. Coordinates are rounded to two decimals; grids keep at most six characters (the sub-square center, as the Sheets build published). Nearby omits members without accepted geography; the territory map and outbreak territory fallback always use reviewed QTH.
-
-Custom photos are explicitly bound by both number and callsign in [`images/photo-overrides.json`](../images/photo-overrides.json), reviewed against the live export on October 2, 2026. These 11 existing overrides take precedence over QRZ photos. A reused callsign on a different member number cannot inherit an old override; inactive or stale bindings are ignored. To associate a replacement callsign/photo, review and update the manifest deliberately. Photos are fully decoded, downscaled to at most 480 px, and re-encoded as first-frame WebP with metadata removed before caching/publication; cached copies are re-verified structurally on every read. Only active selected sanitized photos enter the build.
-
-The validated input and sanitized cache are retained together in a separate immutable `bkg-build-inputs-<run-id>-<attempt>` artifact for 30 days, with export hash, generated timestamp, and exact source SHA. Pages archives keep their existing names/retention. Cache restoration is an optimization; absence requires successful bootstrap. No raw QRZ cache is committed back to `main`. See [deployment and rollback](DEPLOYMENT.md) for archive/cache recovery.
-
-## Reproduce an inspectable local preview
-
-This recipe builds the **v1** rollback path and needs QRZ credentials. To preview what production publishes, use the [v2 commands](#administration-owned-v2-publishing), which need none.
-
-Supply the v1 `ROSTER_EXPORT_URL` securely in the environment, without printing it. The URL secret hides the URL in Actions logs; it does not authenticate the request.
-
-```sh
-preview_dir="$(mktemp -d "${TMPDIR:-/tmp}/bkg-public-roster.XXXXXX")"
-python3 -m venv "$preview_dir/venv"
-. "$preview_dir/venv/bin/activate"
-python3 -m pip install -r requirements-build.txt
-python3 scripts/fetch-roster.py --output "$preview_dir/roster.json"
-# QRZ_USERNAME and QRZ_PASSWORD must already be supplied securely.
-python3 scripts/refresh-qrz.py \
-  --roster-json "$preview_dir/roster.json" \
-  --enrichment-dir "$preview_dir/enrichment" \
-  --photo-overrides images/photo-overrides.json --require-usable
-python3 scripts/build-roster.py --source json \
-  --roster-json "$preview_dir/roster.json" \
-  --enrichment-dir "$preview_dir/enrichment" --output-dir "$preview_dir/site"
-python3 scripts/validate-site.py --source json "$preview_dir/site"
-python3 -m http.server 8765 --bind 127.0.0.1 --directory "$preview_dir/site"
-```
-
-For a deliberately limited local preview without QRZ credentials, replace `--require-usable` with `--overrides-only` in the refresh command. This seeds the existing custom photos without QRZ. Nearby will have no coordinates unless a matching sanitized cache was already supplied. Production never uses this option.
-
-Fixtures are only for offline tests or an explicitly requested fixture build. To render one, replace the fetch with a local fixture path passed to `--roster-json`; never configure a fixture as a production fallback.
-
-## Offline comparison results
-
-Run `python3 -m unittest discover -s tests -v` without production credentials. Tests block network connections and use temporary source/output/cache directories. [`test_json_build.py`](../tests/test_json_build.py) constructs a matched synthetic Sheets CSV from the exact export fixture, supplies identical geographic enrichment, and compares every existing output.
-
-| Output | Synthetic comparison result |
-| --- | --- |
-| Roster cards and count | Same 6 reviewed identities, names, numbers, order, and count; cards otherwise match after removing intentional OG ribbons. |
-| Territory map | Identical 4 mapped members: two in IL, one in NY, one in Canada; two unknown QTHs remain unmapped. |
-| Nearby | Identical empty projection without enrichment; identical 3-member projection with matched grids/rounded coordinates. |
-| Downline | Identical 6 nodes and 3 stable sponsor edges. |
-| Outbreak | Identical 6 identities, sponsor edges, territories, 5 parsed QSO dates, and optional coarse coordinates; the missing date stays null. |
-| `members.txt` | Same 6 callsign/number records. JSON uses full reviewed names and only stored OG assignments; Sheets retains abbreviated names and inferred OGs. |
-| Public JSON snapshot | Validated publication envelope, identical to upstream unless callsigns were excluded; absent from Sheets output. |
-
-The intentional OG differences are explicit: Sheets infers IL for #1 and NY for moved holder #88, while JSON renders stored IL for #7 and VT for #88. Both retain Canada for #21; JSON does not add the hardcoded founder/number OG note. Additional tests remove inactive #7 and its IL assignment, leave IL member #1 without an OG, and reuse #7's callsign on #40 while #21's suppressed sponsor stays null. Tests also exercise reviewed callsign changes, moved QTH suppressing stale coordinates while keeping a photo/stored OG, missing/corrupt enrichment, filtered inactive cache/photos, escaped HTML/script text, and malformed/empty exports preserving the previous output. Separate enrichment tests cover failed refresh retaining sanitized geography and photos.
-
-These are synthetic comparisons. The additional [live review](PUBLIC-ROSTER-REVIEW.md) records the actual production differences and local enrichment limitations at the October 2026 switch to v1, which followed [the v1 cutover runbook](PUBLIC-ROSTER-CUTOVER.md).
-
 ## Administration-owned v2 publishing
 
-This is the production path. The v2 export retains every reviewed membership/OG rule and adds mandatory
-nullable `map_location` and `photo` fields to each member. A location contains
-the accepted four- or six-character public grid and its center coordinates.
-Null suppresses the member's geographic dot; the website never fills it from
-QRZ, a previous cache, a location override, or a demo. Both Nearby and outbreak
-use the exact exported coordinates. Reviewed QTH still supplies territory labels.
+Each member has nullable `map_location` and `photo` fields. A location
+contains the accepted four- or six-character public grid and its center
+coordinates. A null location suppresses the member's dot. Nearby and outbreak
+use the exact exported coordinates, and reviewed QTH supplies territory labels.
 
 A photo contains an anonymous HTTPS administration asset URL, its SHA-256,
 `image/webp` content type, and byte length (at most 1 MiB). Assets must be on the
 same HTTPS origin as the saved export's configured source and at the exact
 `/api/roster/photos/<sha256>.webp` path. Redirects are rejected. The publisher
 checks response type, size, hash, bounded WebP structure, and absence of metadata,
-then copies those accepted bytes without resizing or re-encoding. Null means
-the photo placeholder. The website does not apply its own photo manifest in v2.
-
-Contributed photo overrides remain checked-in, reviewable files in the
-[administration repository](https://github.com/brass-knuckle-gang/bkg-automation/tree/main/public/member-overrides/photos).
-Submit future photo changes there by PR. Administration resolves explicit
-hidden/manual choices, contributed overrides, and QRZ into one accepted public
-photo. The existing website manifest and source photos remain solely for v1
-compatibility until its retirement.
-
-Snapshot validation is strict and version-specific. v1 remains the command-line
-default. `--schema-version 2` is required to accept v2, and v2 rejects
-`--enrichment-dir`. Photo downloads are a separate publication command; the
-renderer is entirely offline. The output includes only selected active photos
-and the publication envelope at `data/v2/roster.json`. The content hash covers accepted
-locations and photo metadata along with the existing membership/OG fields.
+then copies those accepted bytes without resizing or re-encoding. A null photo
+uses the placeholder. The content hash covers location and photo metadata along
+with membership and OG fields.
 
 To reproduce the production build locally, no credentials are needed:
 
@@ -144,29 +65,25 @@ python3 -m venv "$preview_dir/venv"
 . "$preview_dir/venv/bin/activate"
 python3 -m pip install -r requirements-build.txt
 export ROSTER_EXPORT_URL=https://bkg-public-roster.cool-cake-fac1.workers.dev/api/roster/export/v2
-python3 scripts/fetch-roster.py --schema-version 2 \
+python3 scripts/fetch-roster.py \
   --cache-dir "$preview_dir/roster-cache-v2" --output "$preview_dir/roster.json"
 python3 scripts/fetch-public-assets.py \
   --roster-json "$preview_dir/roster.json" --asset-dir "$preview_dir/public-assets"
-python3 scripts/build-roster.py --source json --schema-version 2 \
+python3 scripts/build-roster.py \
   --roster-json "$preview_dir/roster.json" --asset-dir "$preview_dir/public-assets" \
   --asset-origin "$ROSTER_EXPORT_URL" \
   --output-dir "$preview_dir/site"
-python3 scripts/validate-site.py --source json "$preview_dir/site"
+python3 scripts/validate-site.py "$preview_dir/site"
 python3 -m http.server 8765 --bind 127.0.0.1 --directory "$preview_dir/site"
 ```
 
 The asset directory must be outside the repository and separate from snapshot
-and output. Its immutable cache may be reused only when bytes still match the
-current snapshot. Missing/invalid assets fail the build and retain the last
-published site; an old photo is never substituted for a new hash. Removing or
-hiding a member/photo prunes the next artifact. Both snapshot fetching and asset
-cache replacement are atomic.
+and output. The build reuses cached photos only when their bytes match the
+snapshot. Missing or invalid assets fail the build and retain the last
+published site. Removing or hiding a member or photo prunes the next artifact.
 
 `--asset-origin` defaults to `ROSTER_EXPORT_URL`; provide a trusted source URL
-when rendering saved V2 photos offline. Snapshot caches are version-specific and
-bound to the exact endpoint. A valid matching ETag/304 reuses the saved JSON;
-fetch or validation failure cannot fall back to stale membership. The
-[live V2 review](PUBLIC-ROSTER-V2-REVIEW.md) records the pre-activation
-comparison, and [the v2 cutover record](PUBLIC-ROSTER-V2-CUTOVER.md#rollback-and-retirement)
-covers rolling back to v1 and retiring it.
+when rendering saved V2 photos offline. The snapshot cache is bound to the
+endpoint and can reuse the saved JSON only after a matching `304`. The
+[deployment runbook](DEPLOYMENT.md#roll-back-the-exact-published-files) covers
+restoring a verified Pages artifact.

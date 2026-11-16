@@ -1,11 +1,10 @@
 # Administration-owned member publication
 
-> **Status: activated October 21, 2026.** The `github-pages` environment secret
-> `ROSTER_EXPORT_V2_URL` and repository variable `ROSTER_EXPORT_VERSION=2` are
-> configured, PR #46 is merged, and production has published v2 since Deploy run
-> [39615920834](https://github.com/brass-knuckle-gang/bkg.club/actions/runs/39615920834).
-> "Prepare and compare" and "Activate once" are the historical record of that
-> cutover. [Rollback and retirement](#rollback-and-retirement) still applies.
+> **Historical record.** Production activated V2 on October 21, 2026 in
+> [Deploy run 39615920834](https://github.com/brass-knuckle-gang/bkg.club/actions/runs/39615920834).
+> The V1 build command, flags, and rollback settings below describe the
+> cutover-era workflow. For current operation, use the
+> [deployment and artifact rollback runbook](DEPLOYMENT.md).
 
 Backend [PR #13](https://github.com/brass-knuckle-gang/bkg-automation/pull/13)
 is merged and deployed. The anonymous V2 endpoint is:
