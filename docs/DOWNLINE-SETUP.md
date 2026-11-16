@@ -40,20 +40,6 @@ snapshot to the sponsor's current callsign, and injects the result between the
 next website build picks it up. The website never infers sponsors from
 callsigns, names, old pages, or the legacy sheet.
 
-### Legacy Google Sheets path
-
-Production never uses this. It applies only to an explicitly requested
-`scripts/build-roster.py --source sheets` build, which reads the old roster
-Google Sheet. That build takes sponsors from a column whose header matches,
-case-insensitively, `Sponsor`, `Sponsored By`, `Recruited By`, `Recruiter`,
-`Referred By`, `Upline`, `Elmer`, or anything containing "sponsor"/"recruit".
-The sheet uses **`Recruited By`**. Each cell holds the sponsor's callsign
-(e.g. `KI7QCF`) or BKG number (`1`, `BKG1`, `BKG #1`). The build matches
-callsigns first, then numbers. It logs unrecognized sponsors and treats those
-members as roots, and it ignores self-sponsors. The build log prints
-`Sponsor column detected as: ...`; `None` means no header matched and the tree
-will be flat.
-
 ---
 
 ## 2. Recruit applications

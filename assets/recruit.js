@@ -375,21 +375,18 @@
     // Start before restoring a saved attempt, so a recovery-screen error cannot
     // leave sponsor lookup without roster data.
     (async function loadRoster() {
-        for (const version of [2, 1]) {
-            try {
-                const response = await fetch('data/v' + version + '/roster.json');
-                if (!response.ok) continue;
-                const data = await response.json();
-                if (String(data.schema_version) !== String(version) || !Array.isArray(data.members)) continue;
+        try {
+            const response = await fetch('data/v2/roster.json');
+            const data = response.ok ? await response.json() : null;
+            if (data && data.schema_version === '2' && Array.isArray(data.members)) {
                 members = data.members.filter(function (member) {
                     return Number.isSafeInteger(member.bkg_number) && member.bkg_number > 0
                         && typeof member.callsign === 'string' && /^[A-Z0-9]+$/.test(member.callsign)
                         && typeof member.name === 'string';
                 });
                 rosterLoaded = true;
-                break;
-            } catch (_) { /* The explicit officer-review path works offline. */ }
-        }
+            }
+        } catch (_) { /* The explicit officer-review path works offline. */ }
         if (!pendingAttempt) { matchSponsor(); validateRecruit(); }
     }());
     if (pendingAttempt) {

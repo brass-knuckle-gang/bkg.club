@@ -19,7 +19,7 @@ def main(argv=None):
     try:
         if args.roster_json.resolve().is_relative_to(args.asset_dir.resolve()):
             raise ValueError("Snapshot must be outside the asset directory")
-        _envelope, members = parse_roster_json(read_roster_json(args.roster_json), expected_version="2")
+        _envelope, members = parse_roster_json(read_roster_json(args.roster_json))
         result = fetch_assets(members, args.asset_dir, source_url=os.environ.get("ROSTER_EXPORT_URL"))
     except Exception:
         print("ERROR: Public asset publication failed; check the v2 snapshot and asset origin/bytes.", file=sys.stderr)

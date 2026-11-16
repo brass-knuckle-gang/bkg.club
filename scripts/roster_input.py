@@ -1,8 +1,7 @@
-"""Strict adapter for the anonymous public roster v1/v2 contracts.
+"""Strict adapter for the administration's public V2 roster contract.
 
-The exporter contains reviewed membership data, not QRZ enrichment. Validation
-is deliberately completed before returning any members to the renderer. This
-module never consults Sheets, caches, examples, or another roster on failure.
+Validate reviewed membership and public asset metadata before handing members
+to the renderer. A cached response is reused only with a matching HTTP 304.
 """
 
 import hashlib
@@ -23,8 +22,7 @@ MAX_ROSTER_BYTES = 8 * 1024 * 1024
 MAX_BKG_NUMBER = 9007199254740991
 EXPORT_TIMEOUT_SECONDS = 30
 ENVELOPE_KEYS = {"schema_version", "generated_at", "content_hash", "members", "og_assignments"}
-MEMBER_KEYS = {"bkg_number", "callsign", "name", "qth", "qso_date", "sponsor_bkg_number"}
-V2_MEMBER_KEYS = MEMBER_KEYS | {"map_location", "photo"}
+MEMBER_KEYS = {"bkg_number", "callsign", "name", "qth", "qso_date", "sponsor_bkg_number", "map_location", "photo"}
 GRID_PATTERN = re.compile(r"[A-R]{2}[0-9]{2}(?:[A-X]{2})?\Z")
 PHOTO_KEYS = {"url", "sha256", "content_type", "byte_length"}
 MAX_PUBLIC_PHOTO_BYTES = 1024 * 1024
@@ -111,10 +109,9 @@ def _photo(value) -> None:
         raise ValueError("Invalid photo URL") from None
 
 
-def parse_roster_json(text: str, *, expected_version: str = "1",
-                      exclude_invalid_callsigns: bool = False,
+def parse_roster_json(text: str, *, exclude_invalid_callsigns: bool = False,
                       exclusions: list | None = None) -> tuple[dict, list[dict]]:
-    """Validate the explicitly selected contract, then adapt reviewed members.
+    """Validate the V2 contract, then adapt reviewed members.
 
     By default the original envelope is returned without normalizing strings or
     array order. Publication can explicitly exclude invalid callsigns, only after
@@ -131,8 +128,7 @@ def parse_roster_json(text: str, *, expected_version: str = "1",
     except (json.JSONDecodeError, RecursionError, UnicodeEncodeError):
         raise ValueError("Malformed roster JSON") from None
     _object(envelope, ENVELOPE_KEYS, "Roster envelope")
-    _require(expected_version in {"1", "2"} and envelope["schema_version"] == expected_version,
-             "Unsupported roster schema_version")
+    _require(envelope["schema_version"] == "2", "Unsupported roster schema_version")
     generated_at = envelope["generated_at"]
     _require(type(generated_at) is str and bool(UTC_TIMESTAMP_PATTERN.fullmatch(generated_at)),
              "generated_at must be an ISO UTC timestamp")
@@ -156,7 +152,7 @@ def parse_roster_json(text: str, *, expected_version: str = "1",
     callsigns = set()
     previous_number = 0
     for row in rows:
-        _object(row, V2_MEMBER_KEYS if expected_version == "2" else MEMBER_KEYS, "Member")
+        _object(row, MEMBER_KEYS, "Member")
         number = row["bkg_number"]
         _number(number, "member bkg_number")
         _require(number > previous_number, "Members must have unique ascending bkg_number values")
@@ -171,6 +167,9 @@ def parse_roster_json(text: str, *, expected_version: str = "1",
         sponsor = row["sponsor_bkg_number"]
         if sponsor is not None:
             _number(sponsor, "sponsor_bkg_number")
+        location = row["map_location"]
+        _map_location(location)
+        _photo(row["photo"])
         member = {
             "number": number,
             "callsign": callsign,
@@ -180,15 +179,13 @@ def parse_roster_json(text: str, *, expected_version: str = "1",
             "sponsor_bkg_number": sponsor,
             "sponsor_member": None,
             "og_regions": [],
+            "map_location": location,
+            "photo": row["photo"],
+            "grid": location["grid"] if location else None,
+            "lat": location["lat"] if location else None,
+            "lon": location["lon"] if location else None,
+            "mugshot_path": None,
         }
-        if expected_version == "2":
-            _map_location(row["map_location"])
-            _photo(row["photo"])
-            member.update(map_location=row["map_location"], photo=row["photo"],
-                          grid=row["map_location"]["grid"] if row["map_location"] else None,
-                          lat=row["map_location"]["lat"] if row["map_location"] else None,
-                          lon=row["map_location"]["lon"] if row["map_location"] else None,
-                          mugshot_path=None)
         members.append(member)
         by_number[number] = member
 
@@ -238,7 +235,7 @@ def parse_roster_json(text: str, *, expected_version: str = "1",
             _require(bool(projected["members"]), "Roster contains no usable members")
             projected["og_assignments"] = [row for row in assignments if row["bkg_number"] not in excluded]
             projected["content_hash"] = roster_content_hash(projected)
-            result = parse_roster_json(json.dumps(projected, ensure_ascii=False), expected_version=expected_version)
+            result = parse_roster_json(json.dumps(projected, ensure_ascii=False))
             if exclusions is not None:
                 exclusions.extend({"bkg_number": number, "reason": "Invalid callsign characters"}
                                   for number in sorted(excluded))
@@ -266,16 +263,14 @@ def _decode_roster(data: bytes) -> str:
 
 
 def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
-                     environ=None, expected_version: str = "1", cache_dir=None,
+                     environ=None, cache_dir=None,
                      exclude_invalid_callsigns: bool = False) -> str:
-    """Read an explicitly selected file or anonymous HTTPS roster endpoint.
+    """Read a local roster file or an HTTPS roster endpoint.
 
-    Call this only after selecting JSON input. With no file or explicit URL,
-    ``ROSTER_EXPORT_URL`` is required. Network errors expose no URL, headers,
-    credentials, response body, or automatic redirect/fallback in their message.
+    With no file or explicit URL, ``ROSTER_EXPORT_URL`` is required. Network
+    errors omit request and response details.
     """
     _require(not (path is not None and url is not None), "Select one roster JSON file or URL")
-    _require(expected_version in {"1", "2"}, "Unsupported roster schema_version")
     if path is not None:
         _require(cache_dir is None, "Snapshot caching requires a URL source")
         try:
@@ -298,8 +293,7 @@ def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
     headers = {"Accept": "application/json", "User-Agent": "BKG-Roster-Builder/1.0"}
     auth_fields = (("CF_ACCESS_CLIENT_ID", "CF-Access-Client-Id"),
                    ("CF_ACCESS_CLIENT_SECRET", "CF-Access-Client-Secret"))
-    # Public feeds need no authentication. Legacy Access endpoints may still
-    # use a complete pair; never silently send just half of a service token.
+    # An Access-protected endpoint may use a complete service token pair.
     authenticated = any(environment.get(key) is not None for key, _ in auth_fields)
     for key, header in auth_fields if authenticated else ():
         credential = environment.get(key)
@@ -314,7 +308,7 @@ def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
     cached_text = None
     cached_etag = None
     endpoint_hash = hashlib.sha256(endpoint.encode("utf-8")).hexdigest()
-    cache_file = Path(cache_dir) / f"v{expected_version}.json" if cache_dir is not None else None
+    cache_file = Path(cache_dir) / "v2.json" if cache_dir is not None else None
     if cache_file is not None:
         try:
             _require(not cache_file.is_symlink(), "Unsafe roster cache")
@@ -324,8 +318,7 @@ def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
             cached = json.loads(data.decode("utf-8"))
             _object(cached, {"endpoint_sha256", "etag", "snapshot"}, "Roster cache")
             _require(cached["endpoint_sha256"] == endpoint_hash, "Roster cache endpoint changed")
-            parse_roster_json(cached["snapshot"], expected_version=expected_version,
-                              exclude_invalid_callsigns=exclude_invalid_callsigns)
+            parse_roster_json(cached["snapshot"], exclude_invalid_callsigns=exclude_invalid_callsigns)
             # Conditional requests always use the verified source hash, never
             # the hash of a filtered publication projection.
             cached_envelope = json.loads(cached["snapshot"])
@@ -339,8 +332,7 @@ def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
         _require(cached_text is not None and response.headers.get("ETag") == cached_etag,
                  "Roster 304 requires a matching validated cache and ETag")
         # Revalidate on every use, including responses with no JSON body.
-        parse_roster_json(cached_text, expected_version=expected_version,
-                          exclude_invalid_callsigns=exclude_invalid_callsigns)
+        parse_roster_json(cached_text, exclude_invalid_callsigns=exclude_invalid_callsigns)
         return cached_text
 
     try:
@@ -350,8 +342,7 @@ def read_roster_json(path: str | Path | None = None, *, url: str | None = None,
             _require(response.getcode() == 200, "Roster export did not return HTTP 200")
             text = _decode_roster(response.read(MAX_ROSTER_BYTES + 1))
             if cache_file is not None:
-                parse_roster_json(text, expected_version=expected_version,
-                                  exclude_invalid_callsigns=exclude_invalid_callsigns)
+                parse_roster_json(text, exclude_invalid_callsigns=exclude_invalid_callsigns)
                 envelope = json.loads(text)
                 etag = response.headers.get("ETag")
                 expected_etag = f'W/"{envelope["content_hash"]}"'

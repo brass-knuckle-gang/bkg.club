@@ -76,16 +76,21 @@ test('a definitively rejected attempt reuses its key until meaningful details ch
     assert.equal(rules.attempt({ ...payload, notes: 'Corrected' }, rejected, 'replacement-key').key, 'replacement-key');
 });
 
-test('recovering an attempt before Turnstile loads still starts the roster fetch', () => {
+function loadRecruit({ attempt = null, respond }) {
     const nodes = new Map();
     const makeNode = () => {
         const classes = new Set();
         const listeners = new Map();
         return {
-            classes, listeners, value: '', style: {},
-            classList: { add: c => classes.add(c), contains: c => classes.has(c) },
+            classes, listeners, value: '', validationMessage: '', style: {}, children: [],
+            classList: { add: c => classes.add(c), contains: c => classes.has(c), remove: c => classes.delete(c) },
             addEventListener: (event, callback) => listeners.set(event, callback),
-            replaceChildren() {}, append() {}, scrollIntoView() {},
+            replaceChildren() { this.children = []; },
+            append(...children) { this.children.push(...children); },
+            querySelectorAll() { return []; },
+            reportValidity() { return [...nodes.values()].every(node => !node.validationMessage); },
+            setCustomValidity(message) { this.validationMessage = message; },
+            scrollIntoView() {},
         };
     };
     const document = {
@@ -96,7 +101,6 @@ test('recovering an attempt before Turnstile loads still starts the roster fetch
         createElement: makeNode,
         querySelector: makeNode,
     };
-    const attempt = rules.attempt({ callsign: 'F4TEST' }, null, '8d746124-0a7d-4a34-b229-5a85a65aa843');
     const window = {
         BkgRecruit: rules,
         sessionStorage: { getItem: key => key === 'bkg-recruit-pending-v1' ? JSON.stringify(attempt) : null },
@@ -109,8 +113,17 @@ test('recovering an attempt before Turnstile loads still starts the roster fetch
         document, window,
         fetch: async url => {
             requests.push(url);
-            return { ok: true, json: async () => ({ schema_version: '2', members: [] }) };
+            return respond(url);
         },
+    });
+    return { nodes, window, requests };
+}
+
+test('recovering an attempt before Turnstile loads still starts the roster fetch', () => {
+    const attempt = rules.attempt({ callsign: 'F4TEST' }, null, '8d746124-0a7d-4a34-b229-5a85a65aa843');
+    const { nodes, window, requests } = loadRecruit({
+        attempt,
+        respond: () => ({ ok: true, json: async () => ({ schema_version: '2', members: [] }) }),
     });
     assert.deepEqual(requests, ['data/v2/roster.json']);
     assert.ok(nodes.get('formConfirm').classes.has('show'));
@@ -121,4 +134,28 @@ test('recovering an attempt before Turnstile loads still starts the roster fetch
     nodes.get('turnstileScript').listeners.get('load')();
     assert.deepEqual(targets, ['#turnstileWidget']);
     assert.match(fs.readFileSync(path.join(__dirname, '../recruit.html'), 'utf8'), /id="turnstileWidget"/);
+});
+
+test('an unavailable V2 roster leaves sponsor officer review available without fetching V1', async () => {
+    const v1 = { schema_version: '1', members: [{ bkg_number: 42, callsign: 'F4TEST', name: 'Example Sponsor' }] };
+    for (const response of [{ ok: false, status: 404 }, { ok: true, json: async () => v1 }]) {
+        const { nodes, requests } = loadRecruit({ respond: () => response });
+        nodes.get('sponsorCall').value = 'F4TEST';
+        await new Promise(setImmediate);
+        assert.deepEqual(requests, ['data/v2/roster.json']);
+        assert.match(nodes.get('sponsorMatch').textContent, /Public roster unavailable/);
+        assert.equal(nodes.get('sponsorReviewRow').hidden, false);
+
+        nodes.get('recruitCall').value = 'F4NEW';
+        nodes.get('qsoTime').value = '21:30';
+        const submit = nodes.get('recruitForm').listeners.get('submit');
+        submit({ preventDefault() {} });
+        assert.match(nodes.get('sponsorReviewRequested').validationMessage, /request officer review/);
+        assert.equal(nodes.get('formConfirm').classes.has('show'), false);
+
+        nodes.get('sponsorReviewRequested').checked = true;
+        submit({ preventDefault() {} });
+        assert.equal(nodes.get('formConfirm').classes.has('show'), true);
+        assert.ok(nodes.get('confirmSummary').children.some(node => node.textContent === 'Officer review requested'));
+    }
 });

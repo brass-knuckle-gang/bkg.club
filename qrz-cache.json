@@ -1,7 +1,0 @@
-{
-  "_about": "Current callsign per sheet callsign, from QRZ. Used only when a QRZ lookup fails. Auto-refreshed by scripts/build-roster.py; safe to delete.",
-  "KF0CZD": "NB0E",
-  "KF0UFI": "KZ0O",
-  "KM7ANM": "KE7G",
-  "N9FZ": "NU4J"
-}

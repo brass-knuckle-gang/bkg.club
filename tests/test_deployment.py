@@ -1,6 +1,8 @@
-"""Offline build/validation contract. No request can reach a production service."""
+"""Offline V2 publication and validation contract."""
 
 import contextlib
+import copy
+import hashlib
 import importlib.util
 import io
 import json
@@ -13,22 +15,38 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
-import urllib.parse
-import urllib.request
-import xml.etree.ElementTree as ET
 
+from PIL import Image
+
+from test_roster_input import FIXTURES, rehash
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURES = Path(__file__).parent / "fixtures"
 sys.path.insert(0, str(ROOT / "scripts"))
 import site_contract
 
+SOURCE_URL = "https://admin.fixture.invalid/api/roster/export/v2"
+
+
+def load_script(filename):
+    spec = importlib.util.spec_from_file_location(Path(filename).stem, ROOT / "scripts" / filename)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 
 def load_builder():
-    spec = importlib.util.spec_from_file_location("build_roster", ROOT / "scripts/build-roster.py")
-    builder = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(builder)
-    return builder
+    return load_script("build-roster.py")
+
+
+def photo_fixture():
+    output = io.BytesIO()
+    Image.new("RGB", (2, 3), (255, 0, 0)).save(output, format="WEBP")
+    data = output.getvalue()
+    digest = hashlib.sha256(data).hexdigest()
+    return data, {
+        "url": f"https://admin.fixture.invalid/api/roster/photos/{digest}.webp",
+        "sha256": digest, "content_type": "image/webp", "byte_length": len(data),
+    }
 
 
 class CountrySpellingTests(unittest.TestCase):
@@ -46,92 +64,74 @@ class CountrySpellingTests(unittest.TestCase):
         self.assertEqual({m["country"] for m in members}, {"Poland"})
 
 
-class DeploymentTests(unittest.TestCase):
+class WorkflowTests(unittest.TestCase):
+    def test_validates_one_saved_snapshot_before_uploading_the_site(self):
+        workflow = (ROOT / ".github/workflows/deploy.yml").read_text()
+        snapshot = '"$RUNNER_TEMP/bkg-build/roster.json"'
+        steps = (
+            "scripts/fetch-roster.py", "scripts/fetch-public-assets.py",
+            "scripts/build-roster.py", "scripts/validate-site.py dist",
+            "actions/upload-pages-artifact@", "actions/deploy-pages@",
+        )
+        offsets = [workflow.index(step) for step in steps]
+        self.assertEqual(offsets, sorted(offsets))
+        self.assertEqual(workflow.count(steps[0]), 1)
+        self.assertIn(f"--output {snapshot}", workflow)
+        self.assertEqual(workflow.count(f"--roster-json {snapshot}"), 2)
+        self.assertIn("if: needs.build.outputs.changed == 'true'", workflow)
+        self.assertIn("artifact_name: ${{ needs.build.outputs.artifact_name }}", workflow)
+
+
+class PublicationBuildFixture(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.workspace = Path(temporary.name)
         self.source = self.workspace / "source"
         self.dist = self.workspace / "dist"
-        self.source.mkdir()
+        self.assets = self.workspace / "public-assets"
+        self.assets.mkdir()
+        self.roster = self.workspace / "roster.json"
         self.builder = load_builder()
         for relative in site_contract.PUBLIC_FILES:
             target = self.source / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
         shutil.copytree(ROOT / site_contract.GAME_DIR, self.source / site_contract.GAME_DIR)
-        for relative in ("name-overrides.txt", "location-overrides.txt"):
-            shutil.copyfile(FIXTURES / relative, self.source / relative)
-        (self.source / "qrz-cache.json").write_text('{"W1OLD":"W1NEW"}\n')
-        mugshots = self.source / "images/mugshots"
-        mugshots.mkdir(parents=True)
-        (mugshots / "K2TST.jpg").write_bytes(b"unchanged-photo")
-        (mugshots / "K4TST.jpg").write_bytes(b"previous-photo")
-        (mugshots / ".sources.json").write_text(json.dumps({
-            "K2TST": "https://fixture.invalid/unchanged.jpg",
-            "K4TST": "https://fixture.invalid/previous.jpg",
-        }))
-        overrides = self.source / "images/mugshots-override"
-        overrides.mkdir()
-        (overrides / "W1NEW.png").write_bytes(b"override-photo")
         (self.source / "private.txt").write_text("must never be published")
 
-        constants = {
+        paths = {
             "REPO_ROOT": self.source,
             "INDEX_PATH": self.source / "index.html",
             "TREE_PATH": self.source / "tree.html",
             "NEARBY_PATH": self.source / "nearby.html",
             "OUTBREAK_PATH": self.source / "outbreak.html",
-            "NAME_OVERRIDES_PATH": self.source / "name-overrides.txt",
-            "LOCATION_OVERRIDES_PATH": self.source / "location-overrides.txt",
-            "QRZ_CACHE_PATH": self.source / "qrz-cache.json",
-            "MUGSHOT_DIR": mugshots,
-            "MUGSHOT_SOURCES_PATH": mugshots / ".sources.json",
-            "MUGSHOT_OVERRIDE_DIR": overrides,
         }
-        for name, value in constants.items():
+        for name, value in paths.items():
             setattr(self.builder, name, value)
-        self.csv = (FIXTURES / "roster.csv").read_text()
-        self.qrz = json.loads((FIXTURES / "qrz.json").read_text())
-        self.downloads = []
-        patches = [
-            patch.dict(os.environ, {"QRZ_USERNAME": "fixture", "QRZ_PASSWORD": "fixture"}),
-            patch.object(self.builder, "fetch_csv", side_effect=lambda: self.csv),
-            patch.object(self.builder, "_fetch_with_retry", side_effect=self.fixture_response),
-            patch.object(urllib.request, "urlopen", side_effect=AssertionError("Network forbidden in tests")),
-            patch.object(socket, "create_connection", side_effect=AssertionError("Network forbidden in tests")),
-            patch.object(socket.socket, "connect", side_effect=AssertionError("Network forbidden in tests")),
-        ]
-        for replacement in patches:
+        for replacement in (
+            patch.dict(os.environ, {"ROSTER_LAYOUT": "list"}),
+            patch.object(socket.socket, "connect", side_effect=AssertionError("Offline tests only")),
+        ):
             replacement.start()
             self.addCleanup(replacement.stop)
 
-    def fixture_response(self, request, **_kwargs):
-        url = urllib.parse.urlparse(request.full_url)
-        if url.hostname == "xmldata.qrz.com":
-            parameters = urllib.parse.parse_qs(url.query)
-            root = ET.Element("QRZDatabase", xmlns="http://xmldata.qrz.com")
-            if "username" in parameters:
-                ET.SubElement(ET.SubElement(root, "Session"), "Key").text = "fixture-session"
-            else:
-                info = self.qrz[parameters["callsign"][0]]
-                if info is None:
-                    return None
-                call = ET.SubElement(root, "Callsign")
-                for name, value in info.items():
-                    ET.SubElement(call, name).text = value
-            return ET.tostring(root)
-        self.assertEqual(url.hostname, "fixture.invalid")
-        self.downloads.append(request.full_url)
-        if url.path == "/new.png":
-            return b"downloaded-photo"
-        if url.path == "/unavailable.jpg":
-            return None
-        self.fail(f"Unexpected photo download: {request.full_url}")
+        self.envelope = json.loads((FIXTURES / "fixtures/roster-v2.json").read_text())
+        self.photo_bytes, self.photo = photo_fixture()
+        self.envelope["members"][0]["photo"] = self.photo
+        self.asset = self.assets / f"{self.photo['sha256']}.webp"
+        self.asset.write_bytes(self.photo_bytes)
+        self.write_roster()
 
-    def build(self):
+    def write_roster(self):
+        self.roster.write_text(rehash(self.envelope))
+
+    def build(self, *, output=None, extra=()):
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            return self.builder.main(["--output-dir", str(self.dist)])
+            return self.builder.main([
+                "--roster-json", str(self.roster), "--asset-dir", str(self.assets),
+                "--asset-origin", SOURCE_URL, "--output-dir", str(output or self.dist), *extra,
+            ])
 
     def data(self, page, marker):
         text = (self.dist / page).read_text()
@@ -144,71 +144,40 @@ class DeploymentTests(unittest.TestCase):
             target.read_text(), f"<!-- {marker}:START -->", f"<!-- {marker}:END -->", json.dumps(data)
         ))
 
-    def test_full_fixture_build_preserves_enrichment_and_public_site(self):
+    def output_files(self, directory):
+        return {file.relative_to(directory): file.read_bytes() for file in directory.rglob("*") if file.is_file()}
+
+
+class DeploymentTests(PublicationBuildFixture):
+    def test_build_preserves_the_offline_static_publication_contract(self):
         source_index = (self.source / "index.html").read_bytes()
         self.assertEqual(self.build(), 0)
         site_contract.validate_dist(self.dist)
         self.assertEqual((self.source / "index.html").read_bytes(), source_index)
         for relative in (*site_contract.PUBLIC_FILES, *site_contract.GAME_REQUIRED):
             self.assertTrue((self.dist / relative).is_file(), relative)
-        for private in ("qrz-cache.json", "name-overrides.txt", "location-overrides.txt", "private.txt", "scripts", ".github", "images/mugshots/.sources.json"):
+        for private in ("private.txt", "roster.json", "scripts", ".github"):
             self.assertFalse((self.dist / private).exists(), private)
 
         index = (self.dist / "index.html").read_text()
-        self.assertIn("<!-- MEMBER_COUNT:START -->4<!-- MEMBER_COUNT:END -->", index)
+        self.assertIn("<!-- MEMBER_COUNT:START -->6<!-- MEMBER_COUNT:END -->", index)
         self.assertIn('<div class="rl" data-view="list">', index)
         self.assertNotIn('class="member-card', index)
-        self.assertIn('<li class="rl-row" id="VE3TST" data-n="3" data-joined="2025-01-04" data-place="Canada" data-flag="🇨🇦" data-sponsor="K2TST">', index)
-        # The founder has a card of their own, so K2TST (one recruit) tops the recruiter strip.
-        self.assertIn('<a class="rl-fcard rl-red" href="#K2TST" data-call="K2TST"><span class="rl-tag">Top recruiter #1</span>', index)
-        self.assertIn('<div class="rl-badges"><span class="rl-b rl-boss">GODFATHER</span><div class="state-og-badge" title="UT OG">UT OG</div></div>', index)
+        self.assertIn('id="VE3SYN" data-n="21" data-joined="2026-08-21" data-place="Canada"', index)
+        self.assertIn('data-sponsor="N0SYN7"', index)
         self.assertIn('<link rel="stylesheet" href="assets/roster.css">', index)
         self.assertIn('<script src="assets/roster.js" defer></script>', index)
-        self.assertIn("BKG #005", index)  # The existing future-member row.
-        self.assertIn('href="https://www.qrz.com/db/W1NEW"', index)
-        self.assertIn('<div class="member-name">Scout</div>', index)
-        self.assertNotIn('href="https://www.qrz.com/db/W1OLD"', index)
-
-        tree = self.data("tree.html", "DOWNLINE_DATA")
-        self.assertEqual([entry["call"] for entry in tree], ["W1NEW", "K2TST", "VE3TST", "K4TST"])
-        self.assertEqual([entry["sponsor"] for entry in tree], [None, "W1NEW", "K2TST", "W1NEW"])
+        self.assertIn('title="VT OG">VT OG</div>', index)
+        self.assertIn('href="https://www.qrz.com/db/N0SYN1"', index)
         territory = self.data("index.html", "MAP_DATA")
-        self.assertEqual(territory["states"]["TX"][0]["call"], "K2TST")
-        self.assertEqual(territory["dx"]["Canada"]["members"][0]["call"], "VE3TST")
-        geo = self.data("nearby.html", "GEO_DATA")
-        self.assertEqual([entry["call"] for entry in geo], ["W1NEW", "VE3TST", "K4TST"])
-        self.assertEqual((geo[1]["lat"], geo[1]["lon"]), (43.65, -79.38))
+        self.assertEqual(territory["states"]["NY"][0]["call"], "K2SYN88")
+        self.assertEqual(territory["dx"]["Canada"]["members"][0]["call"], "VE3SYN")
+        tree = self.data("tree.html", "DOWNLINE_DATA")
+        self.assertEqual([entry["sponsor"] for entry in tree], [None, "N0SYN1", None, "N0SYN7", None, "VE3SYN"])
         outbreak = self.data("outbreak.html", "OUTBREAK_DATA")
-        self.assertEqual([entry["date"] for entry in outbreak], ["2025-01-02", "2025-01-03", "2025-01-04", "2025-01-05"])
-        self.assertEqual(outbreak[1]["state"], "TX")
-        self.assertNotIn("lat", outbreak[1])
-        self.assertEqual(outbreak[3]["sponsor"], "W1NEW")
-        notes = [line for line in (self.dist / "members.txt").read_text().splitlines() if line and not line.startswith("#")]
-        self.assertEqual(notes, [
-            "K2TST 🤜 Scout BKG #2 (OG, TX OG)",
-            "K4TST 🤜 Dana E BKG #4 (CA OG)",
-            "VE3TST 🤜 Cora E BKG #3 (Canada OG)",
-            "W1NEW 🤜 Ada E BKG #1 (OG, UT OG)",
-        ])
-        self.assertEqual((self.dist / "images/mugshots/W1NEW.png").read_bytes(), b"override-photo")
-        self.assertEqual((self.dist / "images/mugshots/K2TST.jpg").read_bytes(), b"unchanged-photo")
-        self.assertEqual((self.dist / "images/mugshots/K4TST.jpg").read_bytes(), b"previous-photo")
-        self.assertEqual((self.dist / "images/mugshots/VE3TST.png").read_bytes(), b"downloaded-photo")
-        self.assertEqual(self.downloads, ["https://fixture.invalid/new.png", "https://fixture.invalid/unavailable.jpg"])
-        self.assertEqual(json.loads((self.source / "qrz-cache.json").read_text())["W1OLD"], "W1NEW")
-
-    def test_legacy_country_og_is_awarded_once_across_spelling_variants(self):
-        self.csv += "5,SP1TST,Eve Example,2025-01-06,POLAND,W1OLD\n"
-        self.csv += "6,SP2TST,Fay Example,2025-01-07,Poland,W1OLD\n"
-        self.qrz.update({"SP1TST": None, "SP2TST": None})
-
-        self.assertEqual(self.build(), 0)
-        site_contract.validate_dist(self.dist)
-        countries = self.data("index.html", "MAP_DATA")["dx"]
-        self.assertEqual([m["call"] for m in countries["Poland"]["members"]], ["SP1TST", "SP2TST"])
-        notes = (self.dist / "members.txt").read_text()
-        self.assertIn("SP1TST 🤜 Eve E BKG #5 (Poland OG)", notes)
-        self.assertIn("SP2TST 🤜 Fay E BKG #6\n", notes)
+        self.assertEqual([entry["date"] for entry in outbreak],
+                         ["2026-08-21", "2026-08-31", None, "2026-08-21", "2026-08-25", "2026-07-02"])
+        self.assertIn("BKG #88 (VT OG)", (self.dist / "members.txt").read_text())
 
     def test_roster_layout_switch_restores_classic_card_wall(self):
         with patch.dict(os.environ, {"ROSTER_LAYOUT": "classic"}):
@@ -216,7 +185,7 @@ class DeploymentTests(unittest.TestCase):
         site_contract.validate_dist(self.dist)
         index = (self.dist / "index.html").read_text()
         self.assertIn('class="member-card founder-card"', index)
-        self.assertIn('href="https://www.qrz.com/db/W1NEW"', index)
+        self.assertIn('href="https://www.qrz.com/db/N0SYN1"', index)
         self.assertNotIn('class="rl"', index)
         # The list assets still ship, and roster.js does nothing without .rl.
         self.assertTrue((self.dist / "assets/roster.js").is_file())
@@ -233,15 +202,6 @@ class DeploymentTests(unittest.TestCase):
         with patch.dict(os.environ, {"ROSTER_LAYOUT": ""}):
             self.assertEqual(self.build(), 0)
         self.assertIn('class="rl"', (self.dist / "index.html").read_text())
-
-    def test_qrz_outage_uses_canonical_cache_and_previous_photos(self):
-        self.qrz = {callsign: None for callsign in self.qrz}
-        self.assertEqual(self.build(), 0)
-        site_contract.validate_dist(self.dist)
-        self.assertEqual(self.data("tree.html", "DOWNLINE_DATA")[1]["sponsor"], "W1NEW")
-        self.assertEqual(self.data("nearby.html", "GEO_DATA"), [])
-        self.assertEqual((self.dist / "images/mugshots/K4TST.jpg").read_bytes(), b"previous-photo")
-        self.assertEqual(self.downloads, [])
 
     def test_join_dates_use_portable_iso_formatting(self):
         # Match Linux's unpadded strftime behavior even when tests run on macOS.
@@ -274,8 +234,10 @@ class DeploymentTests(unittest.TestCase):
                 with self.subTest(raw=raw):
                     self.assertEqual(self.builder.parse_join_date(raw), expected)
 
-    def test_low_year_sheet_dates_build_and_validate(self):
-        self.csv = self.csv.replace("2025-01-02", "8/20/0026").replace("01/03/2025", "0026-09-03")
+    def test_low_year_roster_dates_build_and_validate(self):
+        first, second = self.envelope["members"][:2]
+        first["qso_date"], second["qso_date"] = "8/20/0026", "0026-09-03"
+        self.write_roster()
         self.assertEqual(self.build(), 0)
         site_contract.validate_dist(self.dist)
         outbreak = self.data("outbreak.html", "OUTBREAK_DATA")
@@ -290,21 +252,6 @@ class DeploymentTests(unittest.TestCase):
                 self.replace_data("outbreak.html", "OUTBREAK_DATA", outbreak)
                 with self.assertRaisesRegex(ValueError, "Invalid outbreak date"):
                     site_contract.validate_dist(self.dist)
-
-    def test_invalid_input_preserves_previous_dist(self):
-        self.dist.mkdir()
-        sentinel = self.dist / "index.html"
-        sentinel.write_text("previous validated build")
-        invalid_inputs = [
-            "", "not,the,roster\ninvalid,csv,data\n", "#,Callsign,Name\n",
-            self.csv + "1,K9TST,Duplicate,2025-01-06,Utah,\n",
-            self.csv + "5,w1old,Duplicate,2025-01-06,Utah,\n",
-        ]
-        for invalid in invalid_inputs:
-            with self.subTest(csv=invalid):
-                self.csv = invalid
-                self.assertNotEqual(self.build(), 0)
-                self.assertEqual(sentinel.read_text(), "previous validated build")
 
     def test_missing_required_template_or_marker_fails_generation(self):
         self.dist.mkdir()
@@ -321,28 +268,6 @@ class DeploymentTests(unittest.TestCase):
                 self.assertNotEqual(self.build(), 0)
                 self.assertEqual(sentinel.read_text(), "previous validated build")
                 target.write_text(original)
-
-    def test_fetch_failure_and_duplicate_canonical_calls_do_not_replace_dist(self):
-        self.dist.mkdir()
-        sentinel = self.dist / "index.html"
-        sentinel.write_text("previous validated build")
-        with patch.object(self.builder, "fetch_csv", side_effect=OSError("fixture fetch failure")):
-            self.assertNotEqual(self.build(), 0)
-        self.assertEqual(sentinel.read_text(), "previous validated build")
-        self.qrz["K2TST"]["call"] = "W1NEW"
-        self.assertNotEqual(self.build(), 0)
-        self.assertEqual(sentinel.read_text(), "previous validated build")
-
-    def test_output_directory_cannot_replace_source_assets(self):
-        asset = self.source / "assets/bkg.css"
-        original = asset.read_bytes()
-        with patch.object(self.builder, "fetch_csv") as fetch, patch.object(self.builder, "annotate_qrz") as enrich:
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-                status = self.builder.main(["--output-dir", str(self.source / "assets")])
-        self.assertNotEqual(status, 0)
-        self.assertEqual(asset.read_bytes(), original)
-        fetch.assert_not_called()
-        enrich.assert_not_called()
 
     def test_failed_output_swap_restores_previous_build(self):
         self.dist.mkdir()
@@ -361,7 +286,8 @@ class DeploymentTests(unittest.TestCase):
 
     def test_validator_rejects_missing_assets_photos_and_internal_files(self):
         self.assertEqual(self.build(), 0)
-        for relative in (*site_contract.PUBLIC_FILES, *site_contract.GAME_REQUIRED, "members.txt", "images/mugshots/W1NEW.png"):
+        for relative in (*site_contract.PUBLIC_FILES, *site_contract.GAME_REQUIRED,
+                         "members.txt", "data/v2/roster.json", f"images/mugshots/{self.asset.name}"):
             with self.subTest(relative=relative):
                 target = self.dist / relative
                 original = target.read_bytes()
@@ -369,28 +295,26 @@ class DeploymentTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     site_contract.validate_dist(self.dist)
                 target.write_bytes(original)
-        leaked = self.dist / "qrz-cache.json"
+        leaked = self.dist / "private.txt"
         leaked.write_text("{}")
         with self.assertRaises(ValueError):
             site_contract.validate_dist(self.dist)
 
-    def test_validator_rejects_sponsor_cycle_consistent_across_pages(self):
+    def test_validator_rejects_sponsor_drift_even_when_generated_pages_agree(self):
         self.assertEqual(self.build(), 0)
         tree = self.data("tree.html", "DOWNLINE_DATA")
         outbreak = self.data("outbreak.html", "OUTBREAK_DATA")
-        # K2TST already names W1NEW as sponsor. Both pages agree, but this
-        # mutual sponsorship cannot form a valid downline tree.
-        tree[0]["sponsor"] = outbreak[0]["sponsor"] = "K2TST"
+        tree[1]["sponsor"] = outbreak[1]["sponsor"] = None
         self.replace_data("tree.html", "DOWNLINE_DATA", tree)
         self.replace_data("outbreak.html", "OUTBREAK_DATA", outbreak)
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "sponsors differ from pages"):
             site_contract.validate_dist(self.dist)
 
     def test_validator_rejects_invalid_us_state_consistent_across_pages(self):
         self.assertEqual(self.build(), 0)
         territory = self.data("index.html", "MAP_DATA")
         outbreak = self.data("outbreak.html", "OUTBREAK_DATA")
-        territory["states"]["XX"] = territory["states"].pop("UT")
+        territory["states"]["XX"] = territory["states"].pop("IL")
         outbreak[0]["state"] = "XX"
         self.replace_data("index.html", "MAP_DATA", territory)
         self.replace_data("outbreak.html", "OUTBREAK_DATA", outbreak)
@@ -403,16 +327,16 @@ class DeploymentTests(unittest.TestCase):
         original_index = index.read_text()
         tree = self.dist / "tree.html"
         original_tree = tree.read_text()
-        tree.write_text(original_tree.replace('"call":"W1NEW"', '"call":', 1))
+        tree.write_text(original_tree.replace('"call":"N0SYN1"', '"call":', 1))
         with self.assertRaises(ValueError):
             site_contract.validate_dist(self.dist)
         tree.write_text(original_tree)
-        index.write_text(original_index.replace("<!-- MEMBER_COUNT:START -->4", "<!-- MEMBER_COUNT:START -->5"))
+        index.write_text(original_index.replace("<!-- MEMBER_COUNT:START -->6", "<!-- MEMBER_COUNT:START -->7"))
         with self.assertRaises(ValueError):
             site_contract.validate_dist(self.dist)
         index.write_text(original_index)
         notes = self.dist / "members.txt"
-        notes.write_text(notes.read_text().replace("BKG #4", "BKG #99"))
+        notes.write_text(notes.read_text().replace("BKG #88", "BKG #99"))
         with self.assertRaises(ValueError):
             site_contract.validate_dist(self.dist)
 
@@ -428,6 +352,88 @@ class DeploymentTests(unittest.TestCase):
         tree = self.data("tree.html", "DOWNLINE_DATA")
         tree[1]["sponsor"] = "UNKNOWN"
         self.replace_data("tree.html", "DOWNLINE_DATA", tree)
+        with self.assertRaises(ValueError):
+            site_contract.validate_dist(self.dist)
+
+    def test_malformed_or_empty_contract_preserves_previous_output(self):
+        self.assertEqual(self.build(), 0)
+        previous = self.output_files(self.dist)
+        missing_sponsor = copy.deepcopy(self.envelope)
+        missing_sponsor["members"][1]["sponsor_bkg_number"] = 99
+        leaked_private = copy.deepcopy(self.envelope)
+        leaked_private["members"][0]["email"] = "private@example.invalid"
+        wrong_hash = copy.deepcopy(self.envelope)
+        wrong_hash["members"][0]["name"] = "Fictional Fallback"
+        invalid = {
+            "missing file": None,
+            "truncated JSON": "{",
+            "unsupported envelope": "{}",
+            "missing sponsor": rehash(missing_sponsor),
+            "private field": rehash(leaked_private),
+            "mismatched hash": json.dumps(wrong_hash),
+            "empty roster": (FIXTURES / "fixtures/empty-v2.json").read_text(),
+        }
+        for case, raw in invalid.items():
+            with self.subTest(case=case):
+                if raw is None:
+                    self.roster.unlink()
+                else:
+                    self.roster.write_text(raw)
+                self.assertNotEqual(self.build(), 0)
+                self.assertEqual(self.output_files(self.dist), previous)
+
+    def test_production_dist_can_build_without_replacing_source_or_inputs(self):
+        production = self.source / "dist"
+        self.assertEqual(self.build(output=production), 0)
+        site_contract.validate_dist(production)
+        previous = self.output_files(production)
+        source_asset = self.source / "assets/bkg.css"
+        original = source_asset.read_bytes()
+        for output in (self.source / "experimental", self.source / "assets", self.source, self.source.parent):
+            with self.subTest(output=output):
+                self.assertNotEqual(self.build(output=output), 0)
+        self.assertEqual(source_asset.read_bytes(), original)
+        self.assertFalse((self.source / "experimental").exists())
+        self.assertTrue(self.roster.is_file())
+        self.assertEqual(self.output_files(production), previous)
+
+    def test_fingerprint_ignores_build_times_but_not_visible_changes(self):
+        fingerprint = load_script("site-fingerprint.py")
+        later = self.workspace / "later"
+        self.assertEqual(self.build(), 0)
+        self.envelope["generated_at"] = "2026-12-31T23:59:59Z"
+        self.write_roster()
+        with patch.object(self.builder, "datetime", wraps=self.builder.datetime) as clock:
+            clock.now.return_value = self.builder.datetime(2030, 1, 2, 3, 4, 5, tzinfo=self.builder.timezone.utc)
+            self.assertEqual(self.build(output=later), 0)
+        self.assertNotEqual((self.dist / "index.html").read_bytes(), (later / "index.html").read_bytes())
+        self.assertNotEqual((self.dist / "members.txt").read_bytes(), (later / "members.txt").read_bytes())
+        self.assertEqual(fingerprint.fingerprint(self.dist), fingerprint.fingerprint(later))
+        self.envelope["members"][0]["name"] = "Renamed Member"
+        self.write_roster()
+        self.assertEqual(self.build(output=later), 0)
+        self.assertNotEqual(fingerprint.fingerprint(self.dist), fingerprint.fingerprint(later))
+
+    def test_reviewed_html_and_script_text_round_trips_without_execution(self):
+        payload = '</script><script>alert("synthetic")</script>&'
+        qth = payload + '\u2028\u2029Synthetic territory'
+        self.envelope["members"][2]["name"] = "Zoë " + payload
+        self.envelope["members"][2]["qth"] = qth
+        self.envelope["og_assignments"][1]["region_label"] = payload
+        self.write_roster()
+        self.assertEqual(self.build(), 0)
+        site_contract.validate_dist(self.dist)
+        self.assertEqual(self.data("tree.html", "DOWNLINE_DATA")[2]["name"], "Zoë " + payload)
+        self.assertIn(qth, self.data("index.html", "MAP_DATA")["dx"])
+        self.assertIn("&lt;/script&gt;", (self.dist / "index.html").read_text())
+        for page in ("index.html", "tree.html", "nearby.html", "outbreak.html"):
+            html = (self.dist / page).read_text()
+            self.assertNotIn('<script>alert("synthetic")', html)
+        self.assertEqual(json.loads((self.dist / "data/v2/roster.json").read_text()), self.envelope)
+
+    def test_validator_rejects_unreferenced_photos(self):
+        self.assertEqual(self.build(), 0)
+        (self.dist / "images/mugshots" / ("a" * 64 + ".webp")).write_bytes(self.photo_bytes)
         with self.assertRaises(ValueError):
             site_contract.validate_dist(self.dist)
 

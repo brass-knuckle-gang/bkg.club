@@ -113,7 +113,7 @@
                         <summary>Refresh roster data</summary>
                         <p id="refreshNote"></p>
                         <div class="form-row">
-                            <textarea id="pasteJson" placeholder="Paste the roster export JSON here" spellcheck="false"></textarea>
+                            <textarea id="pasteJson" placeholder="Paste the V2 roster export JSON here" spellcheck="false"></textarea>
                         </div>
                         <div class="press-btns">
                             <button class="press-btn" id="applyJson">Load pasted roster</button>
@@ -360,7 +360,7 @@ function titlesFor(m){
 // Live, pasted, and uploaded snapshots use the same identity/title projection.
 // Keep every assignment; a member number is not a unique OG title key.
 function parseRoster(d){
-  if(!d || !["1", "2"].includes(d.schema_version)) throw new Error("Load a V1 or V2 roster export");
+  if(!d || d.schema_version !== "2") throw new Error("Load a V2 roster export");
   if(!Array.isArray(d.members) || !Array.isArray(d.og_assignments))
     throw new Error("The roster must contain members and OG assignments");
   const numbers = new Set(), regions = new Set(), og = Object.create(null);
@@ -627,28 +627,21 @@ function stamp(){
     {year:"numeric",month:"short",day:"numeric"}) : "unknown date";
   $("#stageNote").dataset.when = when;
   $("#refreshNote").textContent = liveNote || ("Showing a snapshot taken " + when +
-    ". Reload to try the roster again, or paste the export JSON below.");
+    ". Reload to try the roster again, or paste the V2 export JSON below.");
 }
 
 // The roster this site published with its last build (same origin, no CORS).
-// V2 is production; V1 is published only while the site is rolled back.
-const ROSTER_URLS = ["data/v2/roster.json", "data/v1/roster.json"];
+const ROSTER_URL = "data/v2/roster.json";
 let liveNote = "";
 async function pullLive(){
-  let problem = "";
-  for(const url of ROSTER_URLS){
-    try {
-      const r = await fetch(url);
-      if(!r.ok) throw new Error("returned " + r.status);
-      ROSTER = parseRoster(await r.json());
-      liveNote = "Roster is the one this site published with its last build.";
-      problem = "";
-      break;
-    } catch(e){
-      problem = problem || e.message;
-    }
+  try {
+    const r = await fetch(ROSTER_URL);
+    if(!r.ok) throw new Error("returned " + r.status);
+    ROSTER = parseRoster(await r.json());
+    liveNote = "Roster is the one this site published with its last build.";
+  } catch(e){
+    liveNote = "Couldn't load the site's roster: " + e.message;
   }
-  if(problem) liveNote = "Couldn't load the site's roster: " + problem;
   stamp();
   const founder = ROSTER.members.find(m => m.n === 1);
   founder ? choose(founder) : render();

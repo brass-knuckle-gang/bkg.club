@@ -1,6 +1,5 @@
 """Admin-owned v2 publication, with all network access replaced by fixtures."""
 
-import contextlib
 import copy
 from email.message import Message
 import hashlib
@@ -11,59 +10,23 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import test_json_build as json_build
-from test_roster_enrichment import png
-from test_roster_input import FakeResponse, roster_input
+from test_deployment import PublicationBuildFixture, SOURCE_URL, photo_fixture
+from test_roster_input import FIXTURES, FakeResponse, rehash, roster_input
 import roster_assets
-import roster_enrichment
 from site_contract import validate_dist
 
 
-SOURCE_URL = "https://admin.fixture.invalid/api/roster/export/v2"
-
-
-def photo_fixture():
-    data, _extension = roster_enrichment.sanitize_photo(png(metadata=True))
-    digest = hashlib.sha256(data).hexdigest()
-    return data, {"url": f"https://admin.fixture.invalid/api/roster/photos/{digest}.webp",
-                  "sha256": digest, "content_type": "image/webp", "byte_length": len(data)}
-
-
-class PublisherV2Tests(unittest.TestCase):
-    fixture_response = json_build.JsonBuildTests.fixture_response
-    write_roster = json_build.JsonBuildTests.write_roster
-    data = json_build.JsonBuildTests.data
-
+class PublisherV2Tests(PublicationBuildFixture):
     def setUp(self):
-        json_build.JsonBuildTests.setUp(self)
-        self.envelope["schema_version"] = "2"
+        super().setUp()
         for member in self.envelope["members"]:
-            member.update(map_location=None, photo=None)
+            member["map_location"] = None
         self.envelope["members"][0]["map_location"] = {"grid": "EN61AB", "lat": 41.0625, "lon": -87.9583}
-        self.assets = self.workspace / "public-assets"
-        self.assets.mkdir()
-        self.photo_bytes, self.photo = photo_fixture()
-        self.envelope["members"][0]["photo"] = self.photo
-        (self.assets / f"{self.photo['sha256']}.webp").write_bytes(self.photo_bytes)
-        json_build.rehash(self.envelope)
         self.write_roster()
-
-    def build(self, extra=()):
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), \
-                patch.object(self.builder, "fetch_csv", side_effect=AssertionError("No Sheets")), \
-                patch.object(self.builder, "annotate_qrz", side_effect=AssertionError("No QRZ")), \
-                patch.object(self.builder, "load_name_overrides", side_effect=AssertionError("No name overrides")), \
-                patch.object(self.builder, "load_location_overrides", side_effect=AssertionError("No location overrides")), \
-                patch.object(roster_enrichment, "annotate_json_enrichment", side_effect=AssertionError("No enrichment")), \
-                patch.object(roster_enrichment, "sanitize_photo", side_effect=AssertionError("No photo transformation")):
-            return self.builder.main(["--source", "json", "--schema-version", "2",
-                                      "--roster-json", str(self.roster), "--asset-dir", str(self.assets),
-                                      "--asset-origin", SOURCE_URL,
-                                      "--output-dir", str(self.dist), *extra])
 
     def test_v2_publishes_exact_admin_locations_photos_and_snapshot_offline(self):
         self.assertEqual(self.build(), 0)
-        validate_dist(self.dist, source="json")
+        validate_dist(self.dist)
         self.assertEqual(self.data("nearby.html", "GEO_DATA"), [
             {"call": "N0SYN1", "name": "Synthetic First", "num": 1,
              "grid": "EN61AB", "lat": 41.0625, "lon": -87.9583},
@@ -81,10 +44,9 @@ class PublisherV2Tests(unittest.TestCase):
 
     def test_bad_callsign_is_excluded_consistently_from_every_public_output(self):
         self.envelope["members"][0]["callsign"] = "KCØDWZ"
-        json_build.rehash(self.envelope)
         self.write_roster()
         self.assertEqual(self.build(), 0)
-        validate_dist(self.dist, source="json")
+        validate_dist(self.dist)
         published = json.loads((self.dist / "data/v2/roster.json").read_text())
         self.assertNotEqual(published["content_hash"], self.envelope["content_hash"])
         self.assertEqual(len(published["members"]), len(self.envelope["members"]) - 1)
@@ -96,9 +58,9 @@ class PublisherV2Tests(unittest.TestCase):
             self.assertNotIn("KCØDWZ", (self.dist / relative).read_text())
 
     def test_upstream_v2_fixture_hash_and_full_precision_centers_publish_unchanged(self):
-        fixtures = json_build.ROOT / "tests/fixtures/public-roster/fixtures"
+        fixtures = FIXTURES / "fixtures"
         text = (fixtures / "roster-v2.json").read_text()
-        envelope, members = roster_input.parse_roster_json(text, expected_version="2")
+        envelope, members = roster_input.parse_roster_json(text)
         self.assertEqual(envelope["content_hash"], "sha256:8857d8d9cfd7b57c22918780e189fea1139257817456607fbff6de089490e6a7")
         self.envelope = envelope
         self.write_roster()
@@ -108,22 +70,20 @@ class PublisherV2Tests(unittest.TestCase):
             for member in members if member["map_location"] is not None
         ])
         with self.assertRaisesRegex(ValueError, "no active members"):
-            roster_input.parse_roster_json((fixtures / "empty-v2.json").read_text(), expected_version="2")
+            roster_input.parse_roster_json((fixtures / "empty-v2.json").read_text())
 
-    def test_null_locations_never_recover_from_stale_enrichment(self):
+    def test_null_location_removes_previous_coordinates(self):
+        self.assertEqual(self.build(), 0)
         self.envelope["members"][0]["map_location"] = None
-        json_build.rehash(self.envelope)
         self.write_roster()
         self.assertEqual(self.build(), 0)
         self.assertEqual(self.data("nearby.html", "GEO_DATA"), [])
         self.assertTrue(all("lat" not in row for row in self.data("outbreak.html", "OUTBREAK_DATA")))
-        self.assertNotEqual(self.build(["--enrichment-dir", str(self.enrichment)]), 0)
 
     def test_current_callsign_sponsor_ids_and_stored_ogs_survive_a_rename(self):
         self.envelope["members"][0]["callsign"] = "N0CURRENT"
         self.envelope["members"][0]["photo"] = None
         self.envelope["members"][0]["map_location"] = None
-        json_build.rehash(self.envelope)
         self.write_roster()
         self.assertEqual(self.build(), 0)
         tree = self.data("tree.html", "DOWNLINE_DATA")
@@ -131,13 +91,40 @@ class PublisherV2Tests(unittest.TestCase):
         self.assertEqual(json.loads((self.dist / "data/v2/roster.json").read_text())["og_assignments"],
                          self.envelope["og_assignments"])
 
+    def test_reused_callsign_does_not_restore_inactive_sponsorship_or_og(self):
+        self.envelope["members"] = [row for row in self.envelope["members"] if row["bkg_number"] != 7]
+        self.envelope["og_assignments"] = [row for row in self.envelope["og_assignments"] if row["bkg_number"] != 7]
+        members = {row["bkg_number"]: row for row in self.envelope["members"]}
+        members[21]["sponsor_bkg_number"] = None
+        members[40]["callsign"] = "N0SYN7"
+        self.write_roster()
+        self.assertEqual(self.build(), 0)
+        tree = {entry["num"]: entry for entry in self.data("tree.html", "DOWNLINE_DATA")}
+        self.assertNotIn(7, tree)
+        self.assertIsNone(tree[21]["sponsor"])
+        self.assertEqual(tree[40]["call"], "N0SYN7")
+        self.assertNotIn("IL OG", (self.dist / "members.txt").read_text())
+
+    def test_canadian_province_groups_under_canada_and_keeps_admin_coordinates(self):
+        member = next(row for row in self.envelope["members"] if row["bkg_number"] == 21)
+        member["qth"] = "Ontario"
+        member["map_location"] = {"grid": "FN03", "lat": 43.5, "lon": -79}
+        self.write_roster()
+        self.assertEqual(self.build(), 0)
+        canada = self.data("index.html", "MAP_DATA")["dx"]["Canada"]
+        self.assertEqual([entry["num"] for entry in canada["members"]], [21])
+        located = next(entry for entry in self.data("nearby.html", "GEO_DATA") if entry["num"] == 21)
+        self.assertEqual((located["grid"], located["lat"], located["lon"]), ("FN03", 43.5, -79))
+        outbreak = next(entry for entry in self.data("outbreak.html", "OUTBREAK_DATA") if entry["num"] == 21)
+        self.assertEqual((outbreak["state"], outbreak["dx"]), (None, "Canada"))
+        self.assertIn("BKG #21 (Canada OG)", (self.dist / "members.txt").read_text())
+
     def test_null_photo_removes_old_assets_and_offline_origin_is_checked(self):
         self.assertEqual(self.build(), 0)
         previous = (self.dist / "index.html").read_bytes()
-        self.assertNotEqual(self.build(["--asset-origin", "https://other.fixture.invalid/export"]), 0)
+        self.assertNotEqual(self.build(extra=("--asset-origin", "https://other.fixture.invalid/export")), 0)
         self.assertEqual((self.dist / "index.html").read_bytes(), previous)
         self.envelope["members"][0]["photo"] = None
-        json_build.rehash(self.envelope)
         self.write_roster()
         self.assertEqual(self.build(), 0)
         self.assertFalse(list((self.dist / "images").rglob("*.webp")))
@@ -162,18 +149,16 @@ class PublisherV2Tests(unittest.TestCase):
         original = nearby.read_text()
         nearby.write_text(original.replace('"grid":"EN61AB"', '"grid":"EN61AC"'))
         with self.assertRaisesRegex(ValueError, "administration map locations"):
-            validate_dist(self.dist, source="json")
+            validate_dist(self.dist)
         nearby.write_text(original)
         photo = self.dist / f"images/mugshots/{self.photo['sha256']}.webp"
         photo.write_bytes(self.photo_bytes + b"extra")
         with self.assertRaisesRegex(ValueError, "photo bytes"):
-            validate_dist(self.dist, source="json")
+            validate_dist(self.dist)
 
-    def test_v2_is_explicit_and_contract_rejects_private_malformed_values(self):
+    def test_contract_rejects_invalid_or_unpublished_location_and_photo_metadata(self):
         text = json.dumps(self.envelope)
-        with self.assertRaisesRegex(ValueError, "Unsupported"):
-            roster_input.parse_roster_json(text)
-        envelope, members = roster_input.parse_roster_json(text, expected_version="2")
+        envelope, members = roster_input.parse_roster_json(text)
         self.assertEqual(envelope, self.envelope)
         self.assertIsNone(members[1]["map_location"])
         for target, key, value in (
@@ -190,19 +175,19 @@ class PublisherV2Tests(unittest.TestCase):
                 invalid = copy.deepcopy(self.envelope)
                 invalid["members"][0][target][key] = value
                 with self.assertRaises(ValueError):
-                    roster_input.parse_roster_json(json.dumps(json_build.rehash(invalid)), expected_version="2")
+                    roster_input.parse_roster_json(rehash(invalid))
         invalid = copy.deepcopy(self.envelope)
         invalid["members"][0]["photo"]["source_url"] = "private"
         with self.assertRaisesRegex(ValueError, "additional"):
-            roster_input.parse_roster_json(json.dumps(json_build.rehash(invalid)), expected_version="2")
+            roster_input.parse_roster_json(rehash(invalid))
         invalid = copy.deepcopy(self.envelope)
         invalid["members"][0]["callsign_history"] = ["N0FORMER"]
         with self.assertRaisesRegex(ValueError, "additional"):
-            roster_input.parse_roster_json(json.dumps(json_build.rehash(invalid)), expected_version="2")
+            roster_input.parse_roster_json(rehash(invalid))
         invalid = copy.deepcopy(self.envelope)
         invalid["members"][0]["photo"]["byte_length"] += 1
         with self.assertRaisesRegex(ValueError, "hash mismatch"):
-            roster_input.parse_roster_json(json.dumps(invalid), expected_version="2")
+            roster_input.parse_roster_json(json.dumps(invalid))
 
 
 class PublicAssetTests(unittest.TestCase):
@@ -256,10 +241,11 @@ class PublicAssetTests(unittest.TestCase):
 
     def test_verified_digest_still_rejects_untrusted_webp_metadata(self):
         metadata = b"private metadata"
-        chunk = b"XMP " + len(metadata).to_bytes(4, "little") + metadata + b"\x00"
+        pad = b"\x00" * (len(metadata) % 2)
+        chunk = b"XMP " + len(metadata).to_bytes(4, "little") + metadata + pad
         bad = self.data[:4] + (len(self.data) - 8 + len(chunk)).to_bytes(4, "little") + self.data[8:] + chunk
         photo = dict(self.photo, byte_length=len(bad), sha256=hashlib.sha256(bad).hexdigest())
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "Unusable public WebP photo"):
             roster_assets.verify_asset(bad, photo)
 
     def test_lossless_admin_webp_is_accepted_without_reencoding(self):

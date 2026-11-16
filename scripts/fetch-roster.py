@@ -15,10 +15,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True,
                         help="private snapshot file outside the checkout and published output")
-    parser.add_argument("--schema-version", choices=("1", "2"), default="1",
-                        help="explicit public export contract (default: 1)")
     parser.add_argument("--cache-dir", type=Path,
-                        help="optional version-specific conditional GET cache outside the checkout")
+                        help="optional conditional GET cache outside the checkout")
     args = parser.parse_args(argv)
     try:
         destination = args.output.resolve()
@@ -30,11 +28,9 @@ def main(argv=None) -> int:
             if cache.is_relative_to(root) or root.is_relative_to(cache) or destination.is_relative_to(cache):
                 raise ValueError("Roster cache must be outside the checkout and separate from the snapshot")
         source = destination.with_name(destination.stem + "-source" + destination.suffix)
-        text = read_roster_json(expected_version=args.schema_version, cache_dir=args.cache_dir,
-                                exclude_invalid_callsigns=True)
+        text = read_roster_json(cache_dir=args.cache_dir, exclude_invalid_callsigns=True)
         exclusions = []
-        envelope, members = parse_roster_json(text, expected_version=args.schema_version,
-                                               exclude_invalid_callsigns=True, exclusions=exclusions)
+        envelope, members = parse_roster_json(text, exclude_invalid_callsigns=True, exclusions=exclusions)
         original = json.loads(text)
         publication = json.dumps(envelope, ensure_ascii=False, indent=2) + "\n" if exclusions else text
         destination.parent.mkdir(parents=True, exist_ok=True)

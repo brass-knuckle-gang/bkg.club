@@ -1,6 +1,7 @@
-"""Offline verification of the exact upstream public roster v1 contract."""
+"""Offline verification of the exact upstream public roster V2 contract."""
 
 import copy
+from email.message import Message
 import hashlib
 import http.client
 import json
@@ -27,7 +28,7 @@ def rehash(envelope):
 
 class RosterContractTests(unittest.TestCase):
     def setUp(self):
-        self.text = (FIXTURES / "fixtures/roster-v1.json").read_text()
+        self.text = (FIXTURES / "fixtures/roster-v2.json").read_text()
         self.envelope = json.loads(self.text)
 
     def assert_invalid(self, envelope, message):
@@ -52,7 +53,7 @@ class RosterContractTests(unittest.TestCase):
 
     def test_empty_upstream_fixture_fails_closed(self):
         with self.assertRaisesRegex(ValueError, "no active members"):
-            roster_input.parse_roster_json((FIXTURES / "fixtures/empty-v1.json").read_text())
+            roster_input.parse_roster_json((FIXTURES / "fixtures/empty-v2.json").read_text())
 
     def test_reviewed_values_are_preserved_without_identity_normalization(self):
         row = self.envelope["members"][1]
@@ -88,7 +89,7 @@ class RosterContractTests(unittest.TestCase):
                     else:
                         del value["generated_at" if target == "envelope" else "name" if target == "member" else "region_label"]
                     self.assert_invalid(invalid, "missing or additional")
-        self.envelope["schema_version"] = "2"
+        self.envelope["schema_version"] = "1"
         self.assert_invalid(self.envelope, "Unsupported")
 
     def test_members_require_unique_sorted_positive_safe_integer_numbers(self):
@@ -227,7 +228,7 @@ class RosterContractTests(unittest.TestCase):
                 roster_input.parse_roster_json(json.dumps(invalid))
 
     def test_json_parser_rejects_duplicates_nonfinite_and_bad_shapes(self):
-        invalid_texts = ["", "[]", "null", "{}", "{", self.text.replace('"schema_version": "1"', '"schema_version": "1", "schema_version": "1"'),
+        invalid_texts = ["", "[]", "null", "{}", "{", self.text.replace('"schema_version": "2"', '"schema_version": "2", "schema_version": "2"'),
                          self.text.replace('"callsign": "N0SYN1"', '"callsign": "N0SYN1", "callsign": "N0SYN1"'),
                          self.text.replace('"bkg_number": 1,', '"bkg_number": NaN,', 1)]
         for text in invalid_texts:
@@ -245,6 +246,7 @@ class FakeResponse:
     def __init__(self, body, status=200):
         self.body = body
         self.status = status
+        self.headers = Message()
         self.read_limit = None
 
     def __enter__(self):
@@ -263,9 +265,9 @@ class FakeResponse:
 
 class RosterReadTests(unittest.TestCase):
     def setUp(self):
-        self.body = (FIXTURES / "fixtures/roster-v1.json").read_bytes()
+        self.body = (FIXTURES / "fixtures/roster-v2.json").read_bytes()
         self.environment = {
-            "ROSTER_EXPORT_URL": "https://roster.fixture.invalid/api/roster/export",
+            "ROSTER_EXPORT_URL": "https://roster.fixture.invalid/api/roster/export/v2",
             "CF_ACCESS_CLIENT_ID": "fixture-client.access",
             "CF_ACCESS_CLIENT_SECRET": "fixture-secret-do-not-log",
         }

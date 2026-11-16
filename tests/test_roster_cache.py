@@ -26,14 +26,14 @@ class RosterCacheTests(unittest.TestCase):
         response.headers["ETag"] = etag or self.etag
         return response
 
-    def read(self, response, *, url=None, version="2", exclude_invalid_callsigns=False):
+    def read(self, response, *, url=None, exclude_invalid_callsigns=False):
         with patch.object(roster_input.urllib.request, "build_opener") as opener:
             if isinstance(response, Exception):
                 opener.return_value.open.side_effect = response
             else:
                 opener.return_value.open.return_value = response
             text = roster_input.read_roster_json(url=url or self.url, environ={},
-                                                 expected_version=version, cache_dir=self.cache,
+                                                 cache_dir=self.cache,
                                                  exclude_invalid_callsigns=exclude_invalid_callsigns)
             self.request = opener.return_value.open.call_args.args[0]
             return text
@@ -58,7 +58,7 @@ class RosterCacheTests(unittest.TestCase):
         self.text = json.dumps(original, ensure_ascii=False)
         self.etag = f'W/"{original["content_hash"]}"'
         self.assertEqual(self.read(self.response(), exclude_invalid_callsigns=True), self.text)
-        projected, _ = roster_input.parse_roster_json(self.text, expected_version="2", exclude_invalid_callsigns=True)
+        projected, _ = roster_input.parse_roster_json(self.text, exclude_invalid_callsigns=True)
         self.assertNotEqual(projected["content_hash"], original["content_hash"])
         self.assertEqual(self.read(self.not_modified(), exclude_invalid_callsigns=True), self.text)
         self.assertEqual(self.request.get_header("If-none-match"), self.etag)
@@ -67,23 +67,22 @@ class RosterCacheTests(unittest.TestCase):
     def test_corrupt_or_wrong_version_cache_forces_unconditional_fetch(self):
         self.read(self.response())
         original = json.loads((self.cache / "v2.json").read_text())
+        wrong_version = json.loads(self.text)
+        wrong_version["schema_version"] = "1"
+        wrong_version["content_hash"] = roster_input.roster_content_hash(wrong_version)
         for text in ("broken", original["snapshot"].replace("Synthetic First", "Corrupted"),
-                     (FIXTURES / "fixtures/roster-v1.json").read_text()):
+                     json.dumps(wrong_version)):
             cached = dict(original, snapshot=text)
             (self.cache / "v2.json").write_text(json.dumps(cached))
             self.assertEqual(self.read(self.response()), self.text)
             self.assertIsNone(self.request.get_header("If-none-match"))
 
-    def test_changed_endpoint_and_separate_v1_cache_do_not_send_v2_etag(self):
+    def test_changed_endpoint_does_not_send_another_endpoints_etag(self):
         self.read(self.response())
         self.read(self.response(), url=self.url.replace("public.", "other."))
         self.assertIsNone(self.request.get_header("If-none-match"))
-        v1 = (FIXTURES / "fixtures/roster-v1.json").read_text()
-        etag = f'W/"{json.loads(v1)["content_hash"]}"'
-        self.assertEqual(self.read(self.response(v1, etag), version="1"), v1)
+        self.read(self.response())
         self.assertIsNone(self.request.get_header("If-none-match"))
-        self.assertTrue((self.cache / "v1.json").is_file())
-        self.assertTrue((self.cache / "v2.json").is_file())
 
     def test_unsolicited_or_mismatched_304_fails_closed(self):
         with self.assertRaisesRegex(ValueError, "matching validated cache"):

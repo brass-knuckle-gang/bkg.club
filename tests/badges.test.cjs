@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 const html = fs.readFileSync(path.join(__dirname, '../badges.html'), 'utf8');
 const controller = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-  .map(match => match[1]).find(source => source.includes('const ROSTER_URLS'));
+  .map(match => match[1]).find(source => source.includes('const ROSTER_URL ='));
 
 function fixture() {
   return {schema_version: '2', generated_at: '2026-10-28T12:00:00Z', members: [
@@ -64,26 +64,32 @@ test('live V2 fetch reads the published roster and keeps every title', async () 
   assert.equal(elements.get('#rosterCount').textContent, '2 members · 2 OG titles');
 });
 
-test('the live V1 rollback snapshot and pasted and uploaded exports use the same projection', async () => {
+test('pasting and uploading support V2 snapshots and reject V1 without replacing the roster', async () => {
   const {context, run, json, elements} = harness();
-  const urls = [];
-  const v1 = {...fixture(), schema_version: '1'};
-  context.fetch = async url => {
-    urls.push(url);
-    return url === 'data/v1/roster.json' ? {ok: true, json: async () => v1} : {ok: false, status: 404};
+  const paste = snapshot => {
+    context.document.querySelector('#pasteJson').value = JSON.stringify(snapshot);
+    elements.get('#applyJson').listeners.click();
   };
-  await run('pullLive()');
-  assert.deepEqual(urls, ['data/v2/roster.json', 'data/v1/roster.json']);
-  assert.deepEqual(json('titlesFor(ROSTER.members[0]).map(title => title.key)'), ['CA:AB', 'QTH:CANADA']);
-  context.document.querySelector('#pasteJson').value = JSON.stringify(fixture());
-  elements.get('#applyJson').listeners.click();
-  assert.deepEqual(json('titlesFor(ROSTER.members[0]).map(title => title.key)'), ['CA:AB', 'QTH:CANADA']);
+  const upload = async snapshot => {
+    const file = {text: async () => JSON.stringify(snapshot)};
+    elements.get('#fileInput').listeners.change({target: {files: [file]}});
+    await Promise.resolve();
+  };
+  const titleKeys = () => json('titlesFor(ROSTER.members[0]).map(title => title.key)');
+  const v2 = fixture();
+  v2.og_assignments.pop();
+  paste(v2);
+  assert.deepEqual(titleKeys(), ['CA:AB']);
   assert.match(elements.get('#refreshNote').textContent, /roster you loaded/);
-  v1.og_assignments.pop();
-  const file = {text: async () => JSON.stringify(v1)};
-  elements.get('#fileInput').listeners.change({target: {files: [file]}});
-  await Promise.resolve();
-  assert.deepEqual(json('titlesFor(ROSTER.members[0]).map(title => title.key)'), ['CA:AB']);
+  await upload(fixture());
+  assert.deepEqual(titleKeys(), ['CA:AB', 'QTH:CANADA']);
+
+  const v1 = {...v2, schema_version: '1'};
+  for (const load of [paste, upload]) {
+    await load(v1);
+    assert.deepEqual(titleKeys(), ['CA:AB', 'QTH:CANADA']);
+    assert.equal(elements.get('#toast').textContent, 'Load a V2 roster export');
+  }
 });
 
 test('choosing a title updates the preview and download name, while ordinary members have no title', () => {
@@ -236,7 +242,7 @@ test('ZIP filenames remain distinct when region keys have the same slug', async 
   assert.match(files.get('bkg-ve6syn-qth-timor-leste-og-2.svg'), /VE6SYN — TIMOR-LESTE OG/);
 });
 
-test('invalid snapshots preserve the last usable roster after both live URLs fail', async () => {
+test('invalid snapshots preserve the last usable roster without a live fallback', async () => {
   const {context, run, json, elements} = harness();
   const before = json('ROSTER');
   const invalid = [null, {...fixture(), schema_version: '3'}, {...fixture(), og_assignments: null}];
@@ -248,11 +254,12 @@ test('invalid snapshots preserve the last usable roster after both live URLs fai
     assert.deepEqual(json('ROSTER'), before);
   }
   const urls = [];
-  context.fetch = async url => { urls.push(url); return {ok: true, json: async () => invalid[1]}; };
+  const v1 = {...fixture(), schema_version: '1'};
+  context.fetch = async url => { urls.push(url); return {ok: true, json: async () => v1}; };
   await run('pullLive()');
-  assert.deepEqual(urls, ['data/v2/roster.json', 'data/v1/roster.json']);
+  assert.deepEqual(urls, ['data/v2/roster.json']);
   assert.deepEqual(json('ROSTER'), before);
-  assert.match(elements.get('#refreshNote').textContent, /Load a V1 or V2 roster export/);
+  assert.match(elements.get('#refreshNote').textContent, /Load a V2 roster export/);
 });
 
 test('loading an empty roster clears a previously selected member and title', () => {
