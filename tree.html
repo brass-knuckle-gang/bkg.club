@@ -236,15 +236,22 @@
                 m.children.forEach(c => ul.appendChild(nodeHtml(c)));
                 li.appendChild(ul);
 
-                const btn = li.querySelector('.node-toggle');
-                btn.addEventListener('click', () => {
-                    const collapsed = li.classList.toggle('node-collapsed');
-                    btn.setAttribute('aria-expanded', String(!collapsed));
-                    btn.setAttribute('aria-label',
-                        (collapsed ? 'Expand ' : 'Collapse ') + m.call + '’s downline');
-                });
+                const toggle = { li, btn: li.querySelector('.node-toggle'), call: m.call };
+                toggles.push(toggle);
+                toggle.btn.addEventListener('click', () =>
+                    setCollapsed(toggle, !li.classList.contains('node-collapsed')));
             }
             return li;
+        }
+
+        // Every subtree toggle, so collapsing one or all keeps its spoken
+        // label ("Expand …" / "Collapse …") in step with its state.
+        const toggles = [];
+        function setCollapsed(toggle, collapsed) {
+            toggle.li.classList.toggle('node-collapsed', collapsed);
+            toggle.btn.setAttribute('aria-expanded', String(!collapsed));
+            toggle.btn.setAttribute('aria-label',
+                (collapsed ? 'Expand ' : 'Collapse ') + toggle.call + '’s downline');
         }
 
         roots.forEach(r => rootEl.appendChild(nodeHtml(r)));
@@ -252,12 +259,7 @@
         // ---- Expand / collapse all ----
         toolbarEl.style.display = 'flex';
         function setAll(collapsed) {
-            rootEl.querySelectorAll('.tree-node').forEach(li => {
-                const btn = li.querySelector(':scope > .node-card > .node-toggle');
-                if (!btn || btn.classList.contains('leaf')) return;
-                li.classList.toggle('node-collapsed', collapsed);
-                btn.setAttribute('aria-expanded', String(!collapsed));
-            });
+            toggles.forEach(toggle => setCollapsed(toggle, collapsed));
         }
         document.getElementById('expandAll').addEventListener('click', () => setAll(false));
         document.getElementById('collapseAll').addEventListener('click', () => setAll(true));

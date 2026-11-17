@@ -1610,6 +1610,8 @@ body {
 .form-confirm button:disabled { opacity: 0.5; cursor: default; }
 .form-success .receipt-line code { overflow-wrap: anywhere; }
 .recruit-form [hidden], .form-confirm [hidden] { display: none !important; }
+/* Headings take focus when their panel replaces the form; they are not controls. */
+.form-confirm h2:focus, .form-success h2:focus { outline: none; }
 @media (max-width: 600px) {
     .confirm-summary { grid-template-columns: minmax(0, 1fr); gap: 4px; }
     .confirm-summary dd { margin-bottom: 10px; }

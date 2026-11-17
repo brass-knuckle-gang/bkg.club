@@ -276,7 +276,24 @@
         if (other && byCall[other.dataset.call.toUpperCase()]) open(byCall[other.dataset.call.toUpperCase()]);
     });
     scrim.addEventListener("click", close);
-    document.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
+    // While the sheet is open, Tab and Shift+Tab cycle through its controls
+    // instead of reaching the page behind the scrim. Opening another member
+    // re-renders the sheet, so its controls are looked up on each key press.
+    var FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    document.addEventListener("keydown", function (e) {
+        if (sheet.hidden) return;
+        if (e.key === "Escape") return close();
+        if (e.key !== "Tab") return;
+        var items = sheet.querySelectorAll(FOCUSABLE);
+        if (!items.length) return;
+        var first = items[0], last = items[items.length - 1];
+        var at = document.activeElement;
+        var outside = !sheet.contains(at) || at === sheet;
+        if (e.shiftKey ? at === first || outside : at === last || outside) {
+            e.preventDefault();
+            (e.shiftKey ? last : first).focus();
+        }
+    });
 
     root.addEventListener("click", function (e) {
         var card = e.target.closest(".rl-fcard");
