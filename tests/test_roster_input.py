@@ -226,8 +226,14 @@ class RosterContractTests(unittest.TestCase):
         rounded = copy.deepcopy(self.envelope)
         rounded["members"][0]["map_location"].update(lat=41.0625, lon=-87.9583)
         roster_input.parse_roster_json(rehash(rounded))
+        javascript_center = copy.deepcopy(self.envelope)
+        javascript_center["members"][0]["map_location"].update(
+            grid="JJ00AC", lat=0.10416666666666666, lon=0.041666666666666664,
+        )
+        roster_input.parse_roster_json(rehash(javascript_center))
         changes = (
             (1, {"lat": 41.0625 + 0.0002}),  # 22 m from the center
+            (1, {"lat": 41.0625901}),  # inside the former tolerance
             (1, {"lon": -87.9}),  # inside EN61, outside EN61AB
             (1, {"grid": "EN61AC"}),  # a neighbour's grid with this center
             (21, dict(zip(("lat", "lon"), roster_input.grid_center("FN03AA")))),  # subsquare inside FN03

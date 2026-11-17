@@ -24,9 +24,8 @@ EXPORT_TIMEOUT_SECONDS = 30
 ENVELOPE_KEYS = {"schema_version", "generated_at", "content_hash", "members", "og_assignments"}
 MEMBER_KEYS = {"bkg_number", "callsign", "name", "qth", "qso_date", "sponsor_bkg_number", "map_location", "photo"}
 GRID_PATTERN = re.compile(r"[A-R]{2}[0-9]{2}(?:[A-X]{2})?\Z")
-# Degrees, about 11 m: accepts a center rounded to four decimal places (as V1
-# published them) but nothing else inside a grid that is kilometres across.
-GRID_CENTER_TOLERANCE = 1e-4
+# Account for floating-point differences between the publisher and builder.
+GRID_CENTER_TOLERANCE = 1e-12
 PHOTO_KEYS = {"url", "sha256", "content_type", "byte_length"}
 MAX_PUBLIC_PHOTO_BYTES = 1024 * 1024
 OG_KEYS = {"region_key", "region_label", "bkg_number"}
@@ -96,12 +95,15 @@ def _map_location(value, number: int) -> None:
         coordinate = value[key]
         _require(type(coordinate) in (int, float) and math.isfinite(coordinate) and abs(coordinate) <= limit,
                  f"Invalid map_location {key}")
-    # The contract publishes only the grid's center. Anything else is a more
-    # precise position than the member's public grid, or a dot drawn somewhere
-    # other than the grid it is grouped and searched under.
-    for coordinate, center in zip((value["lat"], value["lon"]), grid_center(grid)):
-        _require(math.isclose(coordinate, center, rel_tol=0, abs_tol=GRID_CENTER_TOLERANCE),
-                 f"map_location coordinates are not the center of {grid} (BKG #{number})")
+    coordinates = (value["lat"], value["lon"])
+    center = grid_center(grid)
+    rounded_center = tuple(round(axis, 4) for axis in center)
+    at_center = all(
+        math.isclose(coordinate, axis, rel_tol=0, abs_tol=GRID_CENTER_TOLERANCE)
+        for coordinate, axis in zip(coordinates, center)
+    )
+    _require(at_center or coordinates == rounded_center,
+             f"map_location coordinates are not the center of {grid} (BKG #{number})")
 
 
 def _photo(value) -> None:
