@@ -52,10 +52,10 @@
         rejectedAttempt = null;
         writeStorage('sessionStorage', PENDING_KEY, value);
     }
-    function error(message) {
+    function error(message, { scroll = true } = {}) {
         errorBox.textContent = message;
         errorBox.classList.add('show');
-        errorBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        if (scroll) errorBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
     // Focus follows the user's actions: the panel that replaces the form, or
     // the field the intake rejected. Restoring a saved state on page load
@@ -294,7 +294,6 @@
                 inFlight = false;
                 showForm();
                 markFields(data.error && data.error.fields);
-                focusAfterRejection();
             }
             let message;
             if (code === 'invalid_request') message = 'Check the highlighted fields, including callsigns and UTC date/time.';
@@ -305,7 +304,8 @@
                 message = 'Intake is temporarily unavailable or busy. ' + (seconds > 0 ? 'Retry in about ' + seconds + ' seconds.' : 'Try again shortly.');
             } else message = 'The server could not confirm this submission. Retry the original details or contact k7bkgang@gmail.com.';
             if (pendingAttempt && code !== 'idempotency_conflict') message += ' Your original details and submission key are preserved for a safe retry.';
-            error(message);
+            error(message, { scroll: !editable });
+            if (editable) focusAfterRejection();
         } catch (_) {
             error('No receipt came back. Your submission may have arrived. Retry the original details to recover its receipt, or contact k7bkgang@gmail.com.');
         } finally {

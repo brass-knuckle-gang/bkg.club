@@ -173,12 +173,13 @@ function recruitPage({ stored = null, intake } = {}) {
         const listeners = new Map();
         const attributes = new Map();
         return {
-            id, classes, listeners, attributes, value: '', style: {}, dataset: {}, options: [],
+            id, classes, listeners, attributes, value: '', style: {}, dataset: {}, options: [], scrolls: 0,
             classList: { add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c) },
             addEventListener: (event, callback) => listeners.set(event, callback),
             setAttribute: (name, value) => attributes.set(name, String(value)),
             removeAttribute: name => attributes.delete(name),
-            setCustomValidity() {}, replaceChildren() {}, append() {}, appendChild() {}, scrollIntoView() {}, reset() {},
+            setCustomValidity() {}, replaceChildren() {}, append() {}, appendChild() {}, reset() {},
+            scrollIntoView() { this.scrolls++; },
             focus() { document.activeElement = this; },
         };
     };
@@ -254,11 +255,14 @@ test('a rejected intake focuses the first highlighted field, or the review butto
     assert.equal(page.el('recruitCall').attributes.get('aria-invalid'), 'true');
     assert.equal(page.el('qsoTime').attributes.get('aria-invalid'), 'true');
     assert.equal(page.document.activeElement, page.el('recruitCall'));
+    assert.ok(page.el('formError').classes.has('show'));
+    assert.equal(page.el('formError').scrolls, 0);
 
     page = recruitPage({ intake: reply(422, { error: { code: 'turnstile_failed' } }) });
     page.review();
     await page.send();
     assert.equal(page.document.activeElement, page.el('submitBtn'));
+    assert.equal(page.el('formError').scrolls, 0);
 });
 
 test('an uncertain send keeps focus on the send button for a safe retry', async () => {
@@ -268,6 +272,7 @@ test('an uncertain send keeps focus on the send button for a safe retry', async 
     await page.send();
     assert.ok(page.el('formConfirm').classes.has('show'));
     assert.equal(page.document.activeElement, page.el('confirmSend'));
+    assert.equal(page.el('formError').scrolls, 1);
 });
 
 test('restoring a saved attempt on page load does not move focus', () => {
