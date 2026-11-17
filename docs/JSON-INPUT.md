@@ -44,7 +44,7 @@ source bytes and source ETag; they never send a projection hash upstream.
 ## Administration-owned v2 publishing
 
 Each member has nullable `map_location` and `photo` fields. A location
-contains the accepted four- or six-character public grid and its center
+contains the accepted four-, six-, or eight-character public grid and its center
 coordinates. Coordinates must match the computed center or its representation
 rounded to four decimal places.
 A null location suppresses the member's dot. Nearby and outbreak

@@ -449,15 +449,17 @@
             if (lastPoint) update(lastPoint[0], lastPoint[1]);
         });
 
-        // ---- Grid square input, e.g. CN85 or CN85nu ----
+        // ---- Maidenhead locator input, e.g. CN85, CN85nu, or CN85nu12 ----
         function gridToLatLon(g) {
-            if (!/^[A-Ra-r]{2}[0-9]{2}([A-Xa-x]{2})?$/.test(g)) return null;
+            if (!/^[A-Ra-r]{2}[0-9]{2}(?:[A-Xa-x]{2}(?:[0-9]{2})?)?$/.test(g)) return null;
             g = g.toUpperCase();
             let lon = (g.charCodeAt(0) - 65) * 20 - 180 + Number(g[2]) * 2;
             let lat = (g.charCodeAt(1) - 65) * 10 - 90 + Number(g[3]);
-            if (g.length === 6) {
-                lon += (g.charCodeAt(4) - 65) * (2 / 24) + 1 / 24;
-                lat += (g.charCodeAt(5) - 65) * (1 / 24) + 0.5 / 24;
+            if (g.length > 4) {
+                const lonOffset = g.length === 8 ? (Number(g[6]) + 0.5) / 120 : 1 / 24;
+                const latOffset = g.length === 8 ? (Number(g[7]) + 0.5) / 240 : 1 / 48;
+                lon += (g.charCodeAt(4) - 65) * (2 / 24) + lonOffset;
+                lat += (g.charCodeAt(5) - 65) * (1 / 24) + latOffset;
             } else {
                 lon += 1;
                 lat += 0.5;

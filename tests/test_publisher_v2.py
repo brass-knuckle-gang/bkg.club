@@ -42,6 +42,25 @@ class PublisherV2Tests(PublicationBuildFixture):
         self.assertEqual(len(list((self.dist / "images/mugshots").iterdir())), 1)
         self.assertFalse((self.dist / "images/mugshots-override").exists())
 
+    def test_v2_publishes_eight_character_grid_center(self):
+        location = {"grid": "FN31PR12", "lat": 41.71875, "lon": -72.7375}
+        self.envelope["members"][0]["map_location"] = location
+        self.write_roster()
+        self.assertEqual(self.build(), 0)
+        validate_dist(self.dist)
+        published = json.loads((self.dist / "data/v2/roster.json").read_text(encoding="utf-8"))
+        self.assertEqual(published, self.envelope)
+        nearby = next(row for row in self.data("nearby.html", "GEO_DATA") if row["num"] == 1)
+        self.assertEqual({key: nearby[key] for key in location}, location)
+        outbreak = next(row for row in self.data("outbreak.html", "OUTBREAK_DATA") if row["num"] == 1)
+        self.assertEqual((outbreak["lat"], outbreak["lon"]), (location["lat"], location["lon"]))
+
+        invalid = copy.deepcopy(self.envelope)
+        lat, lon = roster_input.grid_center("FN31PR")
+        invalid["members"][0]["map_location"].update(lat=lat, lon=lon)
+        with self.assertRaisesRegex(ValueError, "not the center of FN31PR12"):
+            roster_input.parse_roster_json(rehash(invalid))
+
     def test_bad_callsign_is_excluded_consistently_from_every_public_output(self):
         self.envelope["members"][0]["callsign"] = "KCØDWZ"
         self.write_roster()
@@ -162,7 +181,7 @@ class PublisherV2Tests(PublicationBuildFixture):
         self.assertEqual(envelope, self.envelope)
         self.assertIsNone(members[1]["map_location"])
         for target, key, value in (
-            ("map_location", "grid", "en61ab"), ("map_location", "grid", "EN61AB12"),
+            ("map_location", "grid", "en61ab"), ("map_location", "grid", "EN61AB1"),
             ("map_location", "lat", True), ("map_location", "lon", 181),
             ("photo", "byte_length", True), ("photo", "byte_length", 1024 * 1024 + 1),
             ("photo", "sha256", "bad"), ("photo", "content_type", "image/png"),

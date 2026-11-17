@@ -23,7 +23,7 @@ MAX_BKG_NUMBER = 9007199254740991
 EXPORT_TIMEOUT_SECONDS = 30
 ENVELOPE_KEYS = {"schema_version", "generated_at", "content_hash", "members", "og_assignments"}
 MEMBER_KEYS = {"bkg_number", "callsign", "name", "qth", "qso_date", "sponsor_bkg_number", "map_location", "photo"}
-GRID_PATTERN = re.compile(r"[A-R]{2}[0-9]{2}(?:[A-X]{2})?\Z")
+GRID_PATTERN = re.compile(r"[A-R]{2}[0-9]{2}(?:[A-X]{2}(?:[0-9]{2})?)?\Z")
 # Account for floating-point differences between the publisher and builder.
 GRID_CENTER_TOLERANCE = 1e-12
 PHOTO_KEYS = {"url", "sha256", "content_type", "byte_length"}
@@ -77,12 +77,14 @@ def _invalid_constant(_value):
 
 
 def grid_center(grid: str) -> tuple[float, float]:
-    """(lat, lon) of the center of a valid 4- or 6-character Maidenhead grid."""
+    """(lat, lon) of the center of a valid 4-, 6-, or 8-character Maidenhead grid."""
     lat = -90 + (ord(grid[1]) - ord("A")) * 10 + int(grid[3])
     lon = -180 + (ord(grid[0]) - ord("A")) * 20 + int(grid[2]) * 2
     if len(grid) == 4:
         return lat + 0.5, lon + 1
-    return lat + (ord(grid[5]) - ord("A") + 0.5) / 24, lon + (ord(grid[4]) - ord("A") + 0.5) / 12
+    lat_offset = (int(grid[7]) + 0.5) / 10 if len(grid) == 8 else 0.5
+    lon_offset = (int(grid[6]) + 0.5) / 10 if len(grid) == 8 else 0.5
+    return lat + (ord(grid[5]) - ord("A") + lat_offset) / 24, lon + (ord(grid[4]) - ord("A") + lon_offset) / 12
 
 
 def _map_location(value, number: int) -> None:

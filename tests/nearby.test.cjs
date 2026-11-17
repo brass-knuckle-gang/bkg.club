@@ -104,3 +104,11 @@ test('an older geocoder response cannot replace a newer member result', async ()
     await addressSearch;
     assert.match(page.status(), /Found N0SYN1/);
 });
+
+test('eight-character grid searches use the finer center locally', async () => {
+    const page = nearby({ mapped: [{ ...mappedMember, grid: 'FN31PR12', lat: 41.71875, lon: -72.7375 }] });
+    await page.submit('fn31pr12');
+    assert.equal(page.status(), 'Pin dropped: FN31PR12');
+    assert.match(page.results(), /0\.0 mi/);
+    assert.deepEqual(page.requests, []);
+});

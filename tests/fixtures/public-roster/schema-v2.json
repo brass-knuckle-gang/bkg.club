@@ -150,8 +150,8 @@
       "properties": {
         "grid": {
           "type": "string",
-          "pattern": "^[A-R]{2}[0-9]{2}([A-X]{2})?$",
-          "description": "Four characters only when finer information is unavailable; six characters preserve the subsquare."
+          "pattern": "^[A-R]{2}[0-9]{2}([A-X]{2}([0-9]{2})?)?$",
+          "description": "Four characters identify a square, six identify a subsquare, and eight preserve an explicitly supplied finer locator."
         },
         "lat": {
           "type": "number",
