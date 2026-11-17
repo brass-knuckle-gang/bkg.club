@@ -45,7 +45,9 @@ source bytes and source ETag; they never send a projection hash upstream.
 
 Each member has nullable `map_location` and `photo` fields. A location
 contains the accepted four- or six-character public grid and its center
-coordinates. A null location suppresses the member's dot. Nearby and outbreak
+coordinates. Coordinates must match the computed center or its representation
+rounded to four decimal places.
+A null location suppresses the member's dot. Nearby and outbreak
 use the exact exported coordinates, and reviewed QTH supplies territory labels.
 
 A photo contains an anonymous HTTPS administration asset URL, its SHA-256,

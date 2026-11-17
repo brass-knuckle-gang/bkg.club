@@ -14,7 +14,7 @@ import math
 import random
 from pathlib import Path
 
-html = (Path(__file__).resolve().parent.parent / "index.html").read_text()
+html = (Path(__file__).resolve().parent.parent / "index.html").read_text(encoding="utf-8")
 D = math.pi/180
 # (lat, lon) -> (x, y) control points read off the state-corner vertices
 CP = [

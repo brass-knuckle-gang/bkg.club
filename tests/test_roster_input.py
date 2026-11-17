@@ -28,7 +28,7 @@ def rehash(envelope):
 
 class RosterContractTests(unittest.TestCase):
     def setUp(self):
-        self.text = (FIXTURES / "fixtures/roster-v2.json").read_text()
+        self.text = (FIXTURES / "fixtures/roster-v2.json").read_text(encoding="utf-8")
         self.envelope = json.loads(self.text)
 
     def assert_invalid(self, envelope, message):
@@ -53,7 +53,7 @@ class RosterContractTests(unittest.TestCase):
 
     def test_empty_upstream_fixture_fails_closed(self):
         with self.assertRaisesRegex(ValueError, "no active members"):
-            roster_input.parse_roster_json((FIXTURES / "fixtures/empty-v2.json").read_text())
+            roster_input.parse_roster_json((FIXTURES / "fixtures/empty-v2.json").read_text(encoding="utf-8"))
 
     def test_reviewed_values_are_preserved_without_identity_normalization(self):
         row = self.envelope["members"][1]
@@ -216,6 +216,34 @@ class RosterContractTests(unittest.TestCase):
             else:
                 invalid["og_assignments"].reverse()
             self.assert_invalid(invalid, "unique ascending region_key")
+
+    def test_map_locations_must_be_their_grid_center(self):
+        located = {row["bkg_number"]: row["map_location"] for row in self.envelope["members"] if row["map_location"]}
+        self.assertEqual({location["grid"] for location in located.values()}, {"EN61AB", "FN03", "FN33AA"})
+        for location in located.values():
+            # The upstream fixture's JavaScript centers match exactly.
+            self.assertEqual(roster_input.grid_center(location["grid"]), (location["lat"], location["lon"]))
+        rounded = copy.deepcopy(self.envelope)
+        rounded["members"][0]["map_location"].update(lat=41.0625, lon=-87.9583)
+        roster_input.parse_roster_json(rehash(rounded))
+        javascript_center = copy.deepcopy(self.envelope)
+        javascript_center["members"][0]["map_location"].update(
+            grid="JJ00AC", lat=0.10416666666666666, lon=0.041666666666666664,
+        )
+        roster_input.parse_roster_json(rehash(javascript_center))
+        changes = (
+            (1, {"lat": 41.0625 + 0.0002}),  # 22 m from the center
+            (1, {"lat": 41.0625901}),  # inside the former tolerance
+            (1, {"lon": -87.9}),  # inside EN61, outside EN61AB
+            (1, {"grid": "EN61AC"}),  # a neighbour's grid with this center
+            (21, dict(zip(("lat", "lon"), roster_input.grid_center("FN03AA")))),  # subsquare inside FN03
+        )
+        for number, change in changes:
+            with self.subTest(number=number, change=change):
+                invalid = copy.deepcopy(self.envelope)
+                location = next(row for row in invalid["members"] if row["bkg_number"] == number)["map_location"]
+                location.update(change)
+                self.assert_invalid(invalid, rf"not the center of {location['grid']} \(BKG #{number}\)")
 
     def test_hash_corruption_rejected_without_returning_members(self):
         invalid = copy.deepcopy(self.envelope)

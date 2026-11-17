@@ -126,13 +126,13 @@ def validate_dist(output_dir):
         actual.add(rel)
     require(set(GAME_REQUIRED) <= actual, f"Missing game files: {sorted(set(GAME_REQUIRED) - actual)}")
     require(required <= actual, f"Missing public files: {sorted(required - actual)}")
-    require((output_dir / "CNAME").read_text().strip() == "www.bkg.club", "Unexpected production CNAME")
+    require((output_dir / "CNAME").read_text(encoding="utf-8").strip() == "www.bkg.club", "Unexpected production CNAME")
 
     pages = {}
     for rel in PUBLIC_FILES:
         if not rel.endswith(".html"):
             continue
-        html = (output_dir / rel).read_text()
+        html = (output_dir / rel).read_text(encoding="utf-8")
         require("<!doctype html>" in html.lower() and "</html>" in html.lower(), f"Incomplete page: {rel}")
         page = PageParser()
         page.feed(html)
@@ -225,7 +225,7 @@ def validate_dist(output_dir):
     require(len(set(mapped)) == len(mapped), "Duplicate map member")
     require(set(mapped) == {entry["call"] for entry in outbreak if entry.get("state") or entry.get("dx")}, "Map members differ from outbreak")
 
-    index = (output_dir / "index.html").read_text()
+    index = (output_dir / "index.html").read_text(encoding="utf-8")
     require(block(index, "<!-- MEMBER_COUNT:START -->", "<!-- MEMBER_COUNT:END -->").strip() == str(len(calls)), "Member count differs from roster")
     roster = PageParser()
     roster.feed(block(index, ROSTER_START, "<!-- ROSTER:END -->"))
@@ -240,7 +240,7 @@ def validate_dist(output_dir):
             verify_asset((output_dir / f"{PHOTO_DIR}/{photo['sha256']}.webp").read_bytes(), photo)
     card_numbers = [int(n) for n in re.findall(r'class="member-number">BKG #(\d+)</div>', block(index, ROSTER_START, "<!-- ROSTER:END -->"))]
     require(card_numbers == numbers + [max(numbers) + 1], "Roster member numbers differ from generated data")
-    notes = (output_dir / "members.txt").read_text()
+    notes = (output_dir / "members.txt").read_text(encoding="utf-8")
     require(notes.startswith("# BKG Callsign Notes for Ham2K PoLo\n"), "Invalid members.txt header")
     entries = [line for line in notes.splitlines() if line and not line.startswith("#")]
     parsed = [re.fullmatch(r"([A-Za-z0-9/]+) 🤜 (.*?) BKG #(\d+)(?: \([^\n]*\))?", line) for line in entries]

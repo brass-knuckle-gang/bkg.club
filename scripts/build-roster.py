@@ -528,11 +528,11 @@ def render_nearby_data(members: list[dict]) -> tuple[str, str]:
 
 def update_nearby(members: list[dict], output_dir: Path) -> None:
     """Inject both roster datasets into the Nearby page."""
-    html = NEARBY_PATH.read_text()
+    html = NEARBY_PATH.read_text(encoding="utf-8")
     geo, unmapped = render_nearby_data(members)
     html = replace_between(html, "<!-- GEO_DATA:START -->", "<!-- GEO_DATA:END -->", geo)
     html = replace_between(html, "<!-- UNMAPPED_MEMBERS:START -->", "<!-- UNMAPPED_MEMBERS:END -->", unmapped)
-    (output_dir / "nearby.html").write_text(html)
+    (output_dir / "nearby.html").write_text(html, encoding="utf-8")
 
 
 # Join Date cell formats seen (or plausible) on the roster sheet. Google
@@ -625,14 +625,14 @@ def render_outbreak_data(members: list[dict]) -> str:
 
 def update_outbreak(members: list[dict], output_dir: Path) -> None:
     """Inject the outbreak JSON from the source template into the public build."""
-    html = OUTBREAK_PATH.read_text()
+    html = OUTBREAK_PATH.read_text(encoding="utf-8")
     html = replace_between(
         html,
         "<!-- OUTBREAK_DATA:START -->",
         "<!-- OUTBREAK_DATA:END -->",
         render_outbreak_data(members),
     )
-    (output_dir / "outbreak.html").write_text(html)
+    (output_dir / "outbreak.html").write_text(html, encoding="utf-8")
 
 
 US_STATE_NAMES = {
@@ -689,7 +689,7 @@ def replace_between(html: str, start_marker: str, end_marker: str, replacement: 
 
 
 def update_index(members: list[dict], output_dir: Path) -> None:
-    html = INDEX_PATH.read_text()
+    html = INDEX_PATH.read_text(encoding="utf-8")
     layout = roster_layout()
     roster = render_roster_block(members, layout)
     html = replace_between(
@@ -716,19 +716,19 @@ def update_index(members: list[dict], output_dir: Path) -> None:
         "<!-- MAP_DATA:END -->",
         render_map_data(members),
     )
-    (output_dir / "index.html").write_text(html)
+    (output_dir / "index.html").write_text(html, encoding="utf-8")
 
 
 def update_tree(members: list[dict], output_dir: Path) -> None:
     """Inject the downline JSON from the source template into the public build."""
-    html = TREE_PATH.read_text()
+    html = TREE_PATH.read_text(encoding="utf-8")
     html = replace_between(
         html,
         "<!-- DOWNLINE_DATA:START -->",
         "<!-- DOWNLINE_DATA:END -->",
         render_downline_data(members),
     )
-    (output_dir / "tree.html").write_text(html)
+    (output_dir / "tree.html").write_text(html, encoding="utf-8")
 
 
 def render_members_txt(members: list[dict]) -> str:
@@ -800,7 +800,7 @@ def build(output_dir: Path, *, roster_json: Path | None = None,
     update_outbreak(members, output_dir)
     print(f"Updated {OUTBREAK_PATH.name}")
 
-    (output_dir / "members.txt").write_text(render_members_txt(members))
+    (output_dir / "members.txt").write_text(render_members_txt(members), encoding="utf-8")
     print("Wrote members.txt")
 
 
