@@ -24,9 +24,9 @@ The V2 build restores the `bkg-public-assets-v2-*` cache into `$RUNNER_TEMP/bkg-
 
 ### Build, validate, and deploy
 
-Run `scripts/build-roster.py --roster-json <saved-file> --asset-dir <external-assets> --output-dir dist`. The builder stages and validates the site before replacing output. The public allowlist in `scripts/site_contract.py` covers the nine pages, shared assets, the game and its source, `members.txt`, verified photos, and `data/v2/roster.json`.
+Run `scripts/build-roster.py --roster-json <saved-source-file> --asset-dir <external-assets> --output-dir dist`. The builder stages and validates the site before replacing output. It publishes the projection at `data/v2/roster.json` and the upstream response hash at `data/v2/roster-source-hash.txt`. The hash is a single `sha256:` line and changes when the upstream roster changes, including changes to members excluded from publication.
 
-The workflow runs `scripts/validate-site.py dist`, verifies HEAD again, and compares the published roster envelope with its saved input. It fingerprints the output using `scripts/site-fingerprint.py`, then compares the digest with the newest `bkg-deployed-v1-*` Actions cache. The cache name predates V2 and still stores the fingerprint of the last successful deploy. An unchanged scheduled run skips artifact upload and deploy and still saves the roster and photo caches. For a changed build, the deploy job publishes the validated Pages artifact. A failed build or upload leaves the current site in place.
+The workflow runs `scripts/validate-site.py dist`, verifies HEAD again, and compares the published roster envelope and source hash with their saved inputs. It fingerprints the output, including the source hash, using `scripts/site-fingerprint.py`, then compares the digest with the newest `bkg-deployed-v1-*` Actions cache. The cache name predates V2 and still stores the fingerprint of the last successful deploy. An unchanged scheduled run skips artifact upload and deploy and still saves the roster and photo caches. For a changed build, the deploy job publishes the validated Pages artifact. A failed build or upload leaves the current site in place.
 
 Run the offline checks that pull requests run, with Python 3.10+ and the pinned dependency (Pillow) installed, for example in a virtual environment:
 

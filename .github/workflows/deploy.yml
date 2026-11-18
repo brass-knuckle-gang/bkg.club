@@ -101,7 +101,7 @@ jobs:
           ROSTER_EXPORT_URL: ${{ secrets.ROSTER_EXPORT_V2_URL }}
         run: |
           python3 scripts/build-roster.py \
-            --roster-json "$RUNNER_TEMP/bkg-build/roster.json" \
+            --roster-json "$RUNNER_TEMP/bkg-build/roster-source.json" \
             --asset-dir "$RUNNER_TEMP/bkg-build/public-assets" \
             --output-dir dist
 
@@ -113,8 +113,15 @@ jobs:
           python3 - <<'PY_CHECK'
           import json, os
           from pathlib import Path
-          snapshot = Path(os.environ["RUNNER_TEMP"]) / "bkg-build/roster.json"
-          assert json.loads(snapshot.read_text(encoding="utf-8")) == json.loads(Path("dist/data/v2/roster.json").read_text(encoding="utf-8"))
+          inputs = Path(os.environ["RUNNER_TEMP"]) / "bkg-build"
+          snapshot = json.loads((inputs / "roster.json").read_text(encoding="utf-8"))
+          source = json.loads((inputs / "roster-source.json").read_text(encoding="utf-8"))
+          record = json.loads((inputs / "roster-record.json").read_text(encoding="utf-8"))
+          published = Path("dist/data/v2")
+          assert snapshot == json.loads((published / "roster.json").read_text(encoding="utf-8"))
+          source_hash = record["source_content_hash"]
+          assert source_hash == source["content_hash"]
+          assert (published / "roster-source-hash.txt").read_bytes() == (source_hash + "\n").encode("utf-8")
           PY_CHECK
 
       - name: Fingerprint the public build
