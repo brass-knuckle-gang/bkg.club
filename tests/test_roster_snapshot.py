@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from test_deployment import SOURCE_URL, load_builder, load_script, photo_fixture
 from test_roster_input import FakeResponse, FIXTURES, rehash, roster_input
-from site_contract import validate_dist
+from site_contract import PUBLIC_ROSTER_PATH, PUBLIC_ROSTER_SOURCE_HASH_PATH, validate_dist
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -61,6 +61,30 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn("1 excluded", summary.read_text(encoding="utf-8"))
         self.assertIn("excluded_members=1", output.read_text(encoding="utf-8"))
 
+        site = self.workspace / "site"
+        original = self.snapshot.with_name("roster-source.json")
+        fingerprint = load_script("site-fingerprint.py").fingerprint
+        builder = load_builder()
+        args = ["--roster-json", str(original), "--output-dir", str(site)]
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(builder.main(args), 0)
+        self.assertNotEqual(record["source_content_hash"], record["content_hash"])
+        self.assertEqual((site / PUBLIC_ROSTER_SOURCE_HASH_PATH).read_bytes(),
+                         (record["source_content_hash"] + "\n").encode())
+        self.assertEqual(json.loads((site / PUBLIC_ROSTER_PATH).read_text(encoding="utf-8")), published)
+        first_fingerprint = fingerprint(site)
+
+        source["members"][0]["name"] = "Changed Excluded Member"
+        with patch.object(roster_input.urllib.request, "build_opener") as opener:
+            opener.return_value.open.return_value = FakeResponse(rehash(source).encode())
+            self.assertEqual(self.fetch(), 0)
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(builder.main(args), 0)
+        self.assertEqual(json.loads((site / PUBLIC_ROSTER_PATH).read_text(encoding="utf-8")), published)
+        self.assertEqual((site / PUBLIC_ROSTER_SOURCE_HASH_PATH).read_bytes(),
+                         (source["content_hash"] + "\n").encode())
+        self.assertNotEqual(fingerprint(site), first_fingerprint)
+
     def test_one_anonymous_fetch_builds_all_artifacts_from_saved_file(self):
         photo_bytes, photo = photo_fixture()
         source = json.loads(self.body)
@@ -90,7 +114,8 @@ class SnapshotTests(unittest.TestCase):
         builder = load_builder()
         with patch.object(roster_input.urllib.request, "build_opener", side_effect=AssertionError("No refetch")), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            self.assertEqual(builder.main(["--roster-json", str(self.snapshot), "--asset-dir", str(assets),
+            self.assertEqual(builder.main(["--roster-json", str(self.snapshot.with_name("roster-source.json")),
+                                           "--asset-dir", str(assets),
                                            "--output-dir", str(site)]), 0)
             validate_dist(site)
         self.assertEqual(json.loads((site / "data/v2/roster.json").read_text(encoding="utf-8")), source)

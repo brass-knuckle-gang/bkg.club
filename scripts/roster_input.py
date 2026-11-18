@@ -23,6 +23,7 @@ MAX_BKG_NUMBER = 9007199254740991
 EXPORT_TIMEOUT_SECONDS = 30
 ENVELOPE_KEYS = {"schema_version", "generated_at", "content_hash", "members", "og_assignments"}
 MEMBER_KEYS = {"bkg_number", "callsign", "name", "qth", "qso_date", "sponsor_bkg_number", "map_location", "photo"}
+CONTENT_HASH_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 GRID_PATTERN = re.compile(r"[A-R]{2}[0-9]{2}(?:[A-X]{2})?\Z")
 # Account for floating-point differences between the publisher and builder.
 GRID_CENTER_TOLERANCE = 1e-12
@@ -159,7 +160,7 @@ def parse_roster_json(text: str, *, exclude_invalid_callsigns: bool = False,
     except ValueError:
         raise ValueError("generated_at must be an ISO UTC timestamp") from None
     _require(type(envelope["content_hash"]) is str and
-             bool(re.fullmatch(r"sha256:[0-9a-f]{64}", envelope["content_hash"])),
+             bool(CONTENT_HASH_PATTERN.fullmatch(envelope["content_hash"])),
              "Invalid roster content_hash")
 
     rows = envelope["members"]

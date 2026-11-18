@@ -6,7 +6,7 @@ boundary and the [cutover record](PUBLIC-ROSTER-V2-CUTOVER.md) for its history.
 
 ## One snapshot per run
 
-`fetch-roster.py` makes one anonymous HTTPS GET and validates the complete source contract and content hash. It saves the exact response as `$RUNNER_TEMP/bkg-build/roster-source.json` and the publication roster as `roster.json`, outside the checkout and published output. These match unless callsigns are excluded as described below. Asset fetching, build, and validation consume only the publication roster. Consumers independently revalidate the saved bytes; they never refetch the URL. The final validation compares the public JSON envelope with that saved publication input.
+`fetch-roster.py` makes one anonymous HTTPS GET and validates the complete source contract and content hash. It saves the exact response as `$RUNNER_TEMP/bkg-build/roster-source.json` and the publication roster as `roster.json`, outside the checkout and published output. These match unless callsigns are excluded as described below. Photo fetching uses the saved projection, and the builder validates and projects the original response. The workflow verifies both the published envelope against the saved projection and the public `data/v2/roster-source-hash.txt` against the original response's hash. Consumers read the saved files without refetching the URL.
 
 HTTPS, redirect rejection, the 30-second transport timeout, 8 MiB input limit, sanitized errors, schema/hash/reference checks, and empty-roster rejection are preserved. Optional Access headers are supported by the reader for other endpoints only when both credential fields are valid; an incomplete or empty pair fails before requesting. The deployed public feed needs neither header nor API token. Missing configuration or invalid input stops the workflow before artifact upload; the last published site remains available.
 
@@ -72,7 +72,7 @@ python3 scripts/fetch-roster.py \
 python3 scripts/fetch-public-assets.py \
   --roster-json "$preview_dir/roster.json" --asset-dir "$preview_dir/public-assets"
 python3 scripts/build-roster.py \
-  --roster-json "$preview_dir/roster.json" --asset-dir "$preview_dir/public-assets" \
+  --roster-json "$preview_dir/roster-source.json" --asset-dir "$preview_dir/public-assets" \
   --asset-origin "$ROSTER_EXPORT_URL" \
   --output-dir "$preview_dir/site"
 python3 scripts/validate-site.py "$preview_dir/site"
