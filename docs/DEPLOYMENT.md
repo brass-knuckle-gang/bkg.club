@@ -6,17 +6,21 @@ Production publishes the administration-owned **V2** roster from the
 Administration handles QRZ refresh and contributed photos.
 
 Pushes to `main`, manual dispatch on `main`, and the hourly schedule
-`23 * * * *` trigger publication to GitHub Pages at `www.bkg.club`. GitHub
-runs scheduled workflows on a best-effort basis, so new approvals can take
-several hours to appear. Scheduled runs skip upload when the site would be
-identical. Pushes and manual dispatches always deploy unless a dispatch sets
-`skip_unchanged`. The `deploy` concurrency group serializes runs without
-cancelling active deployment. Pull requests run offline checks with
-read-only permissions outside the production environment.
+`23 * * * *` trigger publication to GitHub Pages at `www.bkg.club`. The
+administrator Worker also dispatches the workflow when its five-minute check
+finds a newer roster. GitHub's best-effort schedule remains a fallback.
+Scheduled runs skip upload when the site would be identical. Pushes and manual
+dispatches always deploy unless a dispatch sets `skip_unchanged`. The `deploy`
+concurrency group serializes runs without cancelling active deployment. Pull
+requests run offline checks with read-only permissions outside production.
+
+Deploy the administrator Worker that checks `content_hash` in the live
+`/data/v2/roster.json` before deploying the site without the former
+`/data/v2/roster-source-hash.txt` file.
 
 ## Build contract and deployment checks
 
-The build checks out the event's exact `github.sha`, verifies HEAD, and runs the offline checks. It fetches and validates one roster response and saves it under `$RUNNER_TEMP/bkg-build`. The `bkg-roster-v2-*` cache supports conditional GET. Reusing a cached snapshot requires a matching ETag and a validated schema, hash, and endpoint. Transport, integrity, schema, and reference errors stop the build before upload. Invalid callsigns are the sole record-level exception. The original response is retained as `roster-source.json`, and `roster.json` contains the publication projection with its own hash. The fetch step reports excluded numbers and counts. Recruits of excluded sponsors retain null sponsor links, and excluded OG holders are never replaced. See the [membership rules](JSON-INPUT.md#reviewed-membership-rules).
+The build checks out the event's exact `github.sha`, verifies HEAD, and runs the offline checks. It fetches and validates one roster response and saves it as `$RUNNER_TEMP/bkg-build/roster.json`. The `bkg-roster-v2-*` cache supports conditional GET. Reusing a cached snapshot requires a matching ETag and a validated schema, hash, and endpoint. Transport, integrity, schema, callsign, and reference errors stop the build before upload. See the [membership rules](JSON-INPUT.md#reviewed-membership-rules).
 
 ### V2 photos (production)
 
@@ -24,9 +28,9 @@ The V2 build restores the `bkg-public-assets-v2-*` cache into `$RUNNER_TEMP/bkg-
 
 ### Build, validate, and deploy
 
-Run `scripts/build-roster.py --roster-json <saved-source-file> --asset-dir <external-assets> --output-dir dist`. The builder stages and validates the site before replacing output. It publishes the projection at `data/v2/roster.json` and the upstream response hash at `data/v2/roster-source-hash.txt`. The hash is a single `sha256:` line and changes when the upstream roster changes, including changes to members excluded from publication.
+Run `scripts/build-roster.py --roster-json <saved-file> --asset-dir <external-assets> --output-dir dist`. The builder stages and validates the site before replacing output. It publishes the validated envelope at `data/v2/roster.json` with the upstream `content_hash`.
 
-The workflow runs `scripts/validate-site.py dist`, verifies HEAD again, and compares the published roster envelope and source hash with their saved inputs. It fingerprints the output, including the source hash, using `scripts/site-fingerprint.py`, then compares the digest with the newest `bkg-deployed-v1-*` Actions cache. The cache name predates V2 and still stores the fingerprint of the last successful deploy. An unchanged scheduled run skips artifact upload and deploy and still saves the roster and photo caches. For a changed build, the deploy job publishes the validated Pages artifact. A failed build or upload leaves the current site in place.
+The workflow runs `scripts/validate-site.py dist`, verifies HEAD again, and compares the published roster envelope with the saved input. It fingerprints the output using `scripts/site-fingerprint.py`, then compares the digest with the newest `bkg-deployed-v1-*` Actions cache. The cache name predates V2 and still stores the fingerprint of the last successful deploy. An unchanged scheduled run skips artifact upload and deploy and still saves the roster and photo caches. For a changed build, the deploy job publishes the validated Pages artifact. A failed build or upload leaves the current site in place.
 
 Run the offline checks that pull requests run, with Python 3.10+ and the pinned dependency (Pillow) installed, for example in a virtual environment:
 
@@ -44,12 +48,11 @@ reproduce publication locally.
 ## Build input retention and recovery
 
 A build retains `bkg-build-inputs-<run-id>-<build-attempt>` for **30 days**,
-separate from the Pages archive, whenever it uploads a new site or excludes a
-member. The input archive contains the exact source response
-(`roster-source.json`), the publication snapshot (`roster.json`), hashes and
-exclusions (`roster-record.json`), the source commit (`source-sha.txt`), and
-verified `public-assets/`. An evicted V2 photo cache causes the next build to
-download the snapshot's photos again.
+separate from the Pages archive, whenever it uploads a new site. The input
+archive contains the exact roster response (`roster.json`), its metadata
+(`roster-record.json`), the source commit (`source-sha.txt`), and verified
+`public-assets/`. An evicted V2 photo cache causes the next build to download
+the snapshot's photos again.
 
 ## Switch the roster back to the classic card wall
 

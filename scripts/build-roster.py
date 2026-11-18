@@ -22,9 +22,7 @@ from pathlib import Path
 
 from roster_assets import annotate_public_assets
 from roster_input import parse_roster_json, read_roster_json
-from site_contract import (
-    GAME_DIR, PUBLIC_FILES, PUBLIC_ROSTER_PATH, PUBLIC_ROSTER_SOURCE_HASH_PATH, ROSTER_START, validate_dist,
-)
+from site_contract import GAME_DIR, PUBLIC_FILES, PUBLIC_ROSTER_PATH, ROSTER_START, validate_dist
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INDEX_PATH = REPO_ROOT / "index.html"
@@ -770,14 +768,7 @@ def stage_public_files(output_dir: Path) -> None:
 
 def build(output_dir: Path, *, roster_json: Path | None = None,
           asset_dir: Path | None = None, asset_origin: str | None = None) -> None:
-    exclusions = []
-    text = read_roster_json(roster_json)
-    envelope, members = parse_roster_json(
-        text, exclude_invalid_callsigns=True, exclusions=exclusions
-    )
-    source_hash = json.loads(text)["content_hash"]
-    for exclusion in exclusions:
-        print(f"WARNING: Excluding BKG #{exclusion['bkg_number']}: {exclusion['reason']}", file=sys.stderr)
+    envelope, members = parse_roster_json(read_roster_json(roster_json))
     for member in members:
         member["state"], member["country"] = qth_location(member["qth"])
     canonicalize_countries(members)
@@ -790,7 +781,6 @@ def build(output_dir: Path, *, roster_json: Path | None = None,
     snapshot = output_dir / PUBLIC_ROSTER_PATH
     snapshot.parent.mkdir(parents=True, exist_ok=True)
     snapshot.write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (output_dir / PUBLIC_ROSTER_SOURCE_HASH_PATH).write_text(source_hash + "\n", encoding="utf-8", newline="\n")
     print(f"Validated JSON roster: {len(members)} members ({envelope['content_hash']})")
 
     update_index(members, output_dir)

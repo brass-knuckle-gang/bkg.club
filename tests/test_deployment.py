@@ -77,8 +77,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(offsets, sorted(offsets))
         self.assertEqual(workflow.count(steps[0]), 1)
         self.assertIn(f"--output {snapshot}", workflow)
-        self.assertEqual(workflow.count(f"--roster-json {snapshot}"), 1)
-        self.assertIn('--roster-json "$RUNNER_TEMP/bkg-build/roster-source.json"', workflow)
+        self.assertEqual(workflow.count(f"--roster-json {snapshot}"), 2)
         self.assertIn("if: needs.build.outputs.changed == 'true'", workflow)
         self.assertIn("artifact_name: ${{ needs.build.outputs.artifact_name }}", workflow)
 

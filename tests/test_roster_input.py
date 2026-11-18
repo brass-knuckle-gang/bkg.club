@@ -115,60 +115,6 @@ class RosterContractTests(unittest.TestCase):
         self.envelope["members"][1]["callsign"] = "n0syn1"
         self.assert_invalid(self.envelope, "Duplicate member callsign")
 
-    def test_publication_excludes_only_bad_callsigns_after_validating_the_source(self):
-        for index in (0, len(self.envelope["members"]) // 2, -1):
-            with self.subTest(index=index):
-                original = copy.deepcopy(self.envelope)
-                excluded_number = original["members"][index]["bkg_number"]
-                original["members"][index]["callsign"] = "KCØDWZ"
-                text = rehash(original)
-                report = []
-                projected, members = roster_input.parse_roster_json(
-                    text, exclude_invalid_callsigns=True, exclusions=report)
-                self.assertNotIn(excluded_number, [m["number"] for m in members])
-                self.assertEqual(len(members), len(original["members"]) - 1)
-                self.assertEqual(report, [{"bkg_number": excluded_number, "reason": "Invalid callsign characters"}])
-                self.assertNotEqual(projected["content_hash"], original["content_hash"])
-                self.assertTrue(all(m["sponsor_bkg_number"] != excluded_number for m in projected["members"]))
-                self.assertEqual(projected["og_assignments"], [a for a in original["og_assignments"]
-                                                              if a["bkg_number"] != excluded_number])
-                roster_input.parse_roster_json(json.dumps(projected))
-                self.assertEqual(json.loads(text), original)
-
-    def test_projection_does_not_hide_hash_errors_ambiguity_or_a_broken_graph(self):
-        self.envelope["members"][0]["callsign"] = "KCØDWZ"
-        with self.assertRaisesRegex(ValueError, "hash mismatch"):
-            roster_input.parse_roster_json(json.dumps(self.envelope), exclude_invalid_callsigns=True)
-        for corruption, message in (("duplicate", "unique ascending"), ("sponsor", "missing active"),
-                                    ("cycle", "cycle"), ("private", "additional")):
-            invalid = copy.deepcopy(self.envelope)
-            if corruption == "duplicate":
-                invalid["members"][1]["bkg_number"] = invalid["members"][0]["bkg_number"]
-            elif corruption == "sponsor":
-                invalid["members"][0]["sponsor_bkg_number"] = 9999
-            elif corruption == "cycle":
-                invalid["members"][0]["sponsor_bkg_number"] = invalid["members"][1]["bkg_number"]
-                invalid["members"][1]["sponsor_bkg_number"] = invalid["members"][0]["bkg_number"]
-            else:
-                invalid["members"][0]["private_notes"] = "Never publish"
-            with self.assertRaisesRegex(ValueError, message):
-                roster_input.parse_roster_json(rehash(invalid), exclude_invalid_callsigns=True)
-        for member in self.envelope["members"]:
-            member["callsign"] += "!"
-        with self.assertRaisesRegex(ValueError, "no usable members"):
-            roster_input.parse_roster_json(rehash(self.envelope), exclude_invalid_callsigns=True)
-
-    def test_excluding_a_sponsor_keeps_their_recruits_as_roots(self):
-        excluded = self.envelope["members"][1]["bkg_number"]
-        children = [row["bkg_number"] for row in self.envelope["members"] if row["sponsor_bkg_number"] == excluded]
-        self.assertTrue(children)
-        self.envelope["members"][1]["callsign"] = "KCØDWZ"
-        _, members = roster_input.parse_roster_json(rehash(self.envelope), exclude_invalid_callsigns=True)
-        for member in members:
-            if member["number"] in children:
-                self.assertIsNone(member["sponsor_bkg_number"])
-                self.assertIsNone(member["sponsor_member"])
-
     def test_public_strings_reject_wrong_types_controls_and_surrogates(self):
         for key in ("name", "qth", "qso_date", "callsign"):
             for value in (None, 17, True, [], "line\nbreak", "tab\tbreak", "hidden\x85control"):

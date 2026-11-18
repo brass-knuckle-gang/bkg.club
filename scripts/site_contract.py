@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from roster_assets import verify_asset
-from roster_input import CONTENT_HASH_PATTERN, parse_roster_json
+from roster_input import parse_roster_json
 
 PUBLIC_FILES = (
     "index.html", "tree.html", "nearby.html", "outbreak.html",
@@ -18,7 +18,6 @@ PUBLIC_FILES = (
     "docs/mockups/mobile-readability.html",
 )
 PUBLIC_ROSTER_PATH = "data/v2/roster.json"
-PUBLIC_ROSTER_SOURCE_HASH_PATH = "data/v2/roster-source-hash.txt"
 PHOTO_DIR = "images/mugshots"
 # The Brass Knuckles Knock Out game (Derick, KO6PBZ), copied whole from its repo
 # because the GPL needs source/, LICENSE and THIRD-PARTY.txt to travel with it.
@@ -112,7 +111,7 @@ def coordinates(entry):
 
 def validate_dist(output_dir):
     output_dir = Path(output_dir)
-    required = set(PUBLIC_FILES) | {"members.txt", PUBLIC_ROSTER_PATH, PUBLIC_ROSTER_SOURCE_HASH_PATH}
+    required = set(PUBLIC_FILES) | {"members.txt", PUBLIC_ROSTER_PATH}
     actual = set()
     for path in output_dir.rglob("*"):
         require(not path.is_symlink(), f"Symlink in public output: {path}")
@@ -128,8 +127,6 @@ def validate_dist(output_dir):
     require(set(GAME_REQUIRED) <= actual, f"Missing game files: {sorted(set(GAME_REQUIRED) - actual)}")
     require(required <= actual, f"Missing public files: {sorted(required - actual)}")
     require((output_dir / "CNAME").read_text(encoding="utf-8").strip() == "www.bkg.club", "Unexpected production CNAME")
-    source_hash = (output_dir / PUBLIC_ROSTER_SOURCE_HASH_PATH).read_bytes().decode("utf-8")
-    require(source_hash.endswith("\n") and CONTENT_HASH_PATTERN.fullmatch(source_hash[:-1]), "Invalid roster source hash")
 
     pages = {}
     for rel in PUBLIC_FILES:
