@@ -6,7 +6,7 @@ boundary and the [cutover record](PUBLIC-ROSTER-V2-CUTOVER.md) for its history.
 
 ## One snapshot per run
 
-`fetch-roster.py` makes one anonymous HTTPS GET and validates the complete source contract and content hash. It saves the exact response as `$RUNNER_TEMP/bkg-build/roster-source.json` and the publication roster as `roster.json`, outside the checkout and published output. These match unless callsigns are excluded as described below. Photo fetching uses the saved projection, and the builder validates and projects the original response. The workflow verifies both the published envelope against the saved projection and the public `data/v2/roster-source-hash.txt` against the original response's hash. Consumers read the saved files without refetching the URL.
+`fetch-roster.py` makes one anonymous HTTPS GET and validates the complete source contract and content hash. It saves the exact response as `$RUNNER_TEMP/bkg-build/roster.json`, outside the checkout and published output. Photo fetching, building, and validation use that snapshot without refetching the URL. The workflow verifies that the published envelope equals the saved snapshot, including its upstream `content_hash`.
 
 HTTPS, redirect rejection, the 30-second transport timeout, 8 MiB input limit, sanitized errors, schema/hash/reference checks, and empty-roster rejection are preserved. Optional Access headers are supported by the reader for other endpoints only when both credential fields are valid; an incomplete or empty pair fails before requesting. The deployed public feed needs neither header nor API token. Missing configuration or invalid input stops the workflow before artifact upload; the last published site remains available.
 
@@ -22,24 +22,7 @@ Build to `dist/` or an external preview directory. The snapshot and verified pho
 
 OG badges and note labels come only from stored `og_assignments`. A holder who moves from Vermont to New York keeps `VT OG`; current QTH places that member on the New York map. JSON does not choose a new holder by current state, member number, or enrichment. Inactive members, inactive sponsors, and assignments with inactive holders are suppressed upstream; the builder validates all remaining references and never restores them from a cache.
 
-Validation rejects unsupported schema versions, additional/private fields, duplicate identities or JSON keys, unsorted arrays, invalid sponsor/OG references, sponsor cycles, unsafe text, and mismatched content hashes. Empty active rosters are rejected even though the upstream empty fixture is valid API output. HTML and embedded JSON escape reviewed text before publication. Generation and validation complete in a temporary directory before the previous output can be replaced.
-
-Publication tolerates one narrowly defined record error: a printable callsign
-containing characters other than ASCII letters and digits, including slashes.
-After validating the entire source and its original hash, it excludes those
-members and creates a projection with its own valid content hash. No callsign is
-guessed or rewritten. Recruits of an excluded member remain in the roster with a
-null sponsor; OG assignments held by excluded members are omitted without
-reassignment. Counts, roster rows, maps, downline, notes, photos, and public JSON
-all consume the same projection. If every member would be excluded, publication
-fails and preserves the previous site. All other validation remains strict.
-
-The fetch step emits Actions warnings and a step summary with excluded BKG
-numbers and reasons, never untrusted field values. Its JSON record contains
-source/publication counts and hashes plus the exclusions. The 30-day input
-artifact retains the exact source and publication files and this record even
-when the accepted site is unchanged. Conditional GET caches always retain the
-source bytes and source ETag; they never send a projection hash upstream.
+Validation rejects unsupported schema versions, additional/private fields, duplicate identities or JSON keys, unsorted arrays, invalid sponsor/OG references, sponsor cycles, unsafe text, and mismatched content hashes. Callsigns must contain only ASCII letters and digits. An invalid callsign stops publication and preserves the previous site until the roster is corrected in administration. Empty active rosters are rejected even though the upstream empty fixture is valid API output. HTML and embedded JSON escape reviewed text before publication. Generation and validation complete in a temporary directory before the previous output can be replaced.
 
 ## Administration-owned v2 publishing
 
@@ -72,7 +55,7 @@ python3 scripts/fetch-roster.py \
 python3 scripts/fetch-public-assets.py \
   --roster-json "$preview_dir/roster.json" --asset-dir "$preview_dir/public-assets"
 python3 scripts/build-roster.py \
-  --roster-json "$preview_dir/roster-source.json" --asset-dir "$preview_dir/public-assets" \
+  --roster-json "$preview_dir/roster.json" --asset-dir "$preview_dir/public-assets" \
   --asset-origin "$ROSTER_EXPORT_URL" \
   --output-dir "$preview_dir/site"
 python3 scripts/validate-site.py "$preview_dir/site"
