@@ -1689,6 +1689,11 @@
             gap: 6px;
         }
 
+        #worldMapInfo .map-member-list {
+            max-height: 20rem;
+            overflow-y: auto;
+        }
+
         /* Country headers inside the DX member list */
         .map-country-label {
             font-family: 'Bangers', cursive;
@@ -3327,7 +3332,9 @@
             const opsLabel = n => n + (n === 1 ? ' op' : ' ops');
             const pounders = n => n + (n === 1 ? ' brass pounder' : ' brass pounders');
 
+            let displayedCode = null;
             function renderCountry(code) {
+                if (displayedCode === code) return;
                 const list = groups[code] || [];
                 const name = regions[code].dataset.name || code;
                 const n = total(code);
@@ -3343,9 +3350,14 @@
                     '<div class="map-info-count">🤜 ' + pounders(n) + ' on the air' +
                     (code === 'OTHER' ? ' in ' + list.length + (list.length === 1 ? ' place' : ' places') : '') + '</div>' +
                     '<ul class="map-member-list">' + rows + '</ul>';
+                displayedCode = code;
             }
 
             let activeEl = null;
+            function restoreSelection() {
+                if (activeEl) renderCountry(activeEl.dataset.code);
+            }
+
             function activate(el, code) {
                 if (activeEl) activeEl.classList.remove('is-active');
                 activeEl = el;
@@ -3353,7 +3365,7 @@
                 renderCountry(code);
             }
 
-            // Occupied countries are buttons, wired exactly like the US states.
+            // Occupied countries can be previewed and selected by keyboard.
             function wireRegion(el, code) {
                 const n = total(code);
                 el.classList.add('has-members', tierClass(n));
@@ -3366,14 +3378,26 @@
                     e.preventDefault();
                     activate(el, code);
                 });
-                el.addEventListener('mouseenter', () => renderCountry(code));
+                el.addEventListener('mouseenter', () => {
+                    if (!infoEl.contains(document.activeElement)) renderCountry(code);
+                });
                 el.addEventListener('focus', () => renderCountry(code));
-                const restore = () => {
-                    if (activeEl) renderCountry(activeEl.dataset.code);
+                // Keep the links in place while moving from a country into its member list.
+                const restore = event => {
+                    if (!infoEl.contains(event.relatedTarget) && !infoEl.contains(document.activeElement)) {
+                        restoreSelection();
+                    }
                 };
                 el.addEventListener('mouseleave', restore);
                 el.addEventListener('blur', restore);
             }
+
+            infoEl.addEventListener('focusout', event => {
+                const next = event.relatedTarget;
+                if (next && !infoEl.contains(next) && !svg.contains(next)) {
+                    restoreSelection();
+                }
+            });
 
             const occupied = Object.keys(groups);
             occupied.forEach(code => wireRegion(regions[code], code));

@@ -112,3 +112,55 @@ test('Top States rows are buttons that select the state and move focus to it', (
     assert.ok(map.state('UT').classes.has('is-active'));
     assert.equal(map.document.activeElement, map.state('UT'));
 });
+
+test('world map keeps member links mounted as focus enters the sidebar', () => {
+    const worldScript = html.match(/\/\/ ===== World Territory Map =====([\s\S]*?)<\/script>/)[1];
+    const node = (dataset = {}) => ({
+        dataset,
+        listeners: new Map(),
+        classList: { add() {}, remove() {}, contains() { return false; } },
+        addEventListener(type, listener) { this.listeners.set(type, listener); },
+        setAttribute() {},
+    });
+    const canada = node({ code: 'CA', name: 'Canada' });
+    const poland = node({ code: 'PL', name: 'Poland' });
+    let memberLink;
+    const info = Object.assign(node(), {
+        contains(target) { return target === memberLink; },
+    });
+    Object.defineProperty(info, 'innerHTML', {
+        set(markup) { memberLink = { markup }; },
+    });
+    const document = {
+        activeElement: null,
+        querySelector: () => ({
+            querySelectorAll: () => [canada, poland],
+            contains: target => target === canada || target === poland,
+        }),
+        getElementById: id => ({
+            'bkg-map-data': { textContent: JSON.stringify({ dx: MAP_DATA.dx }) },
+            worldMapInfo: info,
+        })[id],
+    };
+    vm.runInNewContext(worldScript, { document });
+
+    canada.listeners.get('focus')();
+    const selectedLink = memberLink;
+    canada.listeners.get('click')();
+    assert.equal(memberLink, selectedLink);
+    assert.match(memberLink.markup, /VE0SYN/);
+    canada.listeners.get('blur')({ relatedTarget: memberLink });
+    assert.equal(memberLink, selectedLink);
+
+    poland.listeners.get('focus')();
+    const previewLink = memberLink;
+    assert.match(previewLink.markup, /SP0SYN/);
+    poland.listeners.get('blur')({ relatedTarget: previewLink });
+    document.activeElement = previewLink;
+    canada.listeners.get('mouseenter')();
+    poland.listeners.get('mouseleave')({ relatedTarget: {} });
+    assert.equal(memberLink, previewLink);
+
+    info.listeners.get('focusout')({ relatedTarget: {} });
+    assert.match(memberLink.markup, /VE0SYN/);
+});
