@@ -13,8 +13,8 @@ from roster_input import parse_roster_json
 
 PUBLIC_FILES = (
     "index.html", "tree.html", "nearby.html", "outbreak.html",
-    "recruit.html", "clubs.html", "safety.html", "badges.html", "arcade.html", "CNAME", "favicon.svg",
-    "logo.jpg", "assets/bkg.css", "assets/roster.css", "assets/roster.js", "assets/recruit-core.js", "assets/recruit.js", "assets/knockout-splash.png",
+    "recruit.html", "clubs.html", "safety.html", "badges.html", "awards.html", "arcade.html", "CNAME", "favicon.svg",
+    "logo.jpg", "assets/bkg.css", "assets/roster.css", "assets/roster.js", "assets/recruit-core.js", "assets/recruit.js", "assets/awards.js", "assets/knockout-splash.png",
     "docs/mockups/mobile-readability.html",
 )
 PUBLIC_ROSTER_PATH = "data/v2/roster.json"
