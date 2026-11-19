@@ -20,7 +20,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from roster_assets import annotate_public_assets
+from roster_assets import annotate_public_assets, encode_roster_thumbnail, roster_thumbnail_path
 from roster_input import parse_roster_json, read_roster_json
 from site_contract import GAME_DIR, PUBLIC_FILES, PUBLIC_ROSTER_PATH, ROSTER_START, validate_dist
 
@@ -294,11 +294,14 @@ def roster_initials(name: str) -> str:
     return "".join(letters[:2]).upper() or "?"
 
 
-def roster_thumb_html(member: dict) -> str:
+def roster_thumb_html(member: dict, *, use_thumbnail: bool = False) -> str:
     path = member.get("mugshot_path")
     if path:
         callsign = html_escape(member["callsign"])
-        return f'<img src="{html_escape(path)}" alt="{callsign} profile photo" loading="lazy">'
+        full_src = html_escape(path)
+        src = html_escape(member.get("mugshot_thumbnail_path") or path) if use_thumbnail else full_src
+        full_attribute = f' data-full-src="{full_src}"' if use_thumbnail else ""
+        return f'<img src="{src}"{full_attribute} alt="{callsign} profile photo" loading="lazy">'
     return f'<span class="rl-ini">{html_escape(roster_initials(member["name"]))}</span>'
 
 
@@ -320,7 +323,7 @@ def render_roster_row(member: dict, *, is_new: bool) -> str:
         f' data-sponsor="{html_escape(sponsor["callsign"]) if sponsor else ""}"'
     )
     return f"""                    <li class="rl-row" id="{callsign}"{data}>
-                        <span class="rl-shot">{roster_thumb_html(member)}</span>
+                        <span class="rl-shot">{roster_thumb_html(member, use_thumbnail=True)}</span>
                         <div class="rl-main">
                             <div class="rl-line"><a href="https://www.qrz.com/db/{callsign}" target="_blank" rel="noopener" class="member-callsign">{callsign}</a><div class="rl-badges">{badges}</div></div>
                             <div class="rl-who"><div class="member-name">{name}</div><div class="rl-place">{flag + " " if flag else ""}{html_escape(place)}</div></div>
@@ -688,9 +691,8 @@ def replace_between(html: str, start_marker: str, end_marker: str, replacement: 
     return pattern.sub(lambda _match: new_block, html, count=1)
 
 
-def update_index(members: list[dict], output_dir: Path) -> None:
+def update_index(members: list[dict], output_dir: Path, layout: str) -> None:
     html = INDEX_PATH.read_text(encoding="utf-8")
-    layout = roster_layout()
     roster = render_roster_block(members, layout)
     html = replace_between(
         html,
@@ -768,22 +770,28 @@ def stage_public_files(output_dir: Path) -> None:
 
 def build(output_dir: Path, *, roster_json: Path | None = None,
           asset_dir: Path | None = None, asset_origin: str | None = None) -> None:
+    layout = roster_layout()
     envelope, members = parse_roster_json(read_roster_json(roster_json))
     for member in members:
         member["state"], member["country"] = qth_location(member["qth"])
     canonicalize_countries(members)
-    photos = annotate_public_assets(members, asset_dir, source_url=asset_origin, repo_root=REPO_ROOT)
+    photos = annotate_public_assets(members, asset_dir, source_url=asset_origin, repo_root=REPO_ROOT,
+                                    include_thumbnails=layout == "list")
     stage_public_files(output_dir)
     for relative, photo in photos.items():
         destination = output_dir / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(photo, destination)
+        if layout == "list":
+            thumbnail = output_dir / roster_thumbnail_path(photo.stem)
+            thumbnail.parent.mkdir(parents=True, exist_ok=True)
+            thumbnail.write_bytes(encode_roster_thumbnail(destination.read_bytes()))
     snapshot = output_dir / PUBLIC_ROSTER_PATH
     snapshot.parent.mkdir(parents=True, exist_ok=True)
     snapshot.write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Validated JSON roster: {len(members)} members ({envelope['content_hash']})")
 
-    update_index(members, output_dir)
+    update_index(members, output_dir, layout)
     print(f"Updated {INDEX_PATH.name}")
 
     update_tree(members, output_dir)

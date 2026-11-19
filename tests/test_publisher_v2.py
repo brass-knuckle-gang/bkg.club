@@ -40,7 +40,21 @@ class PublisherV2Tests(PublicationBuildFixture):
         public_photo = self.dist / f"images/mugshots/{self.photo['sha256']}.webp"
         self.assertEqual(public_photo.read_bytes(), self.photo_bytes)
         self.assertEqual(len(list((self.dist / "images/mugshots").iterdir())), 1)
+        thumbnail = roster_assets.roster_thumbnail_path(self.photo["sha256"])
+        roster_assets.verify_roster_thumbnail((self.dist / thumbnail).read_bytes())
+        index = (self.dist / "index.html").read_text(encoding="utf-8")
+        self.assertIn(f'src="{thumbnail}" data-full-src="{public_photo.relative_to(self.dist).as_posix()}"', index)
         self.assertFalse((self.dist / "images/mugshots-override").exists())
+
+    def test_thumbnails_deduplicate_and_validator_rejects_a_wrong_size(self):
+        self.envelope["members"][1]["photo"] = self.photo
+        self.write_roster()
+        self.assertEqual(self.build(), 0)
+        thumbnail = self.dist / roster_assets.roster_thumbnail_path(self.photo["sha256"])
+        self.assertEqual(list(thumbnail.parent.iterdir()), [thumbnail])
+        thumbnail.write_bytes(self.photo_bytes)
+        with self.assertRaisesRegex(ValueError, "Unusable roster thumbnail"):
+            validate_dist(self.dist)
 
     def test_invalid_callsign_preserves_the_previous_site(self):
         self.assertEqual(self.build(), 0)

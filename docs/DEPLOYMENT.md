@@ -26,6 +26,12 @@ The build checks out the event's exact `github.sha`, verifies HEAD, and runs the
 
 The V2 build restores the `bkg-public-assets-v2-*` cache into `$RUNNER_TEMP/bkg-build/public-assets`, then `scripts/fetch-public-assets.py` checks every photo the saved snapshot references. It accepts only anonymous HTTPS assets on the snapshot's own origin at `/api/roster/photos/<sha256>.webp`, with no redirects, and verifies content type, byte length, SHA-256, and metadata-free still WebP structure. Accepted bytes are copied into the site without resizing or re-encoding. Cached files are reused only when they still match the snapshot. Map locations come verbatim from the snapshot's `map_location` fields. No QRZ login, enrichment cache, or website override is involved. See [Administration-owned v2 publishing](JSON-INPUT.md#administration-owned-v2-publishing).
 
+The list layout also generates 120 × 160 WebP thumbnails from those verified
+photos. Each unique active photo gets one derivative for the 40 px list rows.
+The wall, featured cards, member details, and classic layout use the original
+WebP files. Thumbnails ship with the Pages build and participate in its
+fingerprint.
+
 ### Build, validate, and deploy
 
 Run `scripts/build-roster.py --roster-json <saved-file> --asset-dir <external-assets> --output-dir dist`. The builder stages and validates the site before replacing output. It publishes the validated envelope at `data/v2/roster.json` with the upstream `content_hash`.
