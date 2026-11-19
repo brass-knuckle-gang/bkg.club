@@ -187,6 +187,7 @@ class DeploymentTests(PublicationBuildFixture):
         self.assertIn('class="member-card founder-card"', index)
         self.assertIn('href="https://www.qrz.com/db/N0SYN1"', index)
         self.assertNotIn('class="rl"', index)
+        self.assertFalse((self.dist / "images/roster-thumbnails").exists())
         # The list assets still ship, and roster.js does nothing without .rl.
         self.assertTrue((self.dist / "assets/roster.js").is_file())
 

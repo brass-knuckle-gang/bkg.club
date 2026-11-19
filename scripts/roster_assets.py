@@ -1,4 +1,4 @@
-"""Copy immutable administration-owned photos; never enrich member data."""
+"""Verify administration-owned photos and derive small site thumbnails."""
 
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
@@ -17,6 +17,8 @@ from roster_input import MAX_PUBLIC_PHOTO_BYTES
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSET_NAME = re.compile(r"[0-9a-f]{64}\.webp\Z")
+ROSTER_THUMBNAIL_DIR = "images/roster-thumbnails"
+ROSTER_THUMBNAIL_SIZE = (120, 160)
 
 
 def asset_directory(directory, *, repo_root=REPO_ROOT):
@@ -53,7 +55,7 @@ def verify_asset(data, photo):
         raise ValueError("Unusable public WebP photo") from None
 
 
-def _verify_webp(data):
+def _verify_webp(data, *, expected_size=None):
     if (len(data) < 20 or data[:4] != b"RIFF" or data[8:12] != b"WEBP"
             or struct.unpack("<I", data[4:8])[0] != len(data) - 8):
         raise ValueError("Invalid WebP envelope")
@@ -79,9 +81,33 @@ def _verify_webp(data):
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         with Image.open(io.BytesIO(data)) as image:
-            if (image.format != "WEBP" or getattr(image, "n_frames", 1) != 1 or max(image.size) > 480):
+            if (image.format != "WEBP" or getattr(image, "n_frames", 1) != 1 or max(image.size) > 480
+                    or (expected_size is not None and image.size != expected_size)):
                 raise ValueError("Unexpected public photo dimensions or animation")
             image.load()
+
+
+def roster_thumbnail_path(digest):
+    return f"{ROSTER_THUMBNAIL_DIR}/{digest}.webp"
+
+
+def encode_roster_thumbnail(data):
+    from PIL import Image, ImageOps
+
+    output = io.BytesIO()
+    with Image.open(io.BytesIO(data)) as original:
+        # The 40 px list tile uses a 3:4 crop aligned to the top center.
+        thumbnail = ImageOps.fit(original, ROSTER_THUMBNAIL_SIZE,
+                                 Image.Resampling.LANCZOS, centering=(0.5, 0))
+        thumbnail.save(output, "WEBP", quality=75)
+    return output.getvalue()
+
+
+def verify_roster_thumbnail(data):
+    try:
+        _verify_webp(data, expected_size=ROSTER_THUMBNAIL_SIZE)
+    except Exception:
+        raise ValueError("Unusable roster thumbnail") from None
 
 
 def _photos(members):
@@ -173,7 +199,8 @@ def fetch_assets(members, directory, *, source_url, workers=4, repo_root=REPO_RO
             "byte_length": sum(len(item[1]) for item in assets)}
 
 
-def annotate_public_assets(members, directory, *, source_url=None, repo_root=REPO_ROOT):
+def annotate_public_assets(members, directory, *, source_url=None, repo_root=REPO_ROOT,
+                           include_thumbnails=False):
     """Read only photo bytes named by the validated v2 snapshot, offline."""
     photos = _validated_photos(members, source_url)
     if photos and directory is None:
@@ -193,5 +220,7 @@ def annotate_public_assets(members, directory, *, source_url=None, repo_root=REP
         verify_asset(path.read_bytes(), photo)
         relative = f"images/mugshots/{photo['sha256']}.webp"
         member["mugshot_path"] = relative
+        if include_thumbnails:
+            member["mugshot_thumbnail_path"] = roster_thumbnail_path(photo["sha256"])
         selected[relative] = path
     return selected

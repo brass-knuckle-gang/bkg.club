@@ -32,7 +32,9 @@
             flag: el.dataset.flag || "",
             joined: el.dataset.joined || "",
             sponsor: el.dataset.sponsor || "",
-            photo: img ? img.getAttribute("src") : "",
+            photo: img ? img.getAttribute("data-full-src") || img.getAttribute("src") : "",
+            thumbnail: img ? img.getAttribute("src") : "",
+            photoElement: img,
             badges: el.querySelector(".rl-badges").innerHTML,
             og: !!el.querySelector(".state-og-badge, .rl-og, .rl-boss"),
             recruits: []
@@ -175,6 +177,12 @@
     var viewButtons = root.querySelectorAll(".rl-views button");
     function setView(view, remember) {
         root.dataset.view = view;
+        members.forEach(function (m) {
+            var source = view === "wall" ? m.photo : m.thumbnail;
+            if (m.photoElement && m.photoElement.getAttribute("src") !== source) {
+                m.photoElement.setAttribute("src", source);
+            }
+        });
         viewButtons.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.view === view)); });
         if (remember) { try { localStorage.setItem("bkg-roster-view", view); } catch (e) { /* private mode */ } }
     }

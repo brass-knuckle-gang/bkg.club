@@ -8,7 +8,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from roster_assets import verify_asset
+from roster_assets import ROSTER_THUMBNAIL_DIR, roster_thumbnail_path, verify_asset, verify_roster_thumbnail
 from roster_input import parse_roster_json
 
 PUBLIC_FILES = (
@@ -51,17 +51,23 @@ class PageParser(HTMLParser):
         self.calls = []
         self.names = []
         self.capture = None
+        self.roster_list = False
+        self.thumbnail_pairs = []
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
-        for attr in ("src", "href"):
+        for attr in ("src", "href", "data-full-src"):
             if attrs.get(attr):
                 self.links.append(attrs[attr])
+        if tag == "img" and attrs.get("data-full-src"):
+            self.thumbnail_pairs.append((attrs.get("src"), attrs["data-full-src"]))
         if tag == "script" and attrs.get("type") == "application/json":
             self.script_id = attrs.get("id")
             require(self.script_id and self.script_id not in self.scripts, "Missing/duplicate JSON script id")
             self.scripts[self.script_id] = ""
         classes = attrs.get("class", "").split()
+        if "rl" in classes:
+            self.roster_list = True
         if tag == "a" and "member-callsign" in classes:
             self.capture = self.calls
             self.capture.append("")
@@ -118,7 +124,7 @@ def validate_dist(output_dir):
         if not path.is_file():
             continue
         rel = path.relative_to(output_dir).as_posix()
-        photo = (path.parent.relative_to(output_dir).as_posix() == PHOTO_DIR
+        photo = (path.parent.relative_to(output_dir).as_posix() in {PHOTO_DIR, ROSTER_THUMBNAIL_DIR}
                  and path.suffix == ".webp" and not path.name.startswith("."))
         game = rel.startswith(GAME_DIR + "/")
         require(rel in required or game or photo, f"Unexpected public file: {rel}")
@@ -234,6 +240,16 @@ def validate_dist(output_dir):
     require(photos <= set(roster.links), "JSON build contains photos outside the active roster")
     expected_photos = {f"{PHOTO_DIR}/{m['photo']['sha256']}.webp" for m in reviewed if m["photo"] is not None}
     require(photos == expected_photos, "v2 photos differ from the administration snapshot")
+    thumbnails = {relative for relative in actual if Path(relative).parent.as_posix() == ROSTER_THUMBNAIL_DIR}
+    expected_thumbnails = {roster_thumbnail_path(Path(photo).stem) for photo in photos} if roster.roster_list else set()
+    require(thumbnails == expected_thumbnails, "Roster thumbnails differ from the active photos")
+    require({thumbnail for thumbnail, _ in roster.thumbnail_pairs} == thumbnails,
+            "Roster thumbnails differ from the list image references")
+    for thumbnail, photo in roster.thumbnail_pairs:
+        require(photo in photos and thumbnail == roster_thumbnail_path(Path(photo).stem),
+                "Roster thumbnail does not match its full photo")
+    for thumbnail in thumbnails:
+        verify_roster_thumbnail((output_dir / thumbnail).read_bytes())
     for member in reviewed:
         if member["photo"] is not None:
             photo = member["photo"]
