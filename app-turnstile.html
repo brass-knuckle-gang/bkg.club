@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <!-- Loaded by the BKG iOS app in a WKWebView. Not linked from the site. See docs/APP-TURNSTILE.md. -->
+    <title>BKG app check</title>
+    <link rel="stylesheet" href="assets/bkg.css">
+    <style>
+        body { min-height: 0; }
+        .app-turnstile { max-width: 360px; margin: 0 auto; padding: 16px 12px; text-align: center; }
+        .app-turnstile-status { font-family: 'Special Elite', monospace; color: var(--brass); font-size: 0.9rem; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+    <main class="app-turnstile">
+        <div class="app-turnstile-status" id="appTurnstileStatus" role="status" aria-live="polite"></div>
+        <div class="turnstile-slot">
+            <div id="appTurnstileWidget"></div>
+        </div>
+    </main>
+    <script src="assets/app-turnstile.js"></script>
+</body>
+</html>
