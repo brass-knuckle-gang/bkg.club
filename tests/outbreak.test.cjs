@@ -13,7 +13,7 @@ function element() {
         dataset: {},
         classList: { contains: () => false, toggle() {}, add() {}, remove() {} },
         addEventListener(type, handler) { handlers.set(type, handler); },
-        dispatch(type) { handlers.get(type)(); },
+        dispatch(type, event) { handlers.get(type)(event); },
         setAttribute() {},
         appendChild() {},
     };
@@ -109,4 +109,31 @@ test('Outbreak updates the 30-day metric during a quiet stretch of replay', () =
     assert.equal(outbreak.reproduction(), '?');
     outbreak.playTo(30);
     assert.equal(outbreak.reproduction(), '1.00');
+});
+
+test('Outbreak TRACE shows the full downline from an earlier replay date', () => {
+    const outbreak = openOutbreak([
+        member(1, 'K1FO', '2026-10-01'),
+        member(2, 'K2SP', '2026-10-05'),
+        member(3, 'K3IN', '2026-10-10', 'K2SP'),
+        member(4, 'K4IN', '2026-10-15', 'K2SP'),
+    ]);
+    const { getElementById } = outbreak;
+    const caseFile = getElementById('obTurfBody');
+
+    getElementById('obTraceInput').value = ' k2sp ';
+    getElementById('obTrace').dispatch('submit', { preventDefault() {} });
+    assert.equal(getElementById('obDayDate').textContent, 'Nov 16, 2026');
+    assert.match(caseFile.innerHTML, /2 downstream \(2 direct\)/);
+    assert.match(caseFile.innerHTML, /data-call="K3IN"/);
+    assert.match(caseFile.innerHTML, /data-call="K4IN"/);
+
+    outbreak.scrub(9);
+    assert.match(getElementById('obTurfTitle').textContent, /as of Oct 10, 2026/);
+    assert.match(caseFile.innerHTML, /data-call="K3IN"/);
+    assert.doesNotMatch(caseFile.innerHTML, /data-call="K4IN"/);
+
+    outbreak.playTo(11);
+    assert.match(getElementById('obTurfTitle').textContent, /as of Oct 12, 2026/);
+    assert.doesNotMatch(caseFile.innerHTML, /data-call="K4IN"/);
 });
