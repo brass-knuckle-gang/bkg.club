@@ -693,7 +693,11 @@
             lastHeavyN = n;
 
             document.getElementById('obDayNum').textContent = 'DAY ' + cur;
-            document.getElementById('obDayDate').textContent = fmtDate(date);
+            const dateLabel = fmtDate(date);
+            document.getElementById('obDayDate').textContent = dateLabel;
+            const turfTitle = document.getElementById('obTurfTitle');
+            const turfLabel = selectedCase ? '🗂 CASE FILE · as of ' + dateLabel : '📍 TURF REPORT';
+            if (turfTitle.textContent !== turfLabel) turfTitle.textContent = turfLabel;
             document.getElementById('obScrub').value = cur;
             const daysTile = document.getElementById('obDaysTile');
             if (daysTile) daysTile.textContent = cur;
@@ -849,11 +853,13 @@
             }
             return out + '</ul>';
         }
-        function selectCall(call) {
+        function selectCall(call, { latest = false } = {}) {
             const c = byCall[String(call || '').trim().toUpperCase()];
             if (!c) return false;
             selectedCase = c; selectedTurf = null;
-            if (c.t > cur) jump(c.t); else render(cur, true);
+            if (latest) jump(T);
+            else if (c.t > cur) jump(c.t);
+            else render(cur, true);
             return true;
         }
         document.addEventListener('click', e => {
@@ -866,7 +872,7 @@
         document.getElementById('obTrace').addEventListener('submit', e => {
             e.preventDefault();
             const input = document.getElementById('obTraceInput');
-            if (!selectCall(input.value)) {
+            if (!selectCall(input.value, { latest: true })) {
                 input.classList.remove('is-bad'); void input.offsetWidth; input.classList.add('is-bad');
                 document.getElementById('obTurfBody').innerHTML = '<span class="ob-muted">No case on file for "' + esc(input.value.trim().toUpperCase()) + '". Not infected. Yet.</span>';
             }
@@ -874,7 +880,6 @@
 
         function renderTurf() {
             const body = document.getElementById('obTurfBody');
-            document.getElementById('obTurfTitle').textContent = selectedCase ? '🗂 CASE FILE' : '📍 TURF REPORT';
             if (selectedCase) {
                 const c = selectedCase;
                 const on = c.t <= cur;
@@ -891,7 +896,7 @@
                     (chain.length > 1 ? '<div class="ob-case-row ob-chain">🧬 ' + chain.map(x => x === c ? '<b>' + esc(x.call) + '</b>' : pick(x.call)).join(' <span class="ob-chain-arrow">→</span> ') + '</div>' : '') +
                     (rank ? '<div class="ob-case-row">☣ Virulence: <b>#' + rank.rank + '</b> carrier, ' + rank.total + ' downstream (' + rank.direct + ' direct)</div>' :
                         '<div class="ob-case-row">☣ Infected nobody' + (on ? ' yet' : '') + '</div>') +
-                    (kids.length ? '<div class="ob-case-row">Who they infected, as of today:</div>' + treeHtml(c, cur, 0) : '') +
+                    (kids.length ? '<div class="ob-case-row">Who they infected</div>' + treeHtml(c, cur, 0) : '') +
                     '<div class="ob-note">Tap any callsign to follow the chain. Bright lines on the map are this case\'s links. Tap the dot again to clear.</div>';
                 return;
             }
